@@ -7,6 +7,7 @@ const nz = shared.numz;
 const Physics = @import("system/Physics.zig");
 const PlayerController = @import("system/PlayerController.zig");
 const CameraController = @import("system/CameraController.zig");
+const Bullet = @import("system/Bullet.zig");
 
 pub const Info = struct {
     delta_time: f32,
@@ -24,15 +25,28 @@ pub const Camera = struct {
     transform: nz.Transform3D(f32) = .{},
 };
 
+pub const Controller = struct {
+    attack_cool_down: f32 = 0,
+
+    input: shared.net.Command.Input = .{},
+};
+
+pub const BulletData = struct {
+    velocity: nz.Vec3(f32) = .{ 0, 0, 0 },
+    lifetime: f32 = 5,
+    owner_id: u32 = 0,
+};
+
 pub const Entity = struct {
     pub const Flags = packed struct(u32) {
         transform: bool = false,
         collider: bool = false,
-        input: bool = false,
+        controller: bool = false,
         camera: bool = false,
         planet: bool = false,
         align_to_planet: bool = false, //TODO: if not aligned jolt needs DOF awareness for later
-        _pad: u26 = 0,
+        bullet: bool = false,
+        _pad: u25 = 0,
     };
 
     id: u32 = 0,
@@ -41,9 +55,10 @@ pub const Entity = struct {
 
     transform: nz.Transform3D(f32) = .{},
     collider: Physics.Collider = undefined,
-    input: shared.net.Command.Input = .{},
+    controller: Controller = .{},
     camera: Camera = .{},
     planet: u32 = 0,
+    bullet: BulletData = .{},
 
     pub fn deinit(self: *Entity, gpa: std.mem.Allocator) void {
         if (self.flags.collider) {
@@ -102,6 +117,7 @@ pub const Context = struct {
     camera_controller: CameraController,
     spawner: Spawner,
     game: Game,
+    bullet: Bullet,
     request_exit: bool = false,
 
     pub const Data = struct {
@@ -121,12 +137,14 @@ pub const Context = struct {
             .physics = undefined,
             .player_controller = undefined,
             .camera_controller = undefined,
+            .bullet = undefined,
         };
         try self.world.entities.ensureTotalCapacity(data.gpa, 1000);
         try self.physics.init(data.gpa, data.io);
         try self.player_controller.init(&self.physics);
         try self.camera_controller.init();
         try self.spawner.init(data.gpa, data.world, &self.physics);
+        try self.bullet.init(data.gpa, &self.physics, &self.spawner);
         try self.game.init(data.gpa, data.world, &self.spawner);
         try self.network_manager.init(data.gpa, data.io);
     }
@@ -134,6 +152,7 @@ pub const Context = struct {
         self.physics.deinit();
         try self.network_manager.deinit();
         try self.game.deinit();
+        self.bullet.deinit();
         self.spawner.deinit();
     }
 
@@ -142,6 +161,7 @@ pub const Context = struct {
         try self.player_controller.update(info, self);
         try self.game.update(info, &self.spawner, &self.physics);
         try self.physics.update(info);
+        try self.bullet.update(info);
         try self.camera_controller.update(info);
         // self.request_exit = true;
         // if (info.elapsed_time > 1) self.request_exit = true;

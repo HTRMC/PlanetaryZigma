@@ -93,6 +93,12 @@ pub fn reload(self: *@This(), pre_reload: bool) !void {
     if (pre_reload) try self.accept_client_future.cancel(self.io) else {
         std.log.debug("RELOAD", .{});
         self.accept_client_future = try self.io.concurrent(Client.accept, .{ self.gpa, self.io, self.socket, &self.clients });
+
+        //NOTE: do full resync for all clients on hotreload?
+        var it = self.clients.iterator();
+        while (it.next()) |pair| {
+            pair.value_ptr.needs_full_sync = true;
+        }
     }
 }
 
@@ -112,7 +118,22 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
         for (client.command_queue.commands.items) |command| {
             switch (command) {
                 .connect => {
-                    client.entity_id = try spawner.spawnConnectPlayer();
+                    const new_player_entity = try spawner.spawn(.{
+                        .kind = .player,
+                        .transform = .{ .position = .{ 0, 0, 100 } },
+                        .collider = .{
+                            .shape = .{ .primitive = .{ .box = .{ .size = 1 } } },
+                            .motion_type = .dynamic,
+                        },
+                        .camera = .{ .transform = .{ .position = .{ 0, 0, 100 } } },
+                        .flags = .{
+                            .transform = true,
+                            .collider = true,
+                            .controller = true,
+                            .camera = true,
+                        },
+                    });
+                    client.entity_id = new_player_entity.id;
                     try client.sendCommand(writer, .{ .acknowledge = .{ .id = client.entity_id } });
                     std.log.debug("New Player ID: {d}\n", .{client.entity_id});
                 },
@@ -123,7 +144,7 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
                 .input => {
                     // std.log.debug("got input from {d}", .{client.entity_id});
                     if (world.get(client.entity_id)) |entity| {
-                        entity.input = command.input;
+                        entity.controller.input = command.input;
                     }
                 },
                 else => {
@@ -131,7 +152,7 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
                 },
             }
         }
-        client.command_queue.commands.items.len = 0;
+        client.command_queue.commands.clearRetainingCapacity();
         client.command_queue.mutex.unlock(self.io);
     }
 
@@ -147,6 +168,7 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
 
         //spawns
         if (client.needs_full_sync) {
+            std.log.debug("FULL SYNC", .{});
             for (world.entities.values()) |*entity| {
                 if (!entity.flags.transform) continue;
                 std.log.debug("sent id {d}", .{entity.id});
@@ -181,8 +203,8 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
             } });
         }
     }
-    spawner.network_pending_spawn.items.len = 0;
-    spawner.network_pending_despawn.items.len = 0;
+    spawner.network_pending_despawn.clearRetainingCapacity();
+    spawner.network_pending_spawn.clearRetainingCapacity();
 
     // for (clients_to_remove.items) |client| {
     //     _ = self.clients.remove(client.ip.*);

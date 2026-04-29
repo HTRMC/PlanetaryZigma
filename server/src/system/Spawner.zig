@@ -28,26 +28,26 @@ pub fn deinit(self: *@This()) void {
     self.network_pending_spawn.deinit(self.gpa);
 }
 
-pub fn spawnConnectPlayer(self: *@This()) !u32 {
-    const entity = try self.world.spawn();
-    entity.kind = .player;
-    entity.transform = .{ .position = .{ 0, 0, 100 } };
-    entity.collider = .{
-        .shape = .{ .primitive = .{ .box = .{ .size = 1 } } },
-        .motion_type = .dynamic,
-    };
-    entity.camera = .{ .transform = .{ .position = .{ 0, 0, 100 } } };
-    entity.flags = .{
-        .transform = true,
-        .collider = true,
-        .input = true,
-        .camera = true,
-    };
-    try self.physics.createBody(entity);
-
-    try self.network_pending_spawn.append(self.gpa, .{ .id = entity.id, .kind = .player });
-    return entity.id;
-}
+// pub fn spawnConnectPlayer(self: *@This()) !u32 {
+//     const entity = try self.world.spawn();
+//     entity.kind = .player;
+//     entity.transform = .{ .position = .{ 0, 0, 100 } };
+//     entity.collider = .{
+//         .shape = .{ .primitive = .{ .box = .{ .size = 1 } } },
+//         .motion_type = .dynamic,
+//     };
+//     entity.camera = .{ .transform = .{ .position = .{ 0, 0, 100 } } };
+//     entity.flags = .{
+//         .transform = true,
+//         .collider = true,
+//         .input = true,
+//         .camera = true,
+//     };
+//     try self.physics.createBody(entity);
+//
+//     try self.network_pending_spawn.append(self.gpa, .{ .id = entity.id, .kind = .player });
+//     return entity.id;
+// }
 
 pub fn spawnEnemy(self: *@This()) !u32 {
     const entity = try self.world.spawn();
@@ -89,7 +89,8 @@ pub fn spawnPlanet(self: *@This()) !u32 {
     return planet_entity.id;
 }
 
-pub fn spawn(self: *@This(), entity_info: system.Entity) !u32 {
+pub fn spawn(self: *@This(), entity_info: system.Entity) !*system.Entity {
+    // std.log.debug("SIZE: {d}", .{self.world.entities.entries.len});
     const entity = try self.world.spawn();
     const id: u32 = entity.id;
     entity.* = entity_info;
@@ -98,7 +99,7 @@ pub fn spawn(self: *@This(), entity_info: system.Entity) !u32 {
         try self.physics.createBody(entity);
     }
     try self.network_pending_spawn.append(self.gpa, .{ .id = entity.id, .kind = entity.kind });
-    return entity.id;
+    return entity;
 }
 
 pub fn depspawn(self: *@This(), entity_id: u32) !void {
