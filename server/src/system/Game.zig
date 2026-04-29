@@ -26,11 +26,16 @@ pub fn deinit(self: *@This()) !void {
 
 pub fn update(self: *@This(), info: *const Info, spawner: *Spawner, physics: *const Physics) !void {
     _ = self;
+    // for (info.world.entities.values()) |*entity| {
+    //     if (entity.kind == .enemy) {
+    //         try spawner.depspawn(entity.id);
+    //     }
+    // }
     var player: *system.Entity = undefined;
     for (info.world.entities.values()) |*entity| {
         if (entity.kind == .player) {
             player = entity;
-            if (player.input.mouse_button_left and player.input.mouse_button_right) {
+            if (player.controller.input.k) {
                 _ = try spawner.spawnEnemy();
             }
             break;
@@ -76,27 +81,5 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner, physics: *co
         const force = nz.vec.scale(nz.vec.normalize(entity.transform.forward()), power);
         // body_interface.addImpulse(body_id, force);
         body_interface.addForce(body_id, force);
-
-        // const forward = entity.transform.forward();
-        // const forward: nz.quat.Hamiltonian(f32) = .fromEuler(forward_vec);
-
-        // std.log.debug("distance: {d}", .{distance});
-        // if (distance < planet_size / 2) {
-        //     const dir = nz.quat.Hamiltonian(f32).fromEuler(to_player);
-        //     body_interface.setRotation(body_id, dir.toVec(), .activate);
-        //     const force = nz.vec.scale(nz.vec.normalize(to_player), power);
-        //     body_interface.addForce(body_id, force);
-        // } else {
-        //     to_player = -player.transform.position - entity.transform.position;
-        //     const dir = nz.quat.Hamiltonian(f32).fromEuler(to_player);
-        //     body_interface.setRotation(body_id, dir.toVec(), .activate);
-        //     const force = -nz.vec.scale(nz.vec.normalize(to_player), power);
-        //     body_interface.addForce(body_id, force);
-        // }
-        //
-        // if (distance < 100) {
-        //     const dir = nz.vec.scale(to_player, 1.0 / distance);
-        //     body_interface.addForce(body_id, nz.vec.scale(dir, 1000));
-        // }
     }
 }

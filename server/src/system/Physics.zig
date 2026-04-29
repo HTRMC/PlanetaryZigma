@@ -290,8 +290,7 @@ pub fn reload(self: *@This(), pre_reload: bool, world: *system.World) !void {
 pub fn update(self: *@This(), info: *const system.Info) !void {
     const bodies = self.physics_system.getBodiesMutUnsafe();
 
-    // Pull each dynamic body toward the planet center ("gravity").
-    for (bodies) |body| {
+    for (bodies) |body| { //TODO: use physics pos instead of transform?
         if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
         const entity = info.world.get(@intCast(body.user_data)) orelse continue;
         const up = nz.vec.normalize(entity.transform.position);
@@ -301,7 +300,6 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
 
     self.physics_system.update(info.delta_time, .{}) catch unreachable;
 
-    // Copy simulated body state back onto entity.transform.
     for (bodies) |body| {
         if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
         const entity = info.world.get(@intCast(body.user_data)) orelse continue;
@@ -315,14 +313,9 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         transform.rotation = .fromVec(body.rotation);
     }
 
-    self.alignToPlanet(info);
+    self.alignToPlanet(info); //TODO: before physics? or do indivual per entity movement?
 }
 
-/// For entities flagged `align_to_planet`, snap their rotation so local-up tracks
-/// the planet surface normal (normalize(position)). Writes the result to both the
-/// transform and the physics body so the alignment is authoritative.
-/// Assumes these bodies have `translation_only` DOFs — otherwise physics will
-/// fight the imposed rotation.
 fn alignToPlanet(self: *@This(), info: *const system.Info) void {
     const body_interface = self.physics_system.getBodyInterfaceMut();
 

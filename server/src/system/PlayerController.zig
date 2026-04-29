@@ -19,13 +19,14 @@ pub fn deinit(self: *@This()) void {
 pub fn update(self: *@This(), info: *const system.Info, system_context: *system.Context) !void {
     const body_interface = self.physics.physics_system.getBodyInterfaceMut();
 
-    for (info.world.entities.values()) |*entity| {
-        const f = entity.flags;
-        if (!f.input or !f.camera or !f.transform or !f.collider) continue;
+    for (info.world.entities.values()) |*player| {
+        const f = player.flags;
+        if (!f.controller or !f.camera or !f.transform or !f.collider) continue;
 
-        const camera = &entity.camera;
-        const transform = &entity.transform;
-        const input = &entity.input;
+        const camera = &player.camera;
+        const transform = &player.transform;
+        const controller = &player.controller;
+        const input = &controller.input;
 
         camera.boom_offset[2] += @floatCast(-input.mouse_wheel);
         camera.boom_offset[2] = std.math.clamp(camera.boom_offset[2], 0, 1000);
@@ -46,19 +47,21 @@ pub fn update(self: *@This(), info: *const system.Info, system_context: *system.
             const pitch_limit: f32 = std.math.pi / 2.0 - 0.01;
             camera.pitch = std.math.clamp(camera.pitch + delta_pitch, -pitch_limit, pitch_limit);
         }
-        if (input.mouse_button_left) {
+
+        controller.attack_cool_down += info.delta_time;
+        if (input.mouse_button_left and controller.attack_cool_down >= 0.001) {
+            controller.attack_cool_down = 0;
+            const muzzle_speed: f32 = 100;
+            const muzzle_velocity = nz.vec.scale(player.transform.forward(), muzzle_speed);
             _ = try system_context.spawner.spawn(
                 .{
                     .kind = .bullet,
-                    .transform = .{ .position = entity.transform.position, .rotation = camera.transform.rotation },
-                    .collider = .{ .shape = .{ .primitive = .{ .box = .{ .size = 0.1 } } }, .motion_type = .dynamic },
-                    .flags = .{ .transform = true, .collider = true, .align_to_planet = true },
+                    .transform = .{ .position = player.transform.position, .rotation = player.transform.rotation },
+                    .bullet = .{ .velocity = muzzle_velocity, .lifetime = 5, .owner_id = player.id },
+                    .flags = .{ .transform = true, .bullet = true },
                 },
             );
         }
-
-        // Consumed: don't keep applying stale input next frame if the client stops sending packets.
-        input.mouse_delta = .{ 0, 0 };
 
         // --- Tangent-plane realign ---
         // The player walks around a sphere, so planet_up drifts over time. Re-project the yaw
@@ -87,7 +90,7 @@ pub fn update(self: *@This(), info: *const system.Info, system_context: *system.
         const move_right = nz.vec.normalize(nz.vec.cross(move_fwd, planet_up));
 
         // --- Apply to body ---
-        if (entity.collider.body_id) |id| {
+        if (player.collider.body_id) |id| {
             var move: nz.Vec3(f32) = .{ 0, 0, 0 };
             const velocity: f32 = 1000;
 
