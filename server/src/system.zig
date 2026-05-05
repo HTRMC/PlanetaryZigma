@@ -33,22 +33,17 @@ pub const Controller = struct {
 
 pub const BulletData = struct {
     velocity: nz.Vec3(f32) = .{ 0, 0, 0 },
+    damage: f32 = 1,
     lifetime: f32 = 5,
     owner_id: u32 = 0,
 };
 
-pub const Entity = struct {
-    pub const Flags = packed struct(u32) {
-        transform: bool = false,
-        collider: bool = false,
-        controller: bool = false,
-        camera: bool = false,
-        planet: bool = false,
-        align_to_planet: bool = false, //TODO: if not aligned jolt needs DOF awareness for later
-        bullet: bool = false,
-        _pad: u25 = 0,
-    };
+pub const Health = struct {
+    current: f32 = 0,
+    max: f32 = 0,
+};
 
+pub const Entity = struct {
     id: u32 = 0,
     flags: Flags = .{},
     kind: shared.EntityKind = .unknown,
@@ -59,6 +54,18 @@ pub const Entity = struct {
     camera: Camera = .{},
     planet: u32 = 0,
     bullet: BulletData = .{},
+    health: Health = .{},
+
+    pub const Flags = packed struct {
+        transform: bool = false,
+        collider: bool = false,
+        controller: bool = false,
+        camera: bool = false,
+        planet: bool = false,
+        align_to_planet: bool = false, //TODO: if not aligned jolt needs DOF awareness for later
+        bullet: bool = false,
+        health: bool = false,
+    };
 
     pub fn deinit(self: *Entity, gpa: std.mem.Allocator) void {
         if (self.flags.collider) {
@@ -141,10 +148,10 @@ pub const Context = struct {
         };
         try self.world.entities.ensureTotalCapacity(data.gpa, 1000);
         try self.physics.init(data.gpa, data.io);
-        try self.player_controller.init(&self.physics);
+        try self.player_controller.init(&self.physics, &self.spawner);
         try self.camera_controller.init();
         try self.spawner.init(data.gpa, data.world, &self.physics);
-        try self.bullet.init(data.gpa, &self.physics, &self.spawner);
+        try self.bullet.init(data.gpa, self.world, &self.physics, &self.spawner);
         try self.game.init(data.gpa, data.world, &self.spawner);
         try self.network_manager.init(data.gpa, data.io);
     }
@@ -158,11 +165,12 @@ pub const Context = struct {
 
     pub fn update(self: *@This(), info: *const Info) !void {
         try self.network_manager.update(info, &self.spawner);
-        try self.player_controller.update(info, self);
-        try self.game.update(info, &self.spawner, &self.physics);
+        try self.player_controller.update(info);
+        try self.game.update(info, &self.physics);
         try self.physics.update(info);
         try self.bullet.update(info);
         try self.camera_controller.update(info);
+        try self.spawner.update(info);
         // self.request_exit = true;
         // if (info.elapsed_time > 1) self.request_exit = true;
     }

@@ -2,21 +2,21 @@ const std = @import("std");
 const shared = @import("shared");
 const system = @import("../system.zig");
 const Physics = @import("Physics.zig");
+const Spawner = @import("Spawner.zig");
 const nz = shared.numz;
 
 physics: *Physics,
+spawner: *Spawner,
 
-pub fn init(self: *@This(), physics: *Physics) !void {
-    self.* = .{ .physics = physics };
+pub fn init(self: *@This(), physics: *Physics, spawner: *Spawner) !void {
+    self.* = .{ .physics = physics, .spawner = spawner };
 }
 
 pub fn deinit(self: *@This()) void {
     _ = self;
 }
 
-//NOTE: AI generated I have no idea about the math
-
-pub fn update(self: *@This(), info: *const system.Info, system_context: *system.Context) !void {
+pub fn update(self: *@This(), info: *const system.Info) !void {
     const body_interface = self.physics.physics_system.getBodyInterfaceMut();
 
     for (info.world.entities.values()) |*player| {
@@ -31,10 +31,8 @@ pub fn update(self: *@This(), info: *const system.Info, system_context: *system.
         camera.boom_offset[2] += @floatCast(-input.mouse_wheel);
         camera.boom_offset[2] = std.math.clamp(camera.boom_offset[2], 0, 1000);
 
-        // Planet-relative up is derived from the body's world position each frame.
         const planet_up = nz.vec.normalize(transform.position);
 
-        // --- Look input ---
         const sensitivity: f32 = 1;
         const delta_yaw: f32 = @floatCast(-input.mouse_delta[0] * sensitivity * info.delta_time);
         const delta_pitch: f32 = @floatCast(-input.mouse_delta[1] * sensitivity * info.delta_time);
@@ -53,7 +51,7 @@ pub fn update(self: *@This(), info: *const system.Info, system_context: *system.
             controller.attack_cool_down = 0;
             const muzzle_speed: f32 = 100;
             const muzzle_velocity = nz.vec.scale(player.transform.forward(), muzzle_speed);
-            _ = try system_context.spawner.spawn(
+            _ = try self.spawner.spawn(
                 .{
                     .kind = .bullet,
                     .transform = .{ .position = player.transform.position, .rotation = player.transform.rotation },
@@ -61,6 +59,19 @@ pub fn update(self: *@This(), info: *const system.Info, system_context: *system.
                     .flags = .{ .transform = true, .bullet = true },
                 },
             );
+        }
+        if (player.controller.input.k and controller.attack_cool_down >= 0.001) {
+            controller.attack_cool_down = 0;
+            _ = try self.spawner.spawn(.{
+                .kind = .enemy,
+                .transform = .{ .position = .{ 0, 0, 100 } },
+                .collider = .{
+                    .shape = .{ .primitive = .{ .box = .{ .size = 1 } } },
+                    .motion_type = .dynamic,
+                },
+                .health = .{ .current = 5, .max = 5 },
+                .flags = .{ .transform = true, .collider = true, .align_to_planet = true, .health = true },
+            });
         }
 
         // --- Tangent-plane realign ---

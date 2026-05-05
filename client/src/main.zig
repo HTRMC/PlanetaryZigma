@@ -48,6 +48,7 @@ pub fn main(init: std.process.Init) !void {
         .platform = platform,
         .window = window,
         .io = io,
+        .world = &world,
     });
 
     var elapsed_time: f32 = 0;

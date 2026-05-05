@@ -10,13 +10,15 @@ const gravity_acceleration: f32 = 100;
 gpa: std.mem.Allocator,
 physics: *Physics,
 spawner: *Spawner,
+world: *system.World,
 to_despawn: std.ArrayList(u32) = .empty,
 
-pub fn init(self: *@This(), gpa: std.mem.Allocator, physics: *Physics, spawner: *Spawner) !void {
+pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World, physics: *Physics, spawner: *Spawner) !void {
     self.* = .{
         .gpa = gpa,
         .physics = physics,
         .spawner = spawner,
+        .world = world,
     };
 }
 
@@ -52,18 +54,26 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         }, .{});
 
         if (result.has_hit) {
-            const bodies = self.physics.physics_system.getBodiesUnsafe();
-            if (Physics.zphy.tryGetBody(bodies, result.hit.body_id)) |hit_body| {
+            const lock_interface = self.physics.physics_system.getBodyLockInterface();
+            var read_lock: Physics.zphy.BodyLockRead = .{};
+            read_lock.lock(lock_interface, result.hit.body_id);
+            defer read_lock.unlock();
+            if (read_lock.body) |hit_body| {
                 const target_id: u32 = @intCast(hit_body.user_data);
-                if (target_id == bullet.owner_id) {
-                    entity.transform.position = p0 + segment;
-                    continue;
+                const hit_entity = self.world.get(target_id) orelse continue;
+                if (hit_entity.flags.health) {
+                    if (target_id == bullet.owner_id) {
+                        continue;
+                    }
+                    hit_entity.health.current -= bullet.damage;
+                    if (hit_entity.health.current <= 0) {
+                        try self.to_despawn.append(self.gpa, target_id);
+                    }
+                    try self.to_despawn.append(self.gpa, entity.id);
                 }
-                try self.to_despawn.append(self.gpa, entity.id);
             }
-        } else {
-            entity.transform.position = p0 + segment;
         }
+        entity.transform.position = p0 + segment;
     }
 
     for (self.to_despawn.items) |id| {
