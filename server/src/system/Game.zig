@@ -15,16 +15,30 @@ pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World, spawne
         .gpa = gpa,
         .world = world,
     };
-    _ = try spawner.spawnPlanet();
-    // for (0..20) |_| {
-    //     _ = try spawner.spawnEnemy();
-    // }
+    const planet_size: u32 = 100;
+    const planet: shared.Planet = try .init(self.gpa, planet_size);
+    _ = try spawner.spawn(.{
+        .kind = .planet,
+        .planet = planet_size,
+        .transform = .{},
+        .collider = .{
+            .shape = .{
+                .mesh = .{
+                    .indices = planet.indices,
+                    .vertices = planet.vertices,
+                },
+            },
+            .motion_type = .static,
+        },
+        .flags = .{ .transform = true, .collider = true, .planet = true },
+    });
 }
+
 pub fn deinit(self: *@This()) !void {
     _ = self;
 }
 
-pub fn update(self: *@This(), info: *const Info, spawner: *Spawner, physics: *const Physics) !void {
+pub fn update(self: *@This(), info: *const Info, physics: *const Physics) !void {
     _ = self;
     // for (info.world.entities.values()) |*entity| {
     //     if (entity.kind == .enemy) {
@@ -35,9 +49,6 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner, physics: *co
     for (info.world.entities.values()) |*entity| {
         if (entity.kind == .player) {
             player = entity;
-            if (player.controller.input.k) {
-                _ = try spawner.spawnEnemy();
-            }
             break;
         }
     } else return;

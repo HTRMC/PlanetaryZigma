@@ -4,6 +4,7 @@ const nz = shared.numz;
 const yes = @import("yes");
 const NetworkManager = @import("system/NetworkManager.zig");
 const AssetServer = @import("shared").AssetServer;
+const Spawner = @import("system/Spawner.zig");
 pub const Renderer = @import("Renderer.zig");
 
 pub const Camera = @import("system/Camera.zig");
@@ -25,7 +26,7 @@ pub const Entity = struct {
         _pad: u29 = 0,
     };
 
-    id: u32,
+    id: u32 = 0,
     flags: Flags = .{},
 
     transform: nz.Transform3D(f32) = .{},
@@ -82,6 +83,7 @@ pub const Context = struct {
     asset_server: *AssetServer,
     renderer: Renderer,
     network_manager: NetworkManager,
+    spawner: Spawner,
     planet: PlanetVertices = undefined,
 
     pub const PlanetVertices = struct {
@@ -100,6 +102,7 @@ pub const Context = struct {
         platform: yes.Platform,
         window: *yes.Window,
         asset_server: *AssetServer,
+        world: *World,
     };
 
     pub fn init(self: *@This(), data: Data) !void {
@@ -111,7 +114,8 @@ pub const Context = struct {
         self.window = data.window;
         self.asset_server = data.asset_server;
         self.renderer = try .init(data.gpa, data.asset_server, data.platform, data.window);
-        try self.network_manager.init(data.gpa, data.io, self.server_stream, self.server_address);
+        try self.spawner.init(data.gpa, data.world);
+        try self.network_manager.init(data.gpa, data.io, self.server_stream, self.server_address, &self.spawner);
 
         const name = "lucas";
         const connect_command: shared.net.Command = .{ .connect = .{
@@ -139,6 +143,7 @@ pub const Context = struct {
         try self.network_manager.deinit();
         self.server_stream.close(self.io);
         try self.planet.deinit(self.gpa);
+        self.spawner.deinit();
     }
 
     pub fn update(self: *@This(), info: *const Info) !void {
@@ -150,6 +155,7 @@ pub const Context = struct {
         }
         try self.asset_server.update();
         try self.network_manager.update(self, info);
+        try self.spawner.update(info);
     }
 
     pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.Event) !void {
@@ -175,7 +181,7 @@ pub const Context = struct {
             );
             //TODO: take care of handle matching
             _ = vulkan_mesh_handle;
-            try self.network_manager.init(self.gpa, self.io, self.server_stream, self.server_address);
+            try self.network_manager.init(self.gpa, self.io, self.server_stream, self.server_address, &self.spawner);
         }
         std.log.debug("before-1", .{});
     }
