@@ -13,6 +13,9 @@ pub fn main(init: std.process.Init) !void {
     const gpa = gpa_impl.allocator();
     const io = init.io;
 
+    //TODO: Move to a system within the DynLib. Steamworks SDK
+    //
+
     var cross_platform: yes.Platform.Cross = try .init(gpa, io, init.minimal);
     defer cross_platform.deinit();
     const platform = cross_platform.platform();
