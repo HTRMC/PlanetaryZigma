@@ -9,6 +9,7 @@ pub fn build(b: *std.Build) void {
 
     const shared = b.dependency("shared", .{ .target = target, .optimize = optimize }).module("shared");
     const yes = b.dependency("yes", .{ .target = target, .optimize = optimize, .x_backend = .xlib }).module("yes");
+    const steam = b.dependency("steamworks_sdk", .{ .target = target, .optimize = optimize }).module("steamworks_sdk");
 
     const time = std.Io.Timestamp.now(io, .real);
     const system = b.addLibrary(.{
@@ -36,6 +37,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "shared", .module = shared },
                 .{ .name = "system", .module = system.root_module },
                 .{ .name = "yes", .module = yes },
+                .{ .name = "steam", .module = steam },
             },
             .link_libc = true,
         }),
