@@ -23,14 +23,9 @@
             .url = "git+https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator#v3.3.0",
             .hash = "N-V-__8AAIutPgABk6NlXZhlJ5P8qVECvakZIKoO94h7xUOw",
         },
-        .wasm_runtime = .{
-            .url = "git+https://git.sagittarius-a.org/lorenzo/wasm-runtime#2bdfef7041b5e85e8d782d42c8a32185c8c92f01",
-            .hash = "wasm_runtime-0.0.0-_oLQEeMdBQDQC17ztold-i-28doIw56DvocXQlaI9Gfj",
-        },
-        .zig_objc = .{
-            .url = "git+https://github.com/lolzdev/zig-objc#db99ba17af2ed3b1fc05c463f86cdb46eb0aae04",
-            .hash = "zig_objc-0.0.0-Ir_Sp3IfAQDUK5DWXJvWDmZqeMFjgSg26Ju7VlVhEeYz",
-            .lazy = true,
+        .steamworks_sdk = .{
+            .url = "git+https://github.com/HaraldWik/steamworks-sdk-zig.git#f66255e48b1ea9a953752b73e09dadd976cdd956",
+            .hash = "steamworks_sdk-0.0.0-b9PM4rIcAABAhKxxjOK5geq26T0_dK8DseKqNInYI1Bh",
         },
     },
     .paths = .{
