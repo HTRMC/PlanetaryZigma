@@ -23,9 +23,9 @@
             .url = "git+https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator#v3.3.0",
             .hash = "N-V-__8AAIutPgABk6NlXZhlJ5P8qVECvakZIKoO94h7xUOw",
         },
-        .steamworks_sdk = .{
-            .url = "git+https://github.com/HaraldWik/steamworks-sdk-zig.git#f66255e48b1ea9a953752b73e09dadd976cdd956",
-            .hash = "steamworks_sdk-0.0.0-b9PM4rIcAABAhKxxjOK5geq26T0_dK8DseKqNInYI1Bh",
+        .zig_steamworks = .{
+            .url = "git+https://github.com/menduz/zig-steamworks.git#7ef8943e7aa9e47abc057e32bc1e1ad63b8ca86d",
+            .hash = "zig_steamworks-0.0.0-QF-Y-5rWxgB893nUytb-BxR5B8XE8FS4CUA2YoaolUSB",
         },
     },
     .paths = .{
