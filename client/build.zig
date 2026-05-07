@@ -9,7 +9,7 @@ pub fn build(b: *std.Build) void {
 
     const shared = b.dependency("shared", .{ .target = target, .optimize = optimize }).module("shared");
     const yes = b.dependency("yes", .{ .target = target, .optimize = optimize, .x_backend = .xlib }).module("yes");
-    const steam = b.dependency("steamworks_sdk", .{ .target = target, .optimize = optimize }).module("steamworks_sdk");
+    const steam = b.dependency("zig_steamworks", .{ .target = target, .optimize = optimize }).module("steamworks");
 
     const time = std.Io.Timestamp.now(io, .real);
     const system = b.addLibrary(.{

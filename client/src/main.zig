@@ -15,8 +15,8 @@ pub fn main(init: std.process.Init) !void {
     const io = init.io;
 
     //TODO: Move to a system within the DynLib. Steamworks SDK
-    try Steam.init();
-    defer Steam.shutdown();
+    // try Steam.init();
+    // defer Steam.shutdown();
 
     var cross_platform: yes.Platform.Cross = try .init(gpa, io, init.minimal);
     defer cross_platform.deinit();
