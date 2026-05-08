@@ -37,7 +37,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "shared", .module = shared },
                 .{ .name = "system", .module = system.root_module },
                 .{ .name = "yes", .module = yes },
-                .{ .name = "steam", .module = steam },
+                .{ .name = "steamworks", .module = steam },
             },
             .link_libc = true,
         }),

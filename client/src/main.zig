@@ -4,7 +4,7 @@ const shared = @import("shared");
 const system = @import("system");
 const World = system.World;
 const yes = @import("yes");
-const Steam = @import("steam");
+const Steam = @import("steamworks");
 
 pub fn main(init: std.process.Init) !void {
     var gpa_impl = if (builtin.mode == .Debug) std.heap.DebugAllocator(.{ .verbose_log = false }).init else init.gpa;
@@ -14,9 +14,8 @@ pub fn main(init: std.process.Init) !void {
     const gpa = gpa_impl.allocator();
     const io = init.io;
 
-    //TODO: Move to a system within the DynLib. Steamworks SDK
-    // try Steam.init();
-    // defer Steam.shutdown();
+    if (!Steam.SteamAPI_Init()) @panic("failed to init steamworks");
+    defer Steam.SteamAPI_Shutdown();
 
     var cross_platform: yes.Platform.Cross = try .init(gpa, io, init.minimal);
     defer cross_platform.deinit();
