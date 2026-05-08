@@ -13,6 +13,7 @@ pub fn build(b: *std.Build) void {
     });
 
     const shared = b.dependency("shared", .{ .target = target, .optimize = optimize }).module("shared");
+    const steam = b.dependency("zig_steamworks", .{ .target = target, .optimize = optimize }).module("steamworks");
 
     const time = std.Io.Timestamp.now(io, .real);
     const system = b.addLibrary(.{
@@ -23,6 +24,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "shared", .module = shared },
+
                 .{ .name = "zphy", .module = zphysics.module("root") },
             },
             .link_libc = true,
@@ -43,6 +45,7 @@ pub fn build(b: *std.Build) void {
             .imports = &.{
                 .{ .name = "shared", .module = shared },
                 .{ .name = "system", .module = system.root_module },
+                .{ .name = "steamworks", .module = steam },
             },
         }),
     });
