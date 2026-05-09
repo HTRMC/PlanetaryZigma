@@ -40,11 +40,6 @@ pub fn deinit(self: *@This()) !void {
 
 pub fn update(self: *@This(), info: *const Info, physics: *const Physics) !void {
     _ = self;
-    // for (info.world.entities.values()) |*entity| {
-    //     if (entity.kind == .enemy) {
-    //         try spawner.depspawn(entity.id);
-    //     }
-    // }
     var player: *system.Entity = undefined;
     for (info.world.entities.values()) |*entity| {
         if (entity.kind == .player) {

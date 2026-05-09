@@ -4,7 +4,6 @@ const shared = @import("shared");
 const system = @import("system");
 const World = system.World;
 const yes = @import("yes");
-const Steam = @import("steamworks");
 
 pub fn main(init: std.process.Init) !void {
     var gpa_impl = if (builtin.mode == .Debug) std.heap.DebugAllocator(.{ .verbose_log = false }).init else init.gpa;
@@ -14,8 +13,19 @@ pub fn main(init: std.process.Init) !void {
     const gpa = gpa_impl.allocator();
     const io = init.io;
 
-    if (!Steam.SteamAPI_Init()) @panic("failed to init steamworks");
-    defer Steam.SteamAPI_Shutdown();
+    const args = try init.minimal.args.toSlice(init.arena.allocator());
+    var server_steamid: u64 = 0;
+    if (args.len > 1) {
+        server_steamid = std.fmt.parseInt(u64, args[1], 10) catch |err| blk: {
+            std.log.warn("could not parse server_steamid arg \"{s}\": {s}", .{ args[1], @errorName(err) });
+            break :blk 0;
+        };
+    }
+    std.log.info("server_steamid = {d}", .{server_steamid});
+
+    var steam_client: shared.SteamNet.Client = try .init(gpa);
+    defer steam_client.deinit();
+    steam_client.connectToServer(server_steamid);
 
     var cross_platform: yes.Platform.Cross = try .init(gpa, io, init.minimal);
     defer cross_platform.deinit();
@@ -53,12 +63,16 @@ pub fn main(init: std.process.Init) !void {
         .window = window,
         .io = io,
         .world = &world,
+        .steam_client = &steam_client,
     });
 
     var elapsed_time: f32 = 0;
     var accumlated_time: f32 = 0;
     const time_step: f32 = 0.0167;
     main_loop: while (true) {
+        try steam_client.recievePackets();
+        try steam_client.sendPackets();
+
         accumlated_time += getDeltaTime(io);
         if (accumlated_time < time_step) continue;
         accumlated_time -= time_step;
@@ -66,8 +80,7 @@ pub fn main(init: std.process.Init) !void {
             system_table.systemContextUpdate(&system_context, &.{ .delta_time = time_step, .elapsed_time = elapsed_time, .world = &world }, &event);
             switch (event) {
                 .close => break :main_loop,
-                .resize => |size| {
-                    std.log.info("resize: {d}x{d}", .{ size.width, size.height });
+                .resize => {
                     try system_context.renderer.resize(gpa, window);
                 },
                 .key => |key| {
@@ -92,6 +105,7 @@ pub fn main(init: std.process.Init) !void {
         elapsed_time += time_step;
     }
 
+    try steam_client.sendPackets();
     system_table.systemContextDeinit(&system_context);
 }
 

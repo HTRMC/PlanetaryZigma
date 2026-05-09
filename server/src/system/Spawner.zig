@@ -48,12 +48,17 @@ pub fn spawn(self: *@This(), entity_info: system.Entity) !*system.Entity {
 }
 
 pub fn depspawn(self: *@This(), entity_id: u32) !void {
-    std.log.debug("despawn ID: {d}", .{entity_id});
+    // std.log.debug("despawn ID: {d}", .{entity_id});
     self.pending_despawn.appendAssumeCapacity(entity_id);
 }
 
 pub fn update(self: *@This(), info: *const system.Info) !void {
     _ = info;
+    // for (info.world.entities.values()) |*entity| {
+    //     if (entity.kind == .enemy) {
+    //         try self.depspawn(entity.id);
+    //     }
+    // }
     std.debug.assert(self.pending_despawn.items.len < max_despawn_count);
     for (self.pending_despawn.items) |entity_id| {
         if (self.world.get(entity_id)) |entity| {

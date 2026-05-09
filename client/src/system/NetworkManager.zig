@@ -9,82 +9,103 @@ const nz = shared.numz;
 
 gpa: std.mem.Allocator,
 io: std.Io,
-stream: std.Io.net.Stream,
-server_address: std.Io.net.IpAddress,
-server_listen: std.Io.Future(@typeInfo(@TypeOf(listen)).@"fn".return_type.?),
-command_queue: shared.net.CommandQueue = .{},
+steam_client: *shared.SteamNet.Client,
 spawner: *Spawner,
+/// Active connection to the server (0 = not yet connected). Filled in from
+/// SteamNet.events on the first .connected event.
+server_conn: shared.SteamNet.Conn = 0,
+/// Whether we've sent the "connect" handshake on the current server_conn.
+sent_connect: bool = false,
 
 pub fn init(
     self: *@This(),
     gpa: std.mem.Allocator,
     io: std.Io,
-    stream: std.Io.net.Stream,
-    server_address: std.Io.net.IpAddress,
+    net: *shared.SteamNet.Client,
     spawner: *Spawner,
 ) !void {
     self.* = .{
         .gpa = gpa,
         .io = io,
-        .stream = stream,
-        .server_address = server_address,
-        .server_listen = try io.concurrent(listen, .{ gpa, io, stream, &self.command_queue }),
+        .steam_client = net,
         .spawner = spawner,
     };
 }
 
 pub fn deinit(self: *@This()) !void {
-    self.server_listen.cancel(self.io) catch |err| {
-        switch (err) {
-            error.Canceled => std.log.err("err: {s}", .{@errorName(err)}),
-            error.Unexpected => std.log.err("err: {s}", .{@errorName(err)}),
-            else => {
-                std.log.err("err: {s}", .{@errorName(err)});
-                return err;
-            },
-        }
-    };
-    try self.command_queue.deinit(self.gpa, self.io);
+    if (self.server_conn != 0) self.sendDisconnect() catch {};
 }
 
-pub fn listen(gpa: std.mem.Allocator, io: std.Io, stream: std.Io.net.Stream, command_queue: *shared.net.CommandQueue) !void {
-    std.log.debug("hello 1", .{});
-    var buffer: [1024]u8 = undefined;
-    while (true) {
-        const msg = stream.socket.receive(io, &buffer) catch |err| {
-            if (err == error.WouldBlock) continue;
-            return err;
-        };
-        _ = msg;
+fn sendDisconnect(self: *@This()) !void {
+    var buf: [1024]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buf);
+    const cmd: shared.net.Command = .disconnect;
+    try cmd.write(&w);
+    try self.steam_client.packets.pushOutgoing(self.gpa, self.server_conn, w.buffered());
+}
 
-        var msg_reader: std.Io.Reader = .fixed(&buffer);
-        const reader = &msg_reader;
+fn sendConnect(self: *@This()) !void {
+    const name = "lucas";
+    const cmd: shared.net.Command = .{ .connect = .{ .name_len = name.len, .name = name } };
+    try self.sendCommand(cmd);
+}
 
-        const parsed = try shared.net.Command.parse(reader);
-
-        // if (parsed.command == .spawn_entity) {
-        // std.log.debug("Spanned: {any}", .{parsed.command});
-        // }
-
-        try command_queue.mutex.lock(io);
-        try command_queue.commands.append(gpa, parsed.command);
-        command_queue.mutex.unlock(io);
-    }
+pub fn sendCommand(self: *@This(), command: shared.net.Command) !void {
+    if (self.server_conn == 0) return;
+    var buf: [1024]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buf);
+    try command.write(&w);
+    try self.steam_client.packets.pushOutgoing(self.gpa, self.server_conn, w.buffered());
 }
 
 pub fn update(self: *@This(), system_context: *system.Context, info: *const Info) !void {
-    var fixed_writer_buffer: [1024]u8 = undefined;
-    var fix_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
-    const writer = &fix_writer;
-    for (info.world.entities.values()) |*entity| {
-        if (!entity.flags.camera or !entity.flags.transform) continue;
+    // 1. Drain lifecycle events.
+    for (self.steam_client.packets.events.items) |ev| switch (ev) {
+        .connected => |conn| {
+            self.server_conn = conn;
+            self.sent_connect = false;
+        },
+        .disconnected => |conn| {
+            if (self.server_conn == conn) {
+                self.server_conn = 0;
+                self.sent_connect = false;
+            }
+        },
+    };
+    self.steam_client.packets.events.clearRetainingCapacity();
 
-        try self.sendCommand(writer, .{ .input = entity.camera.input_map });
-        entity.camera.input_map.mouse_wheel = 0;
-        break;
+    // 2. Handshake once per fresh connection.
+    if (self.server_conn != 0 and !self.sent_connect) {
+        try self.sendConnect();
+        self.sent_connect = true;
     }
-    try self.command_queue.mutex.lock(self.io);
-    for (self.command_queue.commands.items) |command| switch (command) {
+
+    // 3. Send our input.
+    if (self.server_conn != 0) {
+        for (info.world.entities.values()) |*entity| {
+            if (!entity.flags.camera or !entity.flags.transform) continue;
+            try self.sendCommand(.{ .input = entity.camera.input_map });
+            entity.camera.input_map.mouse_wheel = 0;
+            break;
+        }
+    }
+
+    // 4. Drain inbound commands.
+    for (self.steam_client.packets.incoming.items) |*msg| {
+        if (msg.conn != self.server_conn) continue;
+        var msg_reader: std.Io.Reader = .fixed(&msg.bytes);
+        const reader = &msg_reader;
+        const parsed = shared.net.Command.parse(reader) catch |err| {
+            std.log.err("parse command: {s}", .{@errorName(err)});
+            continue;
+        };
+        try self.handleCommand(system_context, info, parsed.command);
+    }
+    self.steam_client.packets.incoming.clearRetainingCapacity();
+}
+
+fn handleCommand(self: *@This(), system_context: *system.Context, info: *const Info, command: shared.net.Command) !void {
+    switch (command) {
         .acknowledge => |acknowledge| {
             const new_player = try self.spawner.spawn(.{
                 .camera = .{ .transform = .{ .position = .{ 0, 0, 0 } } },
@@ -95,11 +116,11 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
             try info.world.enitity_mapping.put(self.gpa, acknowledge.id, new_player.id);
             info.world.my_server_id = acknowledge.id;
             std.log.debug("ack entities: {d}", .{info.world.next_id});
-            std.log.debug("ACK: MY ID: {d}, server ID: {d} ", .{ new_player.id, command.acknowledge.id });
+            std.log.debug("ACK: MY ID: {d}, server ID: {d} ", .{ new_player.id, acknowledge.id });
         },
         .spawn_entity => |spawn_entity| {
-            const server_id = command.spawn_entity.id;
-            if (info.world.enitity_mapping.contains(server_id)) continue;
+            const server_id = spawn_entity.id;
+            if (info.world.enitity_mapping.contains(server_id)) return;
             const new_entity = try self.spawner.spawn(.{
                 .transform = .{ .position = .{ 0, 0, 0 } },
                 .flags = .{ .transform = true, .mesh = true },
@@ -130,44 +151,31 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
                 },
                 .unknown => @panic("unknown entity type... wtf"),
             }
-
-            try info.world.enitity_mapping.put(self.gpa, command.spawn_entity.id, new_entity.id);
+            try info.world.enitity_mapping.put(self.gpa, spawn_entity.id, new_entity.id);
             std.log.debug("spawn entities : {d}", .{info.world.next_id});
-            std.log.debug("SPAWNED: MY ID: {d}, server ID: {d} ", .{ new_entity.id, command.spawn_entity.id });
+            std.log.debug("SPAWNED: MY ID: {d}, server ID: {d} ", .{ new_entity.id, spawn_entity.id });
         },
-        .despawn_entity => {
-            const server_id = command.despawn_entity.id;
+        .despawn_entity => |despawn_entity| {
+            const server_id = despawn_entity.id;
             const my_id = info.world.enitity_mapping.get(server_id) orelse {
                 std.log.debug("FAILED TO GET- SERVER ID: {d},  ", .{server_id});
-                continue;
+                return;
             };
             try self.spawner.depspawn(my_id);
             std.log.debug("DESPAWNED: MY ID: {d}, server ID: {d} ", .{ my_id, server_id });
         },
-        .update_transform => {
-            const update_transform_command = command.update_transform;
-            const id = info.world.enitity_mapping.get(update_transform_command.id) orelse continue;
-            const entity = info.world.get(id) orelse continue;
+        .update_transform => |update_transform_command| {
+            const id = info.world.enitity_mapping.get(update_transform_command.id) orelse return;
+            const entity = info.world.get(id) orelse return;
             entity.transform.position = update_transform_command.position;
             entity.transform.rotation = .fromVec(update_transform_command.rotation);
         },
-        .update_camera_rotation => {
-            const rotation_command = command.update_camera_rotation;
-            const id = info.world.enitity_mapping.get(rotation_command.id) orelse continue;
-            const entity = info.world.get(id) orelse continue;
+        .update_camera_rotation => |rotation_command| {
+            const id = info.world.enitity_mapping.get(rotation_command.id) orelse return;
+            const entity = info.world.get(id) orelse return;
             entity.camera.transform.rotation = .fromVec(rotation_command.rotation);
             entity.camera.transform.position = rotation_command.position;
         },
-        else => {
-            std.log.err("Unhandled command {s}", .{@tagName(command)});
-        },
-    };
-    // self.command_queue.commands.clearAndFree(self.allocator);
-    self.command_queue.commands.items.len = 0;
-    self.command_queue.mutex.unlock(self.io);
-}
-pub fn sendCommand(self: @This(), writer: *std.Io.Writer, command: shared.net.Command) !void {
-    writer.end = 0;
-    try command.write(writer);
-    try self.stream.socket.send(self.io, &self.server_address, writer.buffer);
+        else => std.log.err("Unhandled command {s}", .{@tagName(command)}),
+    }
 }

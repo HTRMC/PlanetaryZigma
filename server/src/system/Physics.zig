@@ -236,6 +236,7 @@ pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io) !void {
     };
 }
 
+//NOTE: Jolt leaks memory ;_;
 pub fn deinit(self: *@This()) void {
     self.gpa.destroy(self.contact_listener);
     self.gpa.destroy(self.broad_phase_layer_interface);

@@ -81,7 +81,6 @@ pub const Entity = struct {
 };
 
 pub const World = struct {
-    mutex: std.Io.Mutex = .init,
     gpa: std.mem.Allocator,
     entities: std.AutoArrayHashMapUnmanaged(u32, Entity) = .empty,
     next_id: u32 = 1,
@@ -92,7 +91,10 @@ pub const World = struct {
         };
     }
     pub fn deinit(self: *@This()) void {
-        for (self.entities.values()) |*entity| entity.deinit(self.gpa);
+        std.log.debug("size {d}", .{self.entities.entries.len});
+        for (self.entities.values()) |*entity| {
+            entity.deinit(self.gpa);
+        }
         self.entities.deinit(self.gpa);
     }
 
@@ -118,6 +120,7 @@ pub const Context = struct {
     gpa: std.mem.Allocator,
     io: std.Io,
     world: *World,
+    steam_server: *shared.SteamNet.Server,
     network_manager: NetworkManager,
     physics: Physics,
     player_controller: PlayerController,
@@ -131,6 +134,7 @@ pub const Context = struct {
         gpa: std.mem.Allocator,
         world: *World,
         io: std.Io,
+        steam_server: *shared.SteamNet.Server,
     };
 
     pub fn init(self: *@This(), data: *const Data) !void {
@@ -138,6 +142,7 @@ pub const Context = struct {
             .gpa = data.gpa,
             .io = data.io,
             .world = data.world,
+            .steam_server = data.steam_server,
             .spawner = undefined,
             .game = undefined,
             .network_manager = undefined,
@@ -153,7 +158,7 @@ pub const Context = struct {
         try self.spawner.init(data.gpa, data.world, &self.physics);
         try self.bullet.init(data.gpa, self.world, &self.physics, &self.spawner);
         try self.game.init(data.gpa, data.world, &self.spawner);
-        try self.network_manager.init(data.gpa, data.io);
+        try self.network_manager.init(data.gpa, data.io, data.steam_server);
     }
     pub fn deinit(self: *@This()) !void {
         self.physics.deinit();
