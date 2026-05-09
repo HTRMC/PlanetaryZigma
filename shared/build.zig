@@ -5,6 +5,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const numz = b.dependency("numz", .{ .target = target, .optimize = optimize }).module("numz");
+    const steamworks = b.dependency("zig_steamworks", .{ .target = target, .optimize = optimize }).module("steamworks");
 
     const shared = b.addModule("shared", .{
         .root_source_file = b.path("root.zig"),
@@ -12,6 +13,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .imports = &.{
             .{ .name = "numz", .module = numz },
+            .{ .name = "steamworks", .module = steamworks },
         },
     });
 

@@ -9,7 +9,7 @@ const nz = shared.numz;
 
 gpa: std.mem.Allocator,
 io: std.Io,
-net: *shared.SteamNet,
+steam_client: *shared.SteamNet.Client,
 spawner: *Spawner,
 /// Active connection to the server (0 = not yet connected). Filled in from
 /// SteamNet.events on the first .connected event.
@@ -21,13 +21,13 @@ pub fn init(
     self: *@This(),
     gpa: std.mem.Allocator,
     io: std.Io,
-    net: *shared.SteamNet,
+    net: *shared.SteamNet.Client,
     spawner: *Spawner,
 ) !void {
     self.* = .{
         .gpa = gpa,
         .io = io,
-        .net = net,
+        .steam_client = net,
         .spawner = spawner,
     };
 }
@@ -41,7 +41,7 @@ fn sendDisconnect(self: *@This()) !void {
     var w: std.Io.Writer = .fixed(&buf);
     const cmd: shared.net.Command = .disconnect;
     try cmd.write(&w);
-    try self.net.pushOutgoing(self.gpa, self.server_conn, w.buffered());
+    try self.steam_client.packets.pushOutgoing(self.gpa, self.server_conn, w.buffered());
 }
 
 fn sendConnect(self: *@This()) !void {
@@ -55,12 +55,12 @@ pub fn sendCommand(self: *@This(), command: shared.net.Command) !void {
     var buf: [1024]u8 = undefined;
     var w: std.Io.Writer = .fixed(&buf);
     try command.write(&w);
-    try self.net.pushOutgoing(self.gpa, self.server_conn, w.buffered());
+    try self.steam_client.packets.pushOutgoing(self.gpa, self.server_conn, w.buffered());
 }
 
 pub fn update(self: *@This(), system_context: *system.Context, info: *const Info) !void {
     // 1. Drain lifecycle events.
-    for (self.net.events.items) |ev| switch (ev) {
+    for (self.steam_client.packets.events.items) |ev| switch (ev) {
         .connected => |conn| {
             self.server_conn = conn;
             self.sent_connect = false;
@@ -72,7 +72,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
             }
         },
     };
-    self.net.events.clearRetainingCapacity();
+    self.steam_client.packets.events.clearRetainingCapacity();
 
     // 2. Handshake once per fresh connection.
     if (self.server_conn != 0 and !self.sent_connect) {
@@ -91,7 +91,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
     }
 
     // 4. Drain inbound commands.
-    for (self.net.incoming.items) |*msg| {
+    for (self.steam_client.packets.incoming.items) |*msg| {
         if (msg.conn != self.server_conn) continue;
         var msg_reader: std.Io.Reader = .fixed(&msg.bytes);
         const reader = &msg_reader;
@@ -101,7 +101,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
         };
         try self.handleCommand(system_context, info, parsed.command);
     }
-    self.net.incoming.clearRetainingCapacity();
+    self.steam_client.packets.incoming.clearRetainingCapacity();
 }
 
 fn handleCommand(self: *@This(), system_context: *system.Context, info: *const Info, command: shared.net.Command) !void {

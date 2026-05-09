@@ -54,6 +54,11 @@ pub fn depspawn(self: *@This(), entity_id: u32) !void {
 
 pub fn update(self: *@This(), info: *const system.Info) !void {
     _ = info;
+    // for (info.world.entities.values()) |*entity| {
+    //     if (entity.kind == .enemy) {
+    //         try self.depspawn(entity.id);
+    //     }
+    // }
     std.debug.assert(self.pending_despawn.items.len < max_despawn_count);
     for (self.pending_despawn.items) |entity_id| {
         if (self.world.get(entity_id)) |entity| {

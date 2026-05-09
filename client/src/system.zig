@@ -78,7 +78,7 @@ pub const Context = struct {
     io: std.Io,
     platform: yes.Platform,
     window: *yes.Window,
-    net: *shared.SteamNet,
+    steam_client: *shared.SteamNet.Client,
     asset_server: *AssetServer,
     renderer: Renderer,
     network_manager: NetworkManager,
@@ -102,7 +102,7 @@ pub const Context = struct {
         window: *yes.Window,
         asset_server: *AssetServer,
         world: *World,
-        net: *shared.SteamNet,
+        steam_client: *shared.SteamNet.Client,
     };
 
     pub fn init(self: *@This(), data: Data) !void {
@@ -110,11 +110,11 @@ pub const Context = struct {
         self.io = data.io;
         self.platform = data.platform;
         self.window = data.window;
-        self.net = data.net;
+        self.steam_client = data.steam_client;
         self.asset_server = data.asset_server;
         self.renderer = try .init(data.gpa, data.asset_server, data.platform, data.window);
         try self.spawner.init(data.gpa, data.world);
-        try self.network_manager.init(data.gpa, data.io, data.net, &self.spawner);
+        try self.network_manager.init(data.gpa, data.io, data.steam_client, &self.spawner);
     }
 
     pub fn deinit(self: *@This()) !void {

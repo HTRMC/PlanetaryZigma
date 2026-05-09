@@ -6,13 +6,13 @@ const Info = system.Info;
 
 gpa: std.mem.Allocator,
 io: std.Io,
-net: *shared.SteamNet,
+net: *shared.SteamNet.Server,
 clients: std.AutoHashMap(shared.SteamNet.Conn, Client),
 
 pub const Client = struct {
     gpa: std.mem.Allocator,
     io: std.Io,
-    net: *shared.SteamNet,
+    steam_server: *shared.SteamNet.Server,
     conn: shared.SteamNet.Conn,
     name: []const u8 = "",
     entity_id: u32 = 0,
@@ -22,7 +22,7 @@ pub const Client = struct {
     pub fn sendCommand(self: *@This(), writer: *std.Io.Writer, command: shared.net.Command) !void {
         writer.end = 0;
         try command.write(writer);
-        try self.net.pushOutgoing(self.gpa, self.conn, writer.buffered());
+        try self.steam_server.packets.pushOutgoing(self.gpa, self.conn, writer.buffered());
     }
 
     pub fn deinit(self: *@This()) !void {
@@ -31,7 +31,7 @@ pub const Client = struct {
     }
 };
 
-pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io, net: *shared.SteamNet) !void {
+pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io, net: *shared.SteamNet.Server) !void {
     self.* = .{
         .gpa = gpa,
         .io = io,
@@ -57,14 +57,14 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
     const world = info.world;
 
     // 1. Drain Steam lifecycle events into client map.
-    for (self.net.events.items) |ev| switch (ev) {
+    for (self.net.packets.events.items) |ev| switch (ev) {
         .connected => |conn| {
             const gop = try self.clients.getOrPut(conn);
             if (!gop.found_existing) {
                 gop.value_ptr.* = .{
                     .gpa = self.gpa,
                     .io = self.io,
-                    .net = self.net,
+                    .steam_server = self.net,
                     .conn = conn,
                 };
                 std.log.debug("client connected: conn={d}", .{conn});
@@ -79,10 +79,10 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
             }
         },
     };
-    self.net.events.clearRetainingCapacity();
+    self.net.packets.events.clearRetainingCapacity();
 
     // 2. Drain incoming bytes into the matching client's command queue.
-    for (self.net.incoming.items) |*msg| {
+    for (self.net.packets.incoming.items) |*msg| {
         const client = self.clients.getPtr(msg.conn) orelse continue;
         var msg_reader: std.Io.Reader = .fixed(&msg.bytes);
         const reader = &msg_reader;
@@ -92,7 +92,7 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
         };
         try client.command_queue.commands.append(self.gpa, parsed.command);
     }
-    self.net.incoming.clearRetainingCapacity();
+    self.net.packets.incoming.clearRetainingCapacity();
 
     // 3. Process per-client command queues.
     var fixed_writer_buffer: [1024]u8 = undefined;
