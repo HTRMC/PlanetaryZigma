@@ -11,6 +11,10 @@ const Steam = @import("steamworks");
 /// connect path.
 var server_steamid: u64 = 0;
 
+/// Virtual port used for self→self ConnectP2P experiment (F4). Must match
+/// `virtual_port` in server/src/main.zig when running same-account-self-connect.
+const self_connect_virtual_port: i32 = 42;
+
 const State = struct {
     /// Steam lobby we created on startup (so we can write server_steamid into its data).
     own_lobby: u64 = 0,
@@ -121,6 +125,11 @@ pub fn main(init: std.process.Init) !void {
                         _ = Steam.SteamMatchmaking().CreateLobby(.k_ELobbyTypePublic, 4);
                         std.log.info("create lobby requested", .{});
                     }
+                    if (key.state == .released and key.sym == .f4) {
+                        const my_id = Steam.SteamUser().GetSteamID();
+                        std.log.info("F4: self-connecting to {d} on virtual port {d}", .{ my_id, self_connect_virtual_port });
+                        connectToServer(my_id, self_connect_virtual_port);
+                    }
                 },
                 else => {},
             }
@@ -185,7 +194,7 @@ fn steamPump(pipe: Steam.HSteamPipe) void {
                 const val = std.mem.span(c_val);
                 std.log.info("lobby enter: id={d} server_steamid=\"{s}\"", .{ ev.m_ulSteamIDLobby, val });
                 const id = std.fmt.parseInt(u64, val, 10) catch 0;
-                if (id != 0) connectToServer(id);
+                if (id != 0) connectToServer(id, 0);
             },
             .SteamNetConnectionStatusChangedCallback => |ev| {
                 std.log.info("client net state: {s} (conn={d})", .{ @tagName(ev.m_info.m_eState), ev.m_hConn });
@@ -207,17 +216,17 @@ fn steamPump(pipe: Steam.HSteamPipe) void {
     }
 }
 
-fn connectToServer(steam_id: u64) void {
+fn connectToServer(steam_id: u64, virtual_port: i32) void {
     var identity: Steam.SteamNetworkingIdentity = undefined;
     identity.Clear();
     identity.SetSteamID64(steam_id);
-    const conn = Steam.SteamNetworkingSockets_SteamAPI().ConnectP2P(&identity, 0, &.{});
+    const conn = Steam.SteamNetworkingSockets_SteamAPI().ConnectP2P(&identity, virtual_port, &.{});
     if (conn == 0) {
-        std.log.err("ConnectP2P failed for {d}", .{steam_id});
+        std.log.err("ConnectP2P failed for {d} (vport={d})", .{ steam_id, virtual_port });
         return;
     }
     state.server_conn = conn;
-    std.log.info("ConnectP2P({d}) -> {d}", .{ steam_id, conn });
+    std.log.info("ConnectP2P({d}, vport={d}) -> {d}", .{ steam_id, virtual_port, conn });
 }
 
 pub fn getDeltaTime(io: std.Io) f32 {
