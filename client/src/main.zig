@@ -71,6 +71,7 @@ pub fn main(init: std.process.Init) !void {
     const time_step: f32 = 0.0167;
     main_loop: while (true) {
         try steam_client.recievePackets();
+        try steam_client.sendPackets();
 
         accumlated_time += getDeltaTime(io);
         if (accumlated_time < time_step) continue;
@@ -89,8 +90,6 @@ pub fn main(init: std.process.Init) !void {
             }
         }
         system_table.systemContextUpdate(&system_context, &.{ .delta_time = time_step, .elapsed_time = elapsed_time, .world = &world }, null);
-
-        try steam_client.sendPackets();
 
         if (try watcher.reload(io)) {
             std.log.err("system table updated", .{});

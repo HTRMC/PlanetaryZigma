@@ -81,7 +81,6 @@ pub const Entity = struct {
 };
 
 pub const World = struct {
-    mutex: std.Io.Mutex = .init,
     gpa: std.mem.Allocator,
     entities: std.AutoArrayHashMapUnmanaged(u32, Entity) = .empty,
     next_id: u32 = 1,
@@ -121,7 +120,7 @@ pub const Context = struct {
     gpa: std.mem.Allocator,
     io: std.Io,
     world: *World,
-    net: *shared.SteamNet.Server,
+    steam_server: *shared.SteamNet.Server,
     network_manager: NetworkManager,
     physics: Physics,
     player_controller: PlayerController,
@@ -143,7 +142,7 @@ pub const Context = struct {
             .gpa = data.gpa,
             .io = data.io,
             .world = data.world,
-            .net = data.steam_server,
+            .steam_server = data.steam_server,
             .spawner = undefined,
             .game = undefined,
             .network_manager = undefined,

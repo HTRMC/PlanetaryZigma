@@ -1,14 +1,3 @@
-//! Layout-stable shim between main.zig (which owns the Steam runtime state)
-//! and the hot-reloadable system dynlib (which only does game logic).
-//!
-//! main.zig drives the Steam side: pumps callbacks, drains
-//! ReceiveMessagesOnConnection into `incoming`, surfaces connect/disconnect
-//! via `events`, and flushes `outgoing` through SendMessageToConnection.
-//!
-//! NetworkManager (inside the dynlib) reads `events` and `incoming`, parses
-//! Commands, processes them, and pushes responses into `outgoing`. It never
-//! touches Steam types directly.
-
 const std = @import("std");
 const steam = @import("steamworks");
 
@@ -67,7 +56,11 @@ pub const Server = struct {
     pub const max_connections: usize = 32;
     connections: [max_connections]steam.HSteamNetConnection = @splat(0),
 
+    handle_packets_future: std.Io.Future(@typeInfo(@TypeOf(handlePackets)).@"fn".return_type.?),
+    packet_mutex: std.Io.Mutex = .init,
+
     gpa: std.mem.Allocator,
+    io: std.Io,
     pipe: steam.HSteamPipe,
     gs: steam.ISteamGameServer,
     socket: steam.ISteamNetworkingSockets,
@@ -120,19 +113,28 @@ pub const Server = struct {
             .pipe = pipe,
             .gs = gs,
             .socket = sock,
+            .io = io,
             .packets = .{},
+            .handle_packets_future = undefined,
         };
     }
 
-    pub fn deinit(self: @This()) void {
-        _ = self;
+    pub fn deinit(self: *@This()) void {
         steam.Server.SteamGameServer_Shutdown();
+        self.packets.deinit(self.gpa);
+    }
 
-        // self.packets.deinit(self.gpa);
+    pub fn handlePackets(self: *@This()) !void {
+        while (true) {
+            try self.packet_mutex.lock(self.io);
+            _ = try self.steamCallback(self.gpa, self.pipe, self.socket);
+            try self.recievePackets();
+            try self.sendPackets();
+            self.packet_mutex.unlock(self.io);
+        }
     }
 
     pub fn recievePackets(self: *@This()) !void {
-        _ = try self.steamCallback(self.gpa, self.pipe, self.socket);
         var msgs: [16][*c]steam.SteamNetworkingMessage_t = undefined;
         for (self.connections) |conn| {
             if (conn == 0) continue;
@@ -229,16 +231,6 @@ pub const Client = struct {
     own_lobby: u64 = 0,
     packets: Packets,
     pipe: steam.HSteamPipe,
-    // const State = struct {
-    //     /// Steam lobby we created on startup (so we can write server_steamid into its data).
-    //     own_lobby: u64 = 0,
-    //     /// First lobby returned by the most recent RequestLobbyList; F2 will JoinLobby on it.
-    //     last_match: u64 = 0,
-    //     /// Active P2P connection to the server, if any.
-    //     server_conn: steam.HSteamNetConnection = 0,
-    // };
-    //
-    // var state: State = .{};
 
     pub fn init(gpa: std.mem.Allocator) !@This() {
         if (!steam.SteamAPI_Init()) return error.InitSteamworks;
@@ -288,11 +280,11 @@ pub const Client = struct {
     pub fn recievePackets(self: *@This()) !void {
         const sock = steam.SteamNetworkingSockets_SteamAPI();
 
-        var status: steam.SteamNetConnectionRealTimeStatus_t = std.mem.zeroes(steam.SteamNetConnectionRealTimeStatus_t);
-        const r = sock.GetConnectionRealTimeStatus(self.server_conn, &status, &.{});
-        if (r == .k_EResultOK) {
-            std.log.info("ping={d}ms", .{status.m_nPing});
-        }
+        // var status: steam.SteamNetConnectionRealTimeStatus_t = std.mem.zeroes(steam.SteamNetConnectionRealTimeStatus_t);
+        // const r = sock.GetConnectionRealTimeStatus(self.server_conn, &status, &.{});
+        // if (r == .k_EResultOK) {
+        //     std.log.info("ping={d}ms", .{status.m_nPing});
+        // }
 
         try self.steamPump();
         var msgs: [16][*c]steam.SteamNetworkingMessage_t = undefined;

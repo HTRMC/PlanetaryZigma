@@ -6,7 +6,7 @@ const Info = system.Info;
 
 gpa: std.mem.Allocator,
 io: std.Io,
-net: *shared.SteamNet.Server,
+steam_server: *shared.SteamNet.Server,
 clients: std.AutoHashMap(shared.SteamNet.Conn, Client),
 
 pub const Client = struct {
@@ -35,7 +35,7 @@ pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io, net: *shared.Ste
     self.* = .{
         .gpa = gpa,
         .io = io,
-        .net = net,
+        .steam_server = net,
         .clients = .init(gpa),
     };
 }
@@ -56,15 +56,17 @@ pub fn reload(self: *@This(), pre_reload: bool) !void {
 pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
     const world = info.world;
 
+    try self.steam_server.packet_mutex.lock(self.io);
+    std.log.debug("cmd coint: {d}", .{self.steam_server.packets.incoming.items.len});
     // 1. Drain Steam lifecycle events into client map.
-    for (self.net.packets.events.items) |ev| switch (ev) {
+    for (self.steam_server.packets.events.items) |ev| switch (ev) {
         .connected => |conn| {
             const gop = try self.clients.getOrPut(conn);
             if (!gop.found_existing) {
                 gop.value_ptr.* = .{
                     .gpa = self.gpa,
                     .io = self.io,
-                    .steam_server = self.net,
+                    .steam_server = self.steam_server,
                     .conn = conn,
                 };
                 std.log.debug("client connected: conn={d}", .{conn});
@@ -79,10 +81,10 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
             }
         },
     };
-    self.net.packets.events.clearRetainingCapacity();
+    self.steam_server.packets.events.clearRetainingCapacity();
 
     // 2. Drain incoming bytes into the matching client's command queue.
-    for (self.net.packets.incoming.items) |*msg| {
+    for (self.steam_server.packets.incoming.items) |*msg| {
         const client = self.clients.getPtr(msg.conn) orelse continue;
         var msg_reader: std.Io.Reader = .fixed(&msg.bytes);
         const reader = &msg_reader;
@@ -92,7 +94,7 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
         };
         try client.command_queue.commands.append(self.gpa, parsed.command);
     }
-    self.net.packets.incoming.clearRetainingCapacity();
+    self.steam_server.packets.incoming.clearRetainingCapacity();
 
     // 3. Process per-client command queues.
     var fixed_writer_buffer: [1024]u8 = undefined;
@@ -148,6 +150,7 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
         // camera
         if (world.get(client.entity_id)) |player_entity| {
             const camera = player_entity.camera;
+            client.needs_full_sync = player_entity.controller.input.r;
             try client.sendCommand(writer, .{ .update_camera_rotation = .{
                 .position = camera.transform.position,
                 .rotation = camera.transform.rotation.toVec(),
@@ -194,4 +197,5 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
     }
     spawner.network_pending_despawn.clearRetainingCapacity();
     spawner.network_pending_spawn.clearRetainingCapacity();
+    self.steam_server.packet_mutex.unlock(self.io);
 }

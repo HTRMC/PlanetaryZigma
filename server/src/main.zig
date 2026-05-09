@@ -15,6 +15,7 @@ pub fn main(init: std.process.Init) !void {
 
     var steam_server: shared.SteamNet.Server = try .init(gpa, io);
     defer steam_server.deinit();
+    steam_server.handle_packets_future = try io.concurrent(shared.SteamNet.Server.handlePackets, .{&steam_server});
 
     var watcher: shared.Watcher = try .init("system_server_", io);
     defer watcher.deinit(io);
@@ -34,25 +35,26 @@ pub fn main(init: std.process.Init) !void {
     });
     defer system_table.systemContextDeinit(&system_context);
 
-    var count: usize = 0;
     var accumlated_time: f32 = 0;
     var elapsed_time: f32 = 0;
     var delta_time: f32 = 0;
     const time_step: f32 = 0.0167;
     while (true) {
         if (system_context.request_exit) break;
-        try steam_server.recievePackets();
+        // try steam_server.recievePackets();
 
+        // try steam_server.sendPackets();
         delta_time = getDeltaTime(io);
         accumlated_time += delta_time;
         if (accumlated_time < time_step) continue;
         elapsed_time += time_step;
         accumlated_time -= time_step;
-        try world.mutex.lock(io);
-        count += 1;
 
-        system_table.systemContextUpdate(&system_context, &.{ .delta_time = time_step, .elapsed_time = elapsed_time, .world = &world });
-        try steam_server.sendPackets();
+        system_table.systemContextUpdate(&system_context, &.{
+            .delta_time = time_step,
+            .elapsed_time = elapsed_time,
+            .world = &world,
+        });
 
         if (try watcher.reload(io)) {
             system_table.systemContextReload(&system_context, true);
@@ -62,7 +64,6 @@ pub fn main(init: std.process.Init) !void {
             system_table = try .load(&watcher.dynlib.?);
             system_table.systemContextReload(&system_context, false);
         }
-        world.mutex.unlock(io);
     }
 }
 
