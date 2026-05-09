@@ -6,6 +6,10 @@ const World = system.World;
 const nz = shared.numz;
 const steam = @import("steamworks");
 
+/// Virtual port both sides agree on. Lets the server distinguish "I'm the
+/// PlanetaryZigma server" from any other thing on the same SteamID.
+pub const virtual_port: i32 = 42;
+
 pub fn main(init: std.process.Init) !void {
     var gpa_impl = if (builtin.mode == .Debug) std.heap.DebugAllocator(.{ .verbose_log = false }).init else init.gpa;
     defer {
@@ -14,46 +18,18 @@ pub fn main(init: std.process.Init) !void {
     const gpa = gpa_impl.allocator();
     const io = init.io;
 
-    if (!steam.Server.SteamInternal_GameServer_Init(
-        0,
-        27016,
-        27015,
-        steam.STEAMGAMESERVER_QUERY_PORT_SHARED,
-        steam.EServerMode.eServerModeAuthentication,
-        "1.0.0.0",
-    )) @panic("failed to init steam game server");
-    defer steam.Server.SteamGameServer_Shutdown();
-
-    const gs = steam.SteamGameServer();
-    gs.SetGameDescription("Planetary Zigma dedicated server");
-    gs.SetModDir("planetaryzigma");
-    gs.SetDedicatedServer(true);
-    gs.SetMaxPlayerCount(16);
-    gs.SetServerName("Planetary Zigma");
-    gs.SetMapName("default");
-    gs.SetPasswordProtected(false);
-    gs.LogOnAnonymous();
-    gs.SetAdvertiseServerActive(true);
+    if (!steam.SteamAPI_Init()) @panic("failed to init steamworks");
+    defer steam.SteamAPI_Shutdown();
 
     steam.SteamAPI_ManualDispatch_Init();
-    const pipe = steam.SteamGameServer_GetHSteamPipe();
+    const pipe = steam.SteamAPI_GetHSteamPipe();
 
-    var connected = false;
-    var deadline: u32 = 0;
-    while (!connected and deadline < 1000) : (deadline += 1) {
-        switch (try steamCallback(pipe, null)) {
-            101 => connected = true,
-            else => {},
-        }
-        try io.sleep(.{ .nanoseconds = std.time.ns_per_s }, .real);
-    }
-    if (!connected) return error.LogonTimeout;
+    std.log.info("STEAM_ID {d}", .{steam.SteamUser().GetSteamID()});
 
-    std.log.info("STEAM_ID {d}", .{gs.GetSteamID()});
-
-    const sock = steam.SteamGameServerNetworkingSockets_SteamAPI();
-    const listen = sock.CreateListenSocketP2P(0, &.{});
+    const sock = steam.SteamNetworkingSockets_SteamAPI();
+    const listen = sock.CreateListenSocketP2P(virtual_port, &.{});
     if (listen == 0) return error.ListenFailed;
+    std.log.info("listening on virtual port {d}", .{virtual_port});
 
     var watcher: shared.Watcher = try .init("system_server_", io);
     defer watcher.deinit(io);
@@ -126,7 +102,6 @@ pub fn steamCallback(pipe: steam.HSteamPipe, sock: ?steam.ISteamNetworkingSocket
     while (steam.SteamAPI_ManualDispatch_GetNextCallback(pipe, &msg)) {
         defer steam.SteamAPI_ManualDispatch_FreeLastCallback(pipe);
         switch (msg.m_iCallback) {
-            102 => return error.SteamServersConnectFailure,
             1221 => {
                 const data = msg.data() orelse return msg.m_iCallback;
                 const ev = data.SteamNetConnectionStatusChangedCallback;
