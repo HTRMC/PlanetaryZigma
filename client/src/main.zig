@@ -45,8 +45,8 @@ pub fn main(init: std.process.Init) !void {
     Steam.SteamAPI_ManualDispatch_Init();
     const steam_pipe = Steam.SteamAPI_GetHSteamPipe();
 
-    // Create a public lobby on startup so RequestLobbyList has at least one match.
-    // _ = Steam.SteamMatchmaking().CreateLobby(.k_ELobbyTypePublic, 4);
+    var net: shared.SteamNet = .{};
+    defer net.deinit(gpa);
 
     var cross_platform: yes.Platform.Cross = try .init(gpa, io, init.minimal);
     defer cross_platform.deinit();
@@ -84,13 +84,17 @@ pub fn main(init: std.process.Init) !void {
         .window = window,
         .io = io,
         .world = &world,
+        .net = &net,
     });
+
+    _ = Steam.SteamMatchmaking().CreateLobby(.k_ELobbyTypePublic, 4);
+    _ = Steam.SteamMatchmaking().JoinLobby(state.last_match);
 
     var elapsed_time: f32 = 0;
     var accumlated_time: f32 = 0;
     const time_step: f32 = 0.0167;
     main_loop: while (true) {
-        steamPump(steam_pipe);
+        try steamPump(gpa, steam_pipe, &net);
 
         accumlated_time += getDeltaTime(io);
         if (accumlated_time < time_step) continue;
@@ -127,6 +131,8 @@ pub fn main(init: std.process.Init) !void {
         }
         system_table.systemContextUpdate(&system_context, &.{ .delta_time = time_step, .elapsed_time = elapsed_time, .world = &world }, null);
 
+        flushOutgoing(&net);
+
         if (try watcher.reload(io)) {
             std.log.err("system table updated", .{});
             system_table.systemContextReload(&system_context, true);
@@ -141,10 +147,11 @@ pub fn main(init: std.process.Init) !void {
         elapsed_time += time_step;
     }
 
+    flushOutgoing(&net);
     system_table.systemContextDeinit(&system_context);
 }
 
-fn steamPump(pipe: Steam.HSteamPipe) void {
+fn steamPump(gpa: std.mem.Allocator, pipe: Steam.HSteamPipe, net: *shared.SteamNet) !void {
     Steam.SteamAPI_ManualDispatch_RunFrame(pipe);
     var msg: Steam.CallbackMsg_t = undefined;
     while (Steam.SteamAPI_ManualDispatch_GetNextCallback(pipe, &msg)) {
@@ -192,12 +199,14 @@ fn steamPump(pipe: Steam.HSteamPipe) void {
                 switch (ev.m_info.m_eState) {
                     .k_ESteamNetworkingConnectionState_Connected => {
                         state.server_conn = ev.m_hConn;
+                        try net.pushEvent(gpa, .{ .connected = ev.m_hConn });
                     },
                     .k_ESteamNetworkingConnectionState_ClosedByPeer,
                     .k_ESteamNetworkingConnectionState_ProblemDetectedLocally,
                     => {
                         _ = Steam.SteamNetworkingSockets_SteamAPI().CloseConnection(ev.m_hConn, 0, "client-close", false);
                         if (state.server_conn == ev.m_hConn) state.server_conn = 0;
+                        try net.pushEvent(gpa, .{ .disconnected = ev.m_hConn });
                     },
                     else => {},
                 }
@@ -205,6 +214,34 @@ fn steamPump(pipe: Steam.HSteamPipe) void {
             else => {},
         }
     }
+
+    if (state.server_conn != 0) try drainIncoming(gpa, state.server_conn, net);
+}
+
+fn drainIncoming(gpa: std.mem.Allocator, conn: Steam.HSteamNetConnection, net: *shared.SteamNet) !void {
+    const sock = Steam.SteamNetworkingSockets_SteamAPI();
+    var msgs: [16][*c]Steam.SteamNetworkingMessage_t = undefined;
+    const n = sock.ReceiveMessagesOnConnection(conn, &msgs[0], @intCast(msgs.len));
+    if (n <= 0) return;
+    const count: usize = @intCast(n);
+    for (msgs[0..count]) |raw| {
+        if (raw == null) continue;
+        const m: *Steam.SteamNetworkingMessage_t = raw;
+        defer m.Release();
+        if (m.m_pData == null or m.m_cbSize <= 0) continue;
+        const bytes = m.m_pData[0..@intCast(m.m_cbSize)];
+        try net.pushIncoming(gpa, conn, bytes);
+    }
+}
+
+fn flushOutgoing(net: *shared.SteamNet) void {
+    if (net.outgoing.items.len == 0) return;
+    const sock = Steam.SteamNetworkingSockets_SteamAPI();
+    for (net.outgoing.items) |*msg| {
+        var msg_num: i64 = 0;
+        _ = sock.SendMessageToConnection(msg.conn, msg.bytes[0..msg.len], Steam.k_nSteamNetworkingSend_Reliable, &msg_num);
+    }
+    net.outgoing.clearRetainingCapacity();
 }
 
 fn connectToServer(steam_id: u64) void {

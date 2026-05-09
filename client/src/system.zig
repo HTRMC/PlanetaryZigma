@@ -78,8 +78,7 @@ pub const Context = struct {
     io: std.Io,
     platform: yes.Platform,
     window: *yes.Window,
-    server_address: std.Io.net.IpAddress,
-    server_stream: std.Io.net.Stream,
+    net: *shared.SteamNet,
     asset_server: *AssetServer,
     renderer: Renderer,
     network_manager: NetworkManager,
@@ -103,45 +102,25 @@ pub const Context = struct {
         window: *yes.Window,
         asset_server: *AssetServer,
         world: *World,
+        net: *shared.SteamNet,
     };
 
     pub fn init(self: *@This(), data: Data) !void {
-        self.server_address = try .parse("127.0.0.1", 8080);
-        self.server_stream = try self.server_address.connect(data.io, .{ .mode = .dgram, .protocol = .udp });
         self.gpa = data.gpa;
         self.io = data.io;
         self.platform = data.platform;
         self.window = data.window;
+        self.net = data.net;
         self.asset_server = data.asset_server;
         self.renderer = try .init(data.gpa, data.asset_server, data.platform, data.window);
         try self.spawner.init(data.gpa, data.world);
-        try self.network_manager.init(data.gpa, data.io, self.server_stream, self.server_address, &self.spawner);
-
-        const name = "lucas";
-        const connect_command: shared.net.Command = .{ .connect = .{
-            .name_len = name.len,
-            .name = name,
-        } };
-        var fixed_writer_buffer: [1024]u8 = undefined;
-        var fixed_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
-        const writer = &fixed_writer;
-        try connect_command.write(writer);
-        try self.server_stream.socket.send(self.io, &self.server_address, writer.buffered());
+        try self.network_manager.init(data.gpa, data.io, data.net, &self.spawner);
     }
 
     pub fn deinit(self: *@This()) !void {
         std.log.debug("DEINIT", .{});
-        var fixed_writer_buffer: [1024]u8 = undefined;
-        var fixed_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
-        const writer = &fixed_writer;
-        const disconnect_command: shared.net.Command = .disconnect;
-        fixed_writer.end = 0;
-        try disconnect_command.write(writer);
-        try self.server_stream.socket.send(self.io, &self.server_address, writer.buffered());
-
         self.renderer.deinit(self.gpa);
         try self.network_manager.deinit();
-        self.server_stream.close(self.io);
         try self.planet.deinit(self.gpa);
         self.spawner.deinit();
     }
@@ -167,11 +146,11 @@ pub const Context = struct {
         }
     }
     fn reload(self: *@This(), pre_reload: bool) !void {
-        std.log.debug("before-0", .{});
         if (pre_reload) {
+            std.log.debug("pre-hotreload", .{});
             self.renderer.deinit(self.gpa);
-            try self.network_manager.deinit();
         } else {
+            std.log.debug("post-hotreload", .{});
             self.renderer = try .init(self.gpa, self.asset_server, self.platform, self.window);
             const vulkan_mesh_handle = try self.renderer.inner.createMesh(
                 self.gpa,
@@ -181,9 +160,7 @@ pub const Context = struct {
             );
             //TODO: take care of handle matching
             _ = vulkan_mesh_handle;
-            try self.network_manager.init(self.gpa, self.io, self.server_stream, self.server_address, &self.spawner);
         }
-        std.log.debug("before-1", .{});
     }
 };
 

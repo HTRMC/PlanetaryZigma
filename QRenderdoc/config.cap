@@ -17,7 +17,7 @@
                 "variable": "SDL_VIDEODRIVER"
             }
         ],
-        "executable": "/home/lucas/Projects/PlanetaryZigma/zig-out/bin/PlanetaryZigma",
+        "executable": "/home/lucas/Projects/PlanetaryZigma/client/zig-out/bin/client",
         "inject": false,
         "numQueuedFrames": 0,
         "options": {
@@ -35,6 +35,6 @@
             "verifyBufferAccess": false
         },
         "queuedFrameCap": 0,
-        "workingDir": "/home/lucas/Projects/PlanetaryZigma"
+        "workingDir": "/home/lucas/Projects/PlanetaryZigma/client"
     }
 }

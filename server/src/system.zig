@@ -92,7 +92,10 @@ pub const World = struct {
         };
     }
     pub fn deinit(self: *@This()) void {
-        for (self.entities.values()) |*entity| entity.deinit(self.gpa);
+        std.log.debug("size {d}", .{self.entities.entries.len});
+        for (self.entities.values()) |*entity| {
+            entity.deinit(self.gpa);
+        }
         self.entities.deinit(self.gpa);
     }
 
@@ -118,6 +121,7 @@ pub const Context = struct {
     gpa: std.mem.Allocator,
     io: std.Io,
     world: *World,
+    net: *shared.SteamNet,
     network_manager: NetworkManager,
     physics: Physics,
     player_controller: PlayerController,
@@ -131,6 +135,7 @@ pub const Context = struct {
         gpa: std.mem.Allocator,
         world: *World,
         io: std.Io,
+        net: *shared.SteamNet,
     };
 
     pub fn init(self: *@This(), data: *const Data) !void {
@@ -138,6 +143,7 @@ pub const Context = struct {
             .gpa = data.gpa,
             .io = data.io,
             .world = data.world,
+            .net = data.net,
             .spawner = undefined,
             .game = undefined,
             .network_manager = undefined,
@@ -153,7 +159,7 @@ pub const Context = struct {
         try self.spawner.init(data.gpa, data.world, &self.physics);
         try self.bullet.init(data.gpa, self.world, &self.physics, &self.spawner);
         try self.game.init(data.gpa, data.world, &self.spawner);
-        try self.network_manager.init(data.gpa, data.io);
+        try self.network_manager.init(data.gpa, data.io, data.net);
     }
     pub fn deinit(self: *@This()) !void {
         self.physics.deinit();
