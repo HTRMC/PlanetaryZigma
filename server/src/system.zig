@@ -91,7 +91,6 @@ pub const World = struct {
         };
     }
     pub fn deinit(self: *@This()) void {
-        std.log.debug("size {d}", .{self.entities.entries.len});
         for (self.entities.values()) |*entity| {
             entity.deinit(self.gpa);
         }
@@ -176,7 +175,7 @@ pub const Context = struct {
         try self.bullet.update(info);
         try self.camera_controller.update(info);
         try self.spawner.update(info);
-        // self.request_exit = true;
+        self.request_exit = true;
         // if (info.elapsed_time > 1) self.request_exit = true;
     }
     fn reload(self: *@This(), pre_reload: bool) !void {

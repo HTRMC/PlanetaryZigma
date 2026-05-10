@@ -65,6 +65,7 @@ pub fn main(init: std.process.Init) !void {
             system_table.systemContextReload(&system_context, false);
         }
     }
+    try steam_server.handle_packets_future.cancel(io);
 }
 
 pub fn getDeltaTime(io: std.Io) f32 {
