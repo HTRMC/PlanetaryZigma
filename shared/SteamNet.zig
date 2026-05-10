@@ -126,11 +126,13 @@ pub const Server = struct {
 
     pub fn handlePackets(self: *@This()) !void {
         while (true) {
+            try self.io.checkCancel();
             try self.packet_mutex.lock(self.io);
             _ = try self.steamCallback(self.gpa, self.pipe, self.socket);
             try self.recievePackets();
             try self.sendPackets();
             self.packet_mutex.unlock(self.io);
+            try self.io.sleep(.{ .nanoseconds = 1_000_000 }, .real);
         }
     }
 
