@@ -19,10 +19,10 @@ pub const Client = struct {
     needs_full_sync: bool = true,
     command_queue: shared.net.CommandQueue = .{},
 
-    pub fn sendCommand(self: *@This(), writer: *std.Io.Writer, command: shared.net.Command) !void {
+    pub fn sendCommand(self: *@This(), writer: *std.Io.Writer, command: shared.net.Command, flags: shared.SteamNet.SendFlags) !void {
         writer.end = 0;
         try command.write(writer);
-        try self.steam_server.packets.pushOutgoing(self.gpa, self.conn, writer.buffered());
+        try self.steam_server.packets.pushOutgoing(self.gpa, self.conn, writer.buffered(), flags);
     }
 
     pub fn deinit(self: *@This()) !void {
@@ -57,7 +57,7 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
     const world = info.world;
 
     try self.steam_server.packet_mutex.lock(self.io);
-    std.log.debug("cmd coint: {d}", .{self.steam_server.packets.incoming.items.len});
+    // std.log.debug("cmd coint: {d}", .{self.steam_server.packets.incoming.items.len});
     // 1. Drain Steam lifecycle events into client map.
     for (self.steam_server.packets.events.items) |ev| switch (ev) {
         .connected => |conn| {
@@ -124,7 +124,7 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
                         },
                     });
                     client.entity_id = new_player_entity.id;
-                    try client.sendCommand(writer, .{ .acknowledge = .{ .id = client.entity_id } });
+                    try client.sendCommand(writer, .{ .acknowledge = .{ .id = client.entity_id } }, .reliable);
                     std.log.debug("New Player ID: {d}\n", .{client.entity_id});
                 },
                 .disconnect => {
@@ -155,7 +155,7 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
                 .position = camera.transform.position,
                 .rotation = camera.transform.rotation.toVec(),
                 .id = client.entity_id,
-            } });
+            } }, .unreliable);
         }
 
         // spawns
@@ -166,24 +166,27 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
                 std.log.debug("sent id {d}", .{entity.id});
                 var data: [4]u8 = @splat(0);
                 switch (entity.kind) {
-                    .planet => data = @bitCast(entity.planet),
+                    .planet => {
+                        data = @bitCast(entity.planet);
+                        std.log.debug("Spawned planet {d}", .{entity.planet});
+                    },
                     else => {},
                 }
                 try client.sendCommand(writer, .{ .spawn_entity = .{
                     .id = entity.id,
                     .kind = entity.kind,
                     .data = data,
-                } });
+                } }, .reliable);
             }
             client.needs_full_sync = false;
         } else {
             for (spawner.network_pending_spawn.items) |entry| {
-                try client.sendCommand(writer, .{ .spawn_entity = .{ .id = entry.id, .kind = entry.kind } });
+                try client.sendCommand(writer, .{ .spawn_entity = .{ .id = entry.id, .kind = entry.kind } }, .reliable);
             }
         }
         // despawns
         for (spawner.network_pending_despawn.items) |id| {
-            try client.sendCommand(writer, .{ .despawn_entity = .{ .id = id } });
+            try client.sendCommand(writer, .{ .despawn_entity = .{ .id = id } }, .reliable);
         }
         // transforms
         for (world.entities.values()) |*entity| {
@@ -192,7 +195,7 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
                 .id = entity.id,
                 .position = entity.transform.position,
                 .rotation = entity.transform.rotation.toVec(),
-            } });
+            } }, .unreliable);
         }
     }
     spawner.network_pending_despawn.clearRetainingCapacity();

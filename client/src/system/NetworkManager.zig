@@ -41,21 +41,21 @@ fn sendDisconnect(self: *@This()) !void {
     var w: std.Io.Writer = .fixed(&buf);
     const cmd: shared.net.Command = .disconnect;
     try cmd.write(&w);
-    try self.steam_client.packets.pushOutgoing(self.gpa, self.server_conn, w.buffered());
+    try self.steam_client.packets.pushOutgoing(self.gpa, self.server_conn, w.buffered(), .reliable);
 }
 
 fn sendConnect(self: *@This()) !void {
     const name = "lucas";
     const cmd: shared.net.Command = .{ .connect = .{ .name_len = name.len, .name = name } };
-    try self.sendCommand(cmd);
+    try self.sendCommand(cmd, .reliable);
 }
 
-pub fn sendCommand(self: *@This(), command: shared.net.Command) !void {
+pub fn sendCommand(self: *@This(), command: shared.net.Command, flags: shared.SteamNet.SendFlags) !void {
     if (self.server_conn == 0) return;
     var buf: [1024]u8 = undefined;
     var w: std.Io.Writer = .fixed(&buf);
     try command.write(&w);
-    try self.steam_client.packets.pushOutgoing(self.gpa, self.server_conn, w.buffered());
+    try self.steam_client.packets.pushOutgoing(self.gpa, self.server_conn, w.buffered(), flags);
 }
 
 pub fn update(self: *@This(), system_context: *system.Context, info: *const Info) !void {
@@ -84,7 +84,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
     if (self.server_conn != 0) {
         for (info.world.entities.values()) |*entity| {
             if (!entity.flags.camera or !entity.flags.transform) continue;
-            try self.sendCommand(.{ .input = entity.camera.input_map });
+            try self.sendCommand(.{ .input = entity.camera.input_map }, .reliable);
             entity.camera.input_map.mouse_wheel = 0;
             break;
         }
@@ -141,7 +141,7 @@ fn handleCommand(self: *@This(), system_context: *system.Context, info: *const I
                         planet_vertices.indices.items,
                         system_context.planet.vertices.items,
                     );
-                    std.log.debug("SPAWNED: Planet ", .{});
+                    std.log.debug("SPAWNED: Planet {d}", .{size});
                     new_entity.mesh = .{ .id = @intCast(vulkan_mesh_handle) };
                 },
                 .enemy => new_entity.mesh = .{ .id = 0 },
