@@ -59,6 +59,8 @@ pub fn sendCommand(self: *@This(), command: shared.net.Command, flags: shared.St
 }
 
 pub fn update(self: *@This(), system_context: *system.Context, info: *const Info) !void {
+    try self.steam_client.packet_mutex.lock(self.io);
+
     // 1. Drain lifecycle events.
     for (self.steam_client.packets.events.items) |ev| switch (ev) {
         .connected => |conn| {
@@ -90,6 +92,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
         }
     }
 
+    std.log.debug("cmd size {d}", .{self.steam_client.packets.incoming.items.len});
     // 4. Drain inbound commands.
     for (self.steam_client.packets.incoming.items) |*msg| {
         if (msg.conn != self.server_conn) continue;
@@ -102,6 +105,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
         try self.handleCommand(system_context, info, parsed.command);
     }
     self.steam_client.packets.incoming.clearRetainingCapacity();
+    self.steam_client.packet_mutex.unlock(self.io);
 }
 
 fn handleCommand(self: *@This(), system_context: *system.Context, info: *const Info, command: shared.net.Command) !void {
@@ -152,8 +156,8 @@ fn handleCommand(self: *@This(), system_context: *system.Context, info: *const I
                 .unknown => @panic("unknown entity type... wtf"),
             }
             try info.world.enitity_mapping.put(self.gpa, spawn_entity.id, new_entity.id);
-            std.log.debug("spawn entities : {d}", .{info.world.next_id});
-            std.log.debug("SPAWNED: MY ID: {d}, server ID: {d} ", .{ new_entity.id, spawn_entity.id });
+            // std.log.debug("spawn entities : {d}", .{info.world.next_id});
+            // std.log.debug("SPAWNED: MY ID: {d}, server ID: {d} ", .{ new_entity.id, spawn_entity.id });
         },
         .despawn_entity => |despawn_entity| {
             const server_id = despawn_entity.id;
@@ -162,7 +166,7 @@ fn handleCommand(self: *@This(), system_context: *system.Context, info: *const I
                 return;
             };
             try self.spawner.depspawn(my_id);
-            std.log.debug("DESPAWNED: MY ID: {d}, server ID: {d} ", .{ my_id, server_id });
+            // std.log.debug("DESPAWNED: MY ID: {d}, server ID: {d} ", .{ my_id, server_id });
         },
         .update_transform => |update_transform_command| {
             const id = info.world.enitity_mapping.get(update_transform_command.id) orelse return;

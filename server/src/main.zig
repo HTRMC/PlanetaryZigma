@@ -6,6 +6,8 @@ const World = system.World;
 const nz = shared.numz;
 
 pub fn main(init: std.process.Init) !void {
+    // if (true) @panic("\nfix this:     try steam_server.handle_packets_future.cancel(io);\n");
+
     var gpa_impl = if (builtin.mode == .Debug) std.heap.DebugAllocator(.{ .verbose_log = false }).init else init.gpa;
     defer {
         if (builtin.mode == .Debug) _ = gpa_impl.deinit();
@@ -41,9 +43,6 @@ pub fn main(init: std.process.Init) !void {
     const time_step: f32 = 0.0167;
     while (true) {
         if (system_context.request_exit) break;
-        // try steam_server.recievePackets();
-
-        // try steam_server.sendPackets();
         delta_time = getDeltaTime(io);
         accumlated_time += delta_time;
         if (accumlated_time < time_step) continue;
