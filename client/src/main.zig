@@ -20,12 +20,15 @@ pub fn main(init: std.process.Init) !void {
             std.log.warn("could not parse server_steamid arg \"{s}\": {s}", .{ args[1], @errorName(err) });
             break :blk 0;
         };
+    } else {
+        return error.SteamGameID;
     }
     std.log.info("server_steamid = {d}", .{server_steamid});
 
-    var steam_client: shared.SteamNet.Client = try .init(gpa);
+    var steam_client: shared.SteamNet.Client = try .init(gpa, io);
     defer steam_client.deinit();
     steam_client.connectToServer(server_steamid);
+    steam_client.handle_packets_future = try io.concurrent(shared.SteamNet.Client.handlePackets, .{&steam_client});
 
     var cross_platform: yes.Platform.Cross = try .init(gpa, io, init.minimal);
     defer cross_platform.deinit();
@@ -65,14 +68,12 @@ pub fn main(init: std.process.Init) !void {
         .world = &world,
         .steam_client = &steam_client,
     });
+    defer system_table.systemContextDeinit(&system_context);
 
     var elapsed_time: f32 = 0;
     var accumlated_time: f32 = 0;
     const time_step: f32 = 0.0167;
     main_loop: while (true) {
-        try steam_client.recievePackets();
-        try steam_client.sendPackets();
-
         accumlated_time += getDeltaTime(io);
         if (accumlated_time < time_step) continue;
         accumlated_time -= time_step;
@@ -106,7 +107,15 @@ pub fn main(init: std.process.Init) !void {
     }
 
     try steam_client.sendPackets();
-    system_table.systemContextDeinit(&system_context);
+    steam_client.handle_packets_future.cancel(io) catch |err| {
+        switch (err) {
+            error.Canceled => std.log.err("err: {s}", .{@errorName(err)}),
+            else => {
+                std.log.err("err: {s}", .{@errorName(err)});
+                return err;
+            },
+        }
+    };
 }
 
 pub fn getDeltaTime(io: std.Io) f32 {

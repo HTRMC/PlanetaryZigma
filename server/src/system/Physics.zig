@@ -301,8 +301,9 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
         const entity = info.world.get(@intCast(body.user_data)) orelse continue;
         const up = nz.vec.normalize(entity.transform.position);
-        const force = -up;
-        body.addForce(nz.vec.scale(force, 1000000));
+        const force = up;
+        body.addForce(nz.vec.scale(force, 1000));
+        // body.addForce(nz.vec.scale(force, 1000000));
     }
 
     self.physics_system.update(info.delta_time, .{}) catch unreachable;

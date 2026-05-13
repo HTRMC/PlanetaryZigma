@@ -51,7 +51,7 @@ pub fn init(gpa: std.mem.Allocator, io: std.Io) !@This() {
     }
     if (!connected) return error.LogonTimeout;
 
-    std.log.info("STEAM_ID {d}", .{gs.GetSteamID()});
+    std.log.info("\nSTEAM_ID {d}\n", .{gs.GetSteamID()});
 
     const sock = steam.SteamGameServerNetworkingSockets_SteamAPI();
     const listen = sock.CreateListenSocketP2P(0, &.{});
@@ -89,16 +89,28 @@ pub fn recievePackets(self: *@This()) !void {
     var msgs: [16][*c]steam.SteamNetworkingMessage_t = undefined;
     for (self.connections) |conn| {
         if (conn == 0) continue;
-        const n = self.socket.ReceiveMessagesOnConnection(conn, &msgs[0], @intCast(msgs.len));
-        if (n <= 0) continue;
-        const cnt: usize = @intCast(n);
-        for (msgs[0..cnt]) |raw| {
-            if (raw == null) continue;
-            const m: *steam.SteamNetworkingMessage_t = raw;
-            defer m.Release();
-            if (m.m_pData == null or m.m_cbSize <= 0) continue;
-            const bytes = m.m_pData[0..@intCast(m.m_cbSize)];
-            try self.packets.pushIncoming(self.gpa, conn, bytes);
+        var status: steam.SteamNetConnectionRealTimeStatus_t = undefined;
+        _ = self.socket.GetConnectionRealTimeStatus(conn, &status, &.{});
+
+        std.debug.print("\rpending_unrel: {}, pending_rel: {}, ping: {}, quality: {d:.2}, out_Bps: {d:.0}\n", .{
+            status.m_cbPendingUnreliable,
+            status.m_cbPendingReliable,
+            status.m_nPing,
+            status.m_flConnectionQualityLocal,
+            status.m_flOutBytesPerSec,
+        });
+        while (true) {
+            const n = self.socket.ReceiveMessagesOnConnection(conn, &msgs[0], @intCast(msgs.len));
+            if (n <= 0) break;
+            const cnt: usize = @intCast(n);
+            for (msgs[0..cnt]) |raw| {
+                if (raw == null) continue;
+                const m: *steam.SteamNetworkingMessage_t = raw;
+                defer m.Release();
+                if (m.m_pData == null or m.m_cbSize <= 0) continue;
+                const bytes = m.m_pData[0..@intCast(m.m_cbSize)];
+                try self.packets.pushIncoming(self.gpa, conn, bytes);
+            }
         }
     }
 }

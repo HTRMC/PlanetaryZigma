@@ -41,9 +41,6 @@ pub fn main(init: std.process.Init) !void {
     const time_step: f32 = 0.0167;
     while (true) {
         if (system_context.request_exit) break;
-        // try steam_server.recievePackets();
-
-        // try steam_server.sendPackets();
         delta_time = getDeltaTime(io);
         accumlated_time += delta_time;
         if (accumlated_time < time_step) continue;
@@ -65,7 +62,15 @@ pub fn main(init: std.process.Init) !void {
             system_table.systemContextReload(&system_context, false);
         }
     }
-    try steam_server.handle_packets_future.cancel(io);
+    steam_server.handle_packets_future.cancel(io) catch |err| {
+        switch (err) {
+            error.Canceled => std.log.err("err: {s}", .{@errorName(err)}),
+            else => {
+                std.log.err("err: {s}", .{@errorName(err)});
+                return err;
+            },
+        }
+    };
 }
 
 pub fn getDeltaTime(io: std.Io) f32 {
