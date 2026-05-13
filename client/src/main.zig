@@ -107,7 +107,15 @@ pub fn main(init: std.process.Init) !void {
     }
 
     try steam_client.sendPackets();
-    try steam_client.handle_packets_future.cancel(io);
+    steam_client.handle_packets_future.cancel(io) catch |err| {
+        switch (err) {
+            error.Canceled => std.log.err("err: {s}", .{@errorName(err)}),
+            else => {
+                std.log.err("err: {s}", .{@errorName(err)});
+                return err;
+            },
+        }
+    };
 }
 
 pub fn getDeltaTime(io: std.Io) f32 {

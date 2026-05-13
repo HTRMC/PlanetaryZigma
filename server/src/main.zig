@@ -6,8 +6,6 @@ const World = system.World;
 const nz = shared.numz;
 
 pub fn main(init: std.process.Init) !void {
-    // if (true) @panic("\nfix this:     try steam_server.handle_packets_future.cancel(io);\n");
-
     var gpa_impl = if (builtin.mode == .Debug) std.heap.DebugAllocator(.{ .verbose_log = false }).init else init.gpa;
     defer {
         if (builtin.mode == .Debug) _ = gpa_impl.deinit();
@@ -64,7 +62,15 @@ pub fn main(init: std.process.Init) !void {
             system_table.systemContextReload(&system_context, false);
         }
     }
-    try steam_server.handle_packets_future.cancel(io);
+    steam_server.handle_packets_future.cancel(io) catch |err| {
+        switch (err) {
+            error.Canceled => std.log.err("err: {s}", .{@errorName(err)}),
+            else => {
+                std.log.err("err: {s}", .{@errorName(err)});
+                return err;
+            },
+        }
+    };
 }
 
 pub fn getDeltaTime(io: std.Io) f32 {

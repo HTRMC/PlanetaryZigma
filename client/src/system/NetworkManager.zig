@@ -41,6 +41,7 @@ fn sendDisconnect(self: *@This()) !void {
     var w: std.Io.Writer = .fixed(&buf);
     const cmd: shared.net.Command = .disconnect;
     try cmd.write(&w);
+
     try self.steam_client.packets.pushOutgoing(self.gpa, self.server_conn, w.buffered(), .reliable);
 }
 
@@ -55,6 +56,7 @@ pub fn sendCommand(self: *@This(), command: shared.net.Command, flags: shared.St
     var buf: [1024]u8 = undefined;
     var w: std.Io.Writer = .fixed(&buf);
     try command.write(&w);
+    std.log.debug("len: {d}", .{w.buffered().len});
     try self.steam_client.packets.pushOutgoing(self.gpa, self.server_conn, w.buffered(), flags);
 }
 
@@ -92,7 +94,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
         }
     }
 
-    std.log.debug("cmd size {d}", .{self.steam_client.packets.incoming.items.len});
+    // std.log.debug("cmd size {d}", .{self.steam_client.packets.incoming.items.len});
     // 4. Drain inbound commands.
     for (self.steam_client.packets.incoming.items) |*msg| {
         if (msg.conn != self.server_conn) continue;
@@ -171,8 +173,8 @@ fn handleCommand(self: *@This(), system_context: *system.Context, info: *const I
         .update_transform => |update_transform_command| {
             const id = info.world.enitity_mapping.get(update_transform_command.id) orelse return;
             const entity = info.world.get(id) orelse return;
-            entity.transform.position = update_transform_command.position;
-            entity.transform.rotation = .fromVec(update_transform_command.rotation);
+            entity.transform.position = @floatCast(update_transform_command.position);
+            entity.transform.rotation = .fromVec(@floatCast(update_transform_command.rotation));
         },
         .update_camera_rotation => |rotation_command| {
             const id = info.world.enitity_mapping.get(rotation_command.id) orelse return;

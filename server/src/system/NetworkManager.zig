@@ -22,6 +22,8 @@ pub const Client = struct {
     pub fn sendCommand(self: *@This(), writer: *std.Io.Writer, command: shared.net.Command, flags: shared.SteamNet.SendFlags) !void {
         writer.end = 0;
         try command.write(writer);
+        std.log.debug("len: {d}", .{writer.buffered().len});
+
         try self.steam_server.packets.pushOutgoing(self.gpa, self.conn, writer.buffered(), flags);
     }
 
@@ -200,13 +202,13 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
         for (world.entities.values()) |*entity| {
             if (!entity.flags.transform) continue;
             try client.sendCommand(writer, .{ .update_transform = .{
-                .id = entity.id,
-                .position = entity.transform.position,
-                .rotation = entity.transform.rotation.toVec(),
+                .id = @intCast(entity.id),
+                .position = @floatCast(entity.transform.position),
+                .rotation = @floatCast(entity.transform.rotation.toVec()),
             } }, .unreliable_no_delay);
         }
     }
-    std.log.debug("cmd size {d}", .{self.steam_server.packets.outgoing.items.len});
+    // std.log.debug("cmd size {d}", .{self.steam_server.packets.outgoing.items.len});
     spawner.network_pending_despawn.clearRetainingCapacity();
     spawner.network_pending_spawn.clearRetainingCapacity();
     self.steam_server.packet_mutex.unlock(self.io);
