@@ -86,8 +86,12 @@ pub const World = struct {
     next_id: u32 = 1,
 
     pub fn init(gpa: std.mem.Allocator) !@This() {
+        var entities: std.AutoArrayHashMapUnmanaged(u32, Entity) = .empty;
+        try entities.ensureTotalCapacity(gpa, 1000);
+
         return .{
             .gpa = gpa,
+            .entities = entities,
         };
     }
     pub fn deinit(self: *@This()) void {
@@ -105,7 +109,7 @@ pub const World = struct {
         return self.entities.getPtr(id).?;
     }
 
-    pub fn get(self: *@This(), id: u32) ?*Entity {
+    pub fn getPtr(self: *@This(), id: u32) ?*Entity {
         return self.entities.getPtr(id);
     }
 
@@ -150,7 +154,6 @@ pub const Context = struct {
             .camera_controller = undefined,
             .bullet = undefined,
         };
-        try self.world.entities.ensureTotalCapacity(data.gpa, 1000);
         try self.physics.init(data.gpa, data.io);
         try self.player_controller.init(&self.physics, &self.spawner);
         try self.camera_controller.init();

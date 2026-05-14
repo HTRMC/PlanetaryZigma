@@ -299,7 +299,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
 
     for (bodies) |body| { //TODO: use physics pos instead of transform?
         if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
-        const entity = info.world.get(@intCast(body.user_data)) orelse continue;
+        const entity = info.world.getPtr(@intCast(body.user_data)) orelse continue;
         const up = nz.vec.normalize(entity.transform.position);
         const force = up;
         body.addForce(nz.vec.scale(force, 1000));
@@ -310,7 +310,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
 
     for (bodies) |body| {
         if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
-        const entity = info.world.get(@intCast(body.user_data)) orelse continue;
+        const entity = info.world.getPtr(@intCast(body.user_data)) orelse continue;
         const transform: *nz.Transform3D(f32) = &entity.transform;
 
         transform.position = .{

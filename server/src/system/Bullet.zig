@@ -60,7 +60,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
             defer read_lock.unlock();
             if (read_lock.body) |hit_body| {
                 const target_id: u32 = @intCast(hit_body.user_data);
-                const hit_entity = self.world.get(target_id) orelse continue;
+                const hit_entity = self.world.getPtr(target_id) orelse continue;
                 if (hit_entity.flags.health) {
                     if (target_id == bullet.owner_id) {
                         continue;
