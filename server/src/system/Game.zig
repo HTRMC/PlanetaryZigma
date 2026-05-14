@@ -40,7 +40,7 @@ pub fn deinit(self: *@This()) !void {
 
 pub fn update(self: *@This(), info: *const Info, physics: *const Physics) !void {
     _ = self;
-    std.log.debug("\n\neneties: {d}\n\n", .{info.world.entities.entries.len});
+    // std.log.debug("\n\neneties: {d}\n\n", .{info.world.entities.entries.len});
     var player: *system.Entity = undefined;
     for (info.world.entities.values()) |*entity| {
         if (entity.kind == .player) {

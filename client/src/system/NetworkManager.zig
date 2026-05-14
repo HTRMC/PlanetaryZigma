@@ -56,7 +56,7 @@ pub fn sendCommand(self: *@This(), command: shared.net.Command, flags: shared.St
     var buf: [1024]u8 = undefined;
     var w: std.Io.Writer = .fixed(&buf);
     try command.write(&w);
-    std.log.debug("len: {d}", .{w.buffered().len});
+    // std.log.debug("len: {d}", .{w.buffered().len});
     try self.steam_client.packets.pushOutgoing(self.gpa, self.server_conn, w.buffered(), flags);
 }
 

@@ -92,13 +92,13 @@ pub fn recievePackets(self: *@This()) !void {
         var status: steam.SteamNetConnectionRealTimeStatus_t = undefined;
         _ = self.socket.GetConnectionRealTimeStatus(conn, &status, &.{});
 
-        std.debug.print("\rpending_unrel: {}, pending_rel: {}, ping: {}, quality: {d:.2}, out_Bps: {d:.0}\n", .{
-            status.m_cbPendingUnreliable,
-            status.m_cbPendingReliable,
-            status.m_nPing,
-            status.m_flConnectionQualityLocal,
-            status.m_flOutBytesPerSec,
-        });
+        // std.debug.print("\rpending_unrel: {}, pending_rel: {}, ping: {}, quality: {d:.2}, out_Bps: {d:.0}\n", .{
+        //     status.m_cbPendingUnreliable,
+        //     status.m_cbPendingReliable,
+        //     status.m_nPing,
+        //     status.m_flConnectionQualityLocal,
+        //     status.m_flOutBytesPerSec,
+        // });
         while (true) {
             const n = self.socket.ReceiveMessagesOnConnection(conn, &msgs[0], @intCast(msgs.len));
             if (n <= 0) break;

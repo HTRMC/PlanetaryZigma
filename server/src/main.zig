@@ -33,6 +33,7 @@ pub fn main(init: std.process.Init) !void {
         .gpa = gpa,
         .steam_server = &steam_server,
     });
+
     defer system_table.systemContextDeinit(&system_context);
 
     var accumlated_time: f32 = 0;

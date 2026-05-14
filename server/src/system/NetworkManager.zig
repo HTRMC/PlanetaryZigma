@@ -22,7 +22,7 @@ pub const Client = struct {
     pub fn sendCommand(self: *@This(), writer: *std.Io.Writer, command: shared.net.Command, flags: shared.SteamNet.SendFlags) !void {
         writer.end = 0;
         try command.write(writer);
-        std.log.debug("len: {d}", .{writer.buffered().len});
+        // std.log.debug("len: {d}", .{writer.buffered().len});
 
         try self.steam_server.packets.pushOutgoing(self.gpa, self.conn, writer.buffered(), flags);
     }
@@ -134,7 +134,7 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
                     std.log.debug("player disconnect", .{});
                 },
                 .input => {
-                    if (world.get(client.entity_id)) |entity| {
+                    if (world.getPtr(client.entity_id)) |entity| {
                         entity.controller.input = command.input;
                     }
                 },
@@ -150,7 +150,7 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
         const client = pair.value_ptr;
 
         // camera
-        if (world.get(client.entity_id)) |player_entity| {
+        if (world.getPtr(client.entity_id)) |player_entity| {
             const camera = player_entity.camera;
             client.needs_full_sync = player_entity.controller.input.r;
             try client.sendCommand(writer, .{ .update_camera_rotation = .{
