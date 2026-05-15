@@ -139,6 +139,7 @@ pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.E
                 .e => self.input_map.up = pressed,
                 .r => self.input_map.r = pressed,
                 .k => self.input_map.k = pressed,
+
                 else => {},
             }
         },

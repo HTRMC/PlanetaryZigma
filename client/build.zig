@@ -9,7 +9,9 @@ pub fn build(b: *std.Build) void {
 
     const shared = b.dependency("shared", .{ .target = target, .optimize = optimize }).module("shared");
     const yes = b.dependency("yes", .{ .target = target, .optimize = optimize, .x_backend = .xlib }).module("yes");
-    const steam = b.dependency("zig_steamworks", .{ .target = target, .optimize = optimize }).module("steamworks");
+
+    const steam_dep = b.dependency("zig_steamworks", .{ .target = target, .optimize = optimize });
+    const steam_module = steam_dep.module("steamworks");
 
     const time = std.Io.Timestamp.now(io, .real);
     const system = b.addLibrary(.{
@@ -24,6 +26,8 @@ pub fn build(b: *std.Build) void {
             },
             .link_libc = true,
         }),
+        .use_lld = true,
+        .use_llvm = true,
         .linkage = .dynamic,
     });
 
@@ -37,10 +41,12 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "shared", .module = shared },
                 .{ .name = "system", .module = system.root_module },
                 .{ .name = "yes", .module = yes },
-                .{ .name = "steamworks", .module = steam },
+                .{ .name = "steamworks", .module = steam_module },
             },
             .link_libc = true,
         }),
+        .use_lld = true,
+        .use_llvm = true,
     });
 
     const vulkandeps = b.dependency("vulkan_headers", .{});

@@ -1,9 +1,17 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{});
+    // const target = b.standardTargetOptions(.{});
+    //TODO: remove once Zig 0.16.0 works properly with GCC 16.1.1
+    const target = b.standardTargetOptions(.{
+        .default_target = .{
+            .cpu_arch = .x86_64,
+            .os_tag = .linux,
+            .abi = .gnu,
+            .glibc_version = .{ .major = 2, .minor = 39, .patch = 0 },
+        },
+    });
     const optimize = b.standardOptimizeOption(.{});
-
     const io = b.graph.io;
     std.Io.Dir.cwd().deleteTree(io, "zig-out/lib/") catch unreachable;
     const zphysics = b.dependency("zphysics", .{
@@ -13,7 +21,8 @@ pub fn build(b: *std.Build) void {
     });
 
     const shared = b.dependency("shared", .{ .target = target, .optimize = optimize }).module("shared");
-    const steam = b.dependency("zig_steamworks", .{ .target = target, .optimize = optimize }).module("steamworks");
+    const steam_dep = b.dependency("zig_steamworks", .{ .target = target, .optimize = optimize });
+    const steam_module = steam_dep.module("steamworks");
 
     const time = std.Io.Timestamp.now(io, .real);
     const system = b.addLibrary(.{
@@ -45,10 +54,13 @@ pub fn build(b: *std.Build) void {
             .imports = &.{
                 .{ .name = "shared", .module = shared },
                 .{ .name = "system", .module = system.root_module },
-                .{ .name = "steamworks", .module = steam },
+                .{ .name = "steamworks", .module = steam_module },
             },
         }),
     });
+    //TODO: remove once Zig 0.16.0 works properly with GCC 16.1.1
+    exe.root_module.addRPath(steam_dep.path("steamworks/public/steam/lib/linux64"));
+    exe.root_module.addRPath(steam_dep.path("steamworks/redistributable_bin/linux64"));
 
     b.installArtifact(exe);
 

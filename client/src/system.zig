@@ -63,7 +63,7 @@ pub const World = struct {
         return self.entities.getPtr(id).?;
     }
 
-    pub fn get(self: *@This(), id: u32) ?*Entity {
+    pub fn getPtr(self: *@This(), id: u32) ?*Entity {
         return self.entities.getPtr(id);
     }
 
@@ -129,12 +129,13 @@ pub const Context = struct {
         for (info.world.entities.values()) |*entity| {
             if (!entity.flags.camera or !entity.flags.transform) continue;
 
-            std.log.debug("server_ID: {d}, client_id: {d}", .{
-                entity.id,
-                info.world.enitity_mapping.get(info.world.my_server_id).?,
-            });
-            std.log.debug("MyserverID: {d}, ", .{info.world.my_server_id});
-
+            // if (entity.camera.input_map.forward) {
+            //     std.log.debug("my_id: {d}, client_id: {d}", .{
+            //         entity.id,
+            //         info.world.enitity_mapping.get(info.world.my_server_id).?,
+            //     });
+            //     std.log.debug("MyserverID: {d}, ", .{info.world.my_server_id});
+            // }
             entity.camera.update(info);
             try self.renderer.update(info);
             break;

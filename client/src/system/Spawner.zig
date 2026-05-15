@@ -44,7 +44,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
     _ = info;
     std.debug.assert(self.pending_despawn.items.len < max_despawn_count);
     for (self.pending_despawn.items) |entity_id| {
-        if (self.world.get(entity_id)) |entity| {
+        if (self.world.getPtr(entity_id)) |entity| {
             _ = entity;
             _ = self.world.despawn(entity_id);
         }

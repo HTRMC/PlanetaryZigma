@@ -127,7 +127,10 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
                     });
                     client.entity_id = new_player_entity.id;
                     try client.sendCommand(writer, .{ .acknowledge = .{ .id = client.entity_id } }, .reliable);
-                    std.log.debug("New Player ID: {d}\n", .{client.entity_id});
+                    std.log.debug("PLAYER SPAWN entity_id={d} body_id={any}", .{
+                        client.entity_id,
+                        new_player_entity.collider.body_id,
+                    });
                 },
                 .disconnect => {
                     if (client.entity_id != 0) try spawner.depspawn(client.entity_id);
@@ -152,7 +155,7 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
         // camera
         if (world.getPtr(client.entity_id)) |player_entity| {
             const camera = player_entity.camera;
-            client.needs_full_sync = player_entity.controller.input.r;
+            client.needs_full_sync = client.needs_full_sync or player_entity.controller.input.r;
             try client.sendCommand(writer, .{ .update_camera_rotation = .{
                 .position = camera.transform.position,
                 .rotation = camera.transform.rotation.toVec(),
@@ -170,7 +173,7 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
                 switch (entity.kind) {
                     .planet => {
                         data = @bitCast(entity.planet);
-                        std.log.debug("Spawned planet {d}", .{entity.planet});
+                        std.log.debug("sent planet RELIABLE! size {d}", .{entity.planet});
                     },
                     else => {},
                 }
@@ -201,6 +204,9 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
         // transforms
         for (world.entities.values()) |*entity| {
             if (!entity.flags.transform) continue;
+            if (entity.kind == .player) {
+                std.log.debug("send over network: {any}", .{entity.transform.position});
+            }
             try client.sendCommand(writer, .{ .update_transform = .{
                 .id = @intCast(entity.id),
                 .position = @floatCast(entity.transform.position),

@@ -64,6 +64,9 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         if (self.world.getPtr(entity_id)) |entity| {
             if (entity.flags.collider) {
                 if (entity.collider.body_id) |body_id| self.physics.destroyBody(body_id);
+                std.log.debug("DESTROY body_id={any} for entity id={d} kind={s}", .{
+                    entity.collider.body_id, entity.id, @tagName(entity.kind),
+                });
             }
             if (!self.world.despawn(entity_id)) @panic("fack");
             try self.network_pending_despawn.append(self.gpa, entity_id);
