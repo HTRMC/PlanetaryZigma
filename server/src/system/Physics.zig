@@ -295,30 +295,35 @@ pub fn reload(self: *@This(), pre_reload: bool, world: *system.World) !void {
 }
 
 pub fn update(self: *@This(), info: *const system.Info) !void {
-    const bodies = self.physics_system.getBodiesMutUnsafe();
+    const body_interface = self.physics_system.getBodyInterfaceMut();
 
-    for (bodies) |body| { //TODO: use physics pos instead of transform?
-        if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
-        const entity = info.world.getPtr(@intCast(body.user_data)) orelse continue;
-        const up = nz.vec.normalize(entity.transform.position);
-        const force = up;
-        body.addForce(nz.vec.scale(force, 1000));
-        // body.addForce(nz.vec.scale(force, 1000000));
+    // 1. Apply custom gravity per dynamic entity.
+    for (info.world.entities.values()) |*entity| {
+        if (!entity.flags.collider or !entity.flags.transform) continue;
+        const body_id = entity.collider.body_id orelse continue;
+        if (entity.collider.motion_type != .dynamic) continue;
+
+        const up_len = nz.vec.length(entity.transform.position);
+        if (up_len < 0.0001) continue;
+        const up = nz.vec.scale(entity.transform.position, 1.0 / up_len);
+        // addForce needs a body pointer; if your wrapper has body_interface.addForce(id, force) use that.
+        // Otherwise: body_interface.addImpulse(id, scale(-up, 1000000 * delta_time))
+        body_interface.addForce(body_id, nz.vec.scale(-up, 1000000));
     }
 
+    // 2. Step.
     self.physics_system.update(info.delta_time, .{}) catch unreachable;
 
-    for (bodies) |body| {
-        if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
-        const entity = info.world.getPtr(@intCast(body.user_data)) orelse continue;
-        const transform: *nz.Transform3D(f32) = &entity.transform;
+    // 3. Read positions back per entity.
+    for (info.world.entities.values()) |*entity| {
+        if (!entity.flags.collider or !entity.flags.transform) continue;
+        const body_id = entity.collider.body_id orelse continue;
 
-        transform.position = .{
-            @as(f32, @floatCast(body.position[0])),
-            @as(f32, @floatCast(body.position[1])),
-            @as(f32, @floatCast(body.position[2])),
+        const pos = body_interface.getPosition(body_id);
+        entity.transform.position = .{
+            @floatCast(pos[0]), @floatCast(pos[1]), @floatCast(pos[2]),
         };
-        transform.rotation = .fromVec(body.rotation);
+        entity.transform.rotation = .fromVec(body_interface.getRotation(body_id));
     }
 
     self.alignToPlanet(info); //TODO: before physics? or do indivual per entity movement?
@@ -406,6 +411,7 @@ pub fn createBody(self: *@This(), entity: *system.Entity) !void {
         .override_mass_properties = .calc_inertia,
         .mass_properties_override = .{ .mass = 10000 },
         .max_linear_velocity = 10000,
+        .allow_sleeping = false,
     }, .activate);
     collider.body_id = body_id;
 }

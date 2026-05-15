@@ -89,6 +89,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
         for (info.world.entities.values()) |*entity| {
             if (!entity.flags.camera or !entity.flags.transform) continue;
             try self.sendCommand(.{ .input = entity.camera.input_map }, .reliable);
+            // std.log.debug("input_map: {any}", .{entity.camera.input_map});
             entity.camera.input_map.mouse_wheel = 0;
             break;
         }
@@ -97,7 +98,6 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
     // std.log.debug("cmd size {d}", .{self.steam_client.packets.incoming.items.len});
     // 4. Drain inbound commands.
     for (self.steam_client.packets.incoming.items) |*msg| {
-        if (msg.conn != self.server_conn) continue;
         var msg_reader: std.Io.Reader = .fixed(&msg.bytes);
         const reader = &msg_reader;
         const parsed = shared.net.Command.parse(reader) catch |err| {
@@ -125,8 +125,7 @@ fn handleCommand(self: *@This(), system_context: *system.Context, info: *const I
             std.log.debug("ACK: MY ID: {d}, server ID: {d} ", .{ new_player.id, acknowledge.id });
         },
         .spawn_entity => |spawn_entity| {
-            const server_id = spawn_entity.id;
-            if (info.world.enitity_mapping.contains(server_id)) return;
+            if (info.world.enitity_mapping.contains(spawn_entity.id)) return;
             const new_entity = try self.spawner.spawn(.{
                 .transform = .{ .position = .{ 0, 0, 0 } },
                 .flags = .{ .transform = true, .mesh = true },
@@ -172,13 +171,22 @@ fn handleCommand(self: *@This(), system_context: *system.Context, info: *const I
         },
         .update_transform => |update_transform_command| {
             const id = info.world.enitity_mapping.get(update_transform_command.id) orelse return;
-            const entity = info.world.get(id) orelse return;
+            const entity = info.world.getPtr(id) orelse {
+                std.log.debug("FAILED TO GET- SERVER ID: {d},  ", .{update_transform_command.id});
+                return;
+            };
+
+            // std.log.debug(" - SERVER ID: {d} == 94, MY_ID {d} == 93 ", .{ update_transform_command.id, id });
+            if (update_transform_command.id == info.world.my_server_id) {
+                std.log.debug("cur-pos: {any}", .{entity.transform.position});
+                std.log.debug("new-pos: {any}", .{update_transform_command.position});
+            }
             entity.transform.position = @floatCast(update_transform_command.position);
             entity.transform.rotation = .fromVec(@floatCast(update_transform_command.rotation));
         },
         .update_camera_rotation => |rotation_command| {
             const id = info.world.enitity_mapping.get(rotation_command.id) orelse return;
-            const entity = info.world.get(id) orelse return;
+            const entity = info.world.getPtr(id) orelse return;
             entity.camera.transform.rotation = .fromVec(rotation_command.rotation);
             entity.camera.transform.position = rotation_command.position;
         },

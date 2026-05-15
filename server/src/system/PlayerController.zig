@@ -28,6 +28,9 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         const controller = &player.controller;
         const input = &controller.input;
 
+        // std.log.debug("handle input for: {d}", .{player.id});
+        // std.log.debug("pos {any}", .{transform.position});
+
         camera.boom_offset[2] += @floatCast(-input.mouse_wheel);
         camera.boom_offset[2] = std.math.clamp(camera.boom_offset[2], 0, 1000);
 
@@ -104,6 +107,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         if (player.collider.body_id) |id| {
             var move: nz.Vec3(f32) = .{ 0, 0, 0 };
             const velocity: f32 = 1000;
+            if (input.forward) std.log.debug("pressed forward, old pos {any}", .{body_interface.getPosition(id)});
 
             if (input.forward) move += nz.vec.scale(move_fwd, velocity);
             if (input.backward) move -= nz.vec.scale(move_fwd, velocity);
@@ -112,11 +116,13 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
             if (input.up) move += nz.vec.scale(planet_up, velocity);
             if (input.down) move -= nz.vec.scale(planet_up, velocity);
 
+            // std.log.debug("add the force pos {any}", .{transform.position});
             body_interface.setLinearVelocity(id, nz.vec.scale(move, info.delta_time));
 
             // Body yaw tracks camera yaw (pitch stays on the camera only).
             body_interface.setRotation(id, camera.yaw_rotation.toVec(), .activate);
 
+            if (input.forward) std.log.debug("new pos {any}", .{body_interface.getPosition(id)});
             if (input.r) {
                 camera.* = .{};
                 transform.* = .{};
