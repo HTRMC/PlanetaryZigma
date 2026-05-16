@@ -13,16 +13,18 @@ pub fn main(init: std.process.Init) !void {
     const gpa = gpa_impl.allocator();
     const io = init.io;
 
-    const args = try init.minimal.args.toSlice(init.arena.allocator());
     var server_steamid: u64 = 0;
-    if (args.len > 1) {
-        server_steamid = std.fmt.parseInt(u64, args[1], 10) catch |err| blk: {
-            std.log.warn("could not parse server_steamid arg \"{s}\": {s}", .{ args[1], @errorName(err) });
-            break :blk 0;
+
+    var args = try init.minimal.args.iterateAllocator(init.arena.allocator());
+    defer args.deinit();
+    _ = args.skip();
+    if (args.next()) |arg| {
+        server_steamid = std.fmt.parseInt(u64, arg, 10) catch |err| {
+            std.log.warn("could not parse server_steamid arg \"{s}\": {s}", .{ arg, @errorName(err) });
+            return error.InvalidSteamGameID;
         };
-    } else {
-        return error.SteamGameID;
-    }
+    } else return error.SteamGameID;
+
     std.log.info("server_steamid = {d}", .{server_steamid});
 
     var steam_client: shared.SteamNet.Client = try .init(gpa, io);

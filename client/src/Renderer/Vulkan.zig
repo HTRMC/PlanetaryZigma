@@ -98,9 +98,9 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         self.vma,
         "box",
         self.device,
-        &Mesh.box.indicies_array,
         Mesh.Vertex,
-        &Mesh.box.vertex_array,
+        Mesh.box.verticies,
+        Mesh.box.indicies,
     ));
     self.vertex_shader = try .init(gpa, self.device, asset_server, .{
         .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
@@ -469,15 +469,15 @@ pub fn resize(self: *@This(), gpa: std.mem.Allocator, width: u32, height: u32) !
     );
 }
 
-pub fn createMesh(self: *@This(), gpa: std.mem.Allocator, name: []const u8, indices: []u32, verices: []Mesh.Vertex) !usize {
+pub fn createMesh(self: *@This(), gpa: std.mem.Allocator, name: []const u8, verices: []Mesh.Vertex, indices: []u32) !usize {
     const mesh = try Mesh.init(
         gpa,
         self.vma,
         name,
         self.device,
-        indices,
         Mesh.Vertex,
         verices,
+        indices,
     );
     try self.meshes.append(
         gpa,

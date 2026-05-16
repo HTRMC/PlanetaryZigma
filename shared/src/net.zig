@@ -1,5 +1,5 @@
 const std = @import("std");
-const EntityKind = @import("root.zig").EntityKind;
+const Entity = @import("root.zig").Entity;
 
 pub const endian: std.builtin.Endian = .little;
 
@@ -13,7 +13,7 @@ pub const CommandQueue = struct {
     }
 };
 
-pub const Command = union(Opcode) {
+pub const Command = union(enum) {
     connect: Connect,
     disconnect: void,
     acknowledge: Acknowledge,
@@ -23,23 +23,14 @@ pub const Command = union(Opcode) {
     update_transform: UpdateTransform,
     update_camera_rotation: UpdateCameraRotation,
 
-    pub const Opcode = enum(u16) {
-        connect,
-        disconnect,
-        acknowledge,
-        spawn_entity,
-        despawn_entity,
-        input,
-        update_transform,
-        update_camera_rotation,
-    };
-
-    pub const Header = packed struct {
-        opcode: Opcode,
-    };
+    pub const Opcode = std.meta.Tag(Command);
+    //
+    // pub const Header = packed struct {
+    //     opcode: u16,
+    // };
 
     pub const Parsed = struct {
-        header: Header,
+        // header: Header,
         command: Command,
     };
 
@@ -54,9 +45,10 @@ pub const Command = union(Opcode) {
 
     pub const SpawnEntity = struct {
         id: u32,
-        kind: EntityKind,
+        kind: Entity.Kind,
         data: [4]u8 = @splat(0),
     };
+
     pub const DespawnEntity = struct {
         id: u32,
     };
@@ -91,22 +83,23 @@ pub const Command = union(Opcode) {
         switch (std.meta.activeTag(self.*)) {
             inline else => |tag| {
                 const tag_name = @tagName(tag);
-                const opcode = std.meta.stringToEnum(Opcode, tag_name).?;
-                const header: Header = .{ .opcode = opcode };
-                try writer.writeStruct(header, endian);
+                // const opcode = std.meta.stringToEnum(Opcode, tag_name).?;
+                // const header: Header = .{ .opcode = opcode };
+                // try writer.writeStruct(header, endian);
+                try writer.writeInt(u16, @intFromEnum(self.*), endian);
                 try marshal(writer, @field(self.*, tag_name));
             },
         }
     }
 
     pub fn parse(reader: *std.Io.Reader) !Parsed {
-        const header = try reader.takeStruct(Header, endian);
-        switch (header.opcode) {
-            inline else => |opcode| return .{
-                .header = header,
-                .command = try .parseFromOpcode(reader, opcode),
+        const opcode: Opcode = @enumFromInt(try reader.takeInt(u16, endian));
+        switch (opcode) {
+            inline else => |tag| {
+                return .{ .command = try .parseFromOpcode(reader, tag) };
             },
         }
+        unreachable;
     }
 
     fn parseFromOpcode(reader: *std.Io.Reader, comptime opcode: Opcode) !Command {

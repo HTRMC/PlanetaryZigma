@@ -4,17 +4,12 @@ const shared = @import("shared");
 const Info = system.Info;
 const nz = shared.nz;
 
-const SpawnEntity = struct {
-    kind: shared.EntityKind,
-    id: u32,
-};
-
-const max_despawn_count: u32 = 1000;
-
 gpa: std.mem.Allocator,
 world: *system.World,
 
 pending_despawn: std.ArrayList(u32) = .empty,
+
+const max_despawn_count: u32 = 1000;
 
 pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World) !void {
     self.* = .{

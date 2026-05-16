@@ -2,7 +2,6 @@ const std = @import("std");
 const shared = @import("shared");
 const system = @import("../system.zig");
 const World = system.World;
-const Planet = @import("../Renderer/Vulkan/Mesh.zig").Planet;
 const Spawner = @import("Spawner.zig");
 const Info = system.Info;
 const nz = shared.numz;
@@ -32,7 +31,7 @@ pub fn init(
     };
 }
 
-pub fn deinit(self: *@This()) !void {
+pub fn deinit(self: *@This()) void {
     if (self.server_conn != 0) self.sendDisconnect() catch {};
 }
 
@@ -134,17 +133,13 @@ fn handleCommand(self: *@This(), system_context: *system.Context, info: *const I
                 .player => new_entity.mesh = .{ .id = 0 },
                 .planet => {
                     const size: u32 = @intCast(spawn_entity.data[0]);
-                    var planet_vertices: Planet = try .init(self.gpa, size);
-                    defer planet_vertices.deinit(self.gpa);
-                    system_context.planet.vertices = try .initCapacity(self.gpa, planet_vertices.vertices.items.len);
-                    system_context.planet.indices = try .initCapacity(self.gpa, planet_vertices.indices.items.len);
-                    system_context.planet.indices.appendSliceAssumeCapacity(planet_vertices.indices.items);
-                    system_context.planet.vertices.appendSliceAssumeCapacity(planet_vertices.vertices.items);
+                    const planet: shared.Planet(.renderable) = try .init(self.gpa, size);
+                    system_context.planet = planet;
                     const vulkan_mesh_handle = try system_context.renderer.inner.createMesh(
                         self.gpa,
                         "planet",
-                        planet_vertices.indices.items,
-                        system_context.planet.vertices.items,
+                        planet.vertices,
+                        planet.indices,
                     );
                     std.log.debug("SPAWNED: Planet {d}", .{size});
                     new_entity.mesh = .{ .id = @intCast(vulkan_mesh_handle) };

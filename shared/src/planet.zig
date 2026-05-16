@@ -1,120 +1,150 @@
 const std = @import("std");
 const nz = @import("numz");
 
-vertices: std.ArrayList([4]f32),
-indices: std.ArrayList(u32),
+pub const PlanetKind = enum {
+    logical,
+    renderable,
+};
 
-//if size < 3, size = 3. It beaks other ways.
-pub fn init(
-    gpa: std.mem.Allocator,
-    size: u32,
-) !@This() {
-    const clamped_size = @max(size, 3);
-    const radius: f32 = (@as(f32, @floatFromInt(clamped_size)) / 2);
-    var points = try gpa.alloc(f32, (clamped_size + 1) * (clamped_size + 1) * (clamped_size + 1));
-    defer gpa.free(points);
-    const center_pos: nz.Vec3(f32) = .{ 0, 0, 0 };
+pub fn Planet(kind: PlanetKind) type {
+    return struct {
+        vertices: []Vertex,
+        indices: []u32,
 
-    for (0..clamped_size + 1) |x| {
-        for (0..clamped_size + 1) |y| {
-            for (0..clamped_size + 1) |z| {
-                const b_x: f32 = @as(f32, @floatFromInt(x)) + center_pos[0] - radius + 0.5;
-                const b_y: f32 = @as(f32, @floatFromInt(y)) + center_pos[1] - radius + 0.5;
-                const b_z: f32 = @as(f32, @floatFromInt(z)) + center_pos[2] - radius + 0.5;
-                const pos_point: nz.Vec3(f32) = .{ b_x, b_y, b_z };
-                const distance: f32 = @abs(nz.vec.distance(center_pos, pos_point));
-                var point: f32 = 0;
+        pub const Vertex = switch (kind) {
+            .logical => [4]f32,
+            .renderable => extern struct {
+                position: [3]f32 = @splat(0),
+                uv_x: f32 = 0,
+                normal: [3]f32 = @splat(0),
+                uv_y: f32 = 0,
+                color: [4]f32 = @splat(0),
+            },
+        };
 
-                if (radius <= distance - 0.5) {
-                    point = 0;
-                } else if (radius > distance + 0.5) {
-                    point = 1;
-                } else if (radius > distance) {
-                    point = radius - distance;
-                } else point = distance - radius;
-                points[getIndex(clamped_size, x, y, z)] = point;
-            }
-        }
-    }
+        pub fn init(gpa: std.mem.Allocator, size: u32) !@This() {
+            const clamped_size = @max(size, 3);
+            const radius: f32 = (@as(f32, @floatFromInt(clamped_size)) / 2);
+            var points = try gpa.alloc(f32, (clamped_size + 1) * (clamped_size + 1) * (clamped_size + 1));
+            defer gpa.free(points);
+            const center_pos: nz.Vec3(f32) = .{ 0, 0, 0 };
 
-    var gen_vertices: std.ArrayList([4]f32) = .empty;
-    var gen_indices: std.ArrayList(u32) = .empty;
-    for (0..clamped_size) |x| {
-        for (0..clamped_size) |y| {
-            for (0..clamped_size) |z| {
-                var b_x: f32 = @floatFromInt(x);
-                var b_y: f32 = @floatFromInt(y);
-                var b_z: f32 = @floatFromInt(z);
-                var cube_pos: nz.Vec3(f32) = .{ b_x, b_y, b_z };
-                var cube: [8]f32 = undefined;
-                for (0..8) |i| {
-                    const corner = cube_pos + cube_corners[i];
-                    cube[i] = points[getIndex(clamped_size, @intFromFloat(corner[0]), @intFromFloat(corner[1]), @intFromFloat(corner[2]))];
+            for (0..clamped_size + 1) |x| {
+                for (0..clamped_size + 1) |y| {
+                    for (0..clamped_size + 1) |z| {
+                        const b_x: f32 = @as(f32, @floatFromInt(x)) + center_pos[0] - radius + 0.5;
+                        const b_y: f32 = @as(f32, @floatFromInt(y)) + center_pos[1] - radius + 0.5;
+                        const b_z: f32 = @as(f32, @floatFromInt(z)) + center_pos[2] - radius + 0.5;
+                        const pos_point: nz.Vec3(f32) = .{ b_x, b_y, b_z };
+                        const distance: f32 = @abs(nz.vec.distance(center_pos, pos_point));
+                        var point: f32 = 0;
+
+                        if (radius <= distance - 0.5) {
+                            point = 0;
+                        } else if (radius > distance + 0.5) {
+                            point = 1;
+                        } else if (radius > distance) {
+                            point = radius - distance;
+                        } else point = distance - radius;
+                        points[getIndex(clamped_size, x, y, z)] = point;
+                    }
                 }
+            }
+            var vertices: std.ArrayList(Vertex) = .empty;
+            var indices: std.ArrayList(u32) = .empty;
+            for (0..clamped_size) |x| {
+                for (0..clamped_size) |y| {
+                    for (0..clamped_size) |z| {
+                        var b_x: f32 = @floatFromInt(x);
+                        var b_y: f32 = @floatFromInt(y);
+                        var b_z: f32 = @floatFromInt(z);
+                        var cube_pos: nz.Vec3(f32) = .{ b_x, b_y, b_z };
+                        var cube: [8]f32 = undefined;
+                        for (0..8) |i| {
+                            const corner = cube_pos + cube_corners[i];
+                            cube[i] = points[getIndex(clamped_size, @intFromFloat(corner[0]), @intFromFloat(corner[1]), @intFromFloat(corner[2]))];
+                        }
 
-                b_x = @as(f32, @floatFromInt(x)) + center_pos[0] - radius + 0.5;
-                b_y = @as(f32, @floatFromInt(y)) + center_pos[1] - radius + 0.5;
-                b_z = @as(f32, @floatFromInt(z)) + center_pos[2] - radius + 0.5;
-                cube_pos = .{ b_x, b_y, b_z };
-                try marchCube(gpa, cube_pos, cube, &gen_vertices, &gen_indices);
+                        b_x = @as(f32, @floatFromInt(x)) + center_pos[0] - radius + 0.5;
+                        b_y = @as(f32, @floatFromInt(y)) + center_pos[1] - radius + 0.5;
+                        b_z = @as(f32, @floatFromInt(z)) + center_pos[2] - radius + 0.5;
+                        cube_pos = .{ b_x, b_y, b_z };
+                        try marchCube(gpa, cube_pos, cube, &vertices, &indices);
+                    }
+                }
+            }
+
+            // The triangles are genereated in the wrong order. I rather do a reverse, than creating a while new pipeline.
+            std.mem.reverse(u32, indices.items);
+
+            return .{
+                .vertices = try vertices.toOwnedSlice(gpa),
+                .indices = try indices.toOwnedSlice(gpa),
+            };
+        }
+
+        pub fn deinit(self: @This(), gpa: std.mem.Allocator) void {
+            gpa.free(self.vertices);
+            gpa.free(self.indices);
+        }
+
+        pub fn marchCube(
+            gpa: std.mem.Allocator,
+            postion: nz.Vec3(f32),
+            corners: [8]f32,
+            gen_vertices: *std.ArrayList(Vertex),
+            gen_indices: *std.ArrayList(u32),
+        ) !void {
+            var config_index: u32 = 0;
+            const terrain_surface: f32 = 0.5;
+            for (0..8) |i| {
+                if (corners[i] > terrain_surface)
+                    config_index |= @as(u32, 1) << @intCast(i);
+            }
+            if (config_index == 0 or config_index == 255) return;
+            var edge_index: u32 = 0;
+            for (0..5) |_| {
+                for (0..3) |_| {
+                    const index = triangle_table[config_index][edge_index];
+                    if (index == -1) return;
+                    const vert1 = postion + edge_table[@intFromFloat(index)][0];
+                    const vert2 = postion + edge_table[@intFromFloat(index)][1];
+                    const devision: nz.Vec3(f32) = .{ 2, 2, 2 };
+                    const pos: [3]f32 = @bitCast((vert1 + vert2) / devision);
+
+                    switch (kind) {
+                        .logical => try gen_vertices.append(
+                            gpa,
+                            .{
+                                pos[0],
+                                pos[1],
+                                pos[2],
+                                1,
+                            },
+                        ),
+                        .renderable => try gen_vertices.append(
+                            gpa,
+                            .{
+                                .position = (vert1 + vert2) / devision,
+                                .color = .{ if (postion[1] < 0) 0 else 1, if (postion[0] < 0) 0 else 1, if (postion[2] < 0) 0 else 1, 1 },
+                                // .color = .{ @mod(static.count + 0, 3), @mod(static.count + 1, 3), @mod(static.count + 2, 3), 1 },
+                                // .normal = .{ 1, 0, 0 },
+                                .uv_x = @floor(@mod(index, 3)),
+                                .uv_y = @ceil(@mod(index + 2, 3)),
+                            },
+                        ),
+                    }
+
+                    try gen_indices.append(gpa, @intCast(gen_vertices.items.len - 1));
+                    edge_index += 1;
+                }
             }
         }
-    }
 
-    //The triangles are genereated in the wrong order. I rather do a reverse, than creating a while new pipeline.
-    std.mem.reverse(u32, gen_indices.items);
-
-    return .{
-        .indices = gen_indices,
-        .vertices = gen_vertices,
-    };
-}
-pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
-    self.vertices.deinit(gpa);
-    self.indices.deinit(gpa);
-}
-
-fn marchCube(
-    gpa: std.mem.Allocator,
-    postion: nz.Vec3(f32),
-    corners: [8]f32,
-    gen_vertices: *std.ArrayList([4]f32),
-    gen_indices: *std.ArrayList(u32),
-) !void {
-    var config_index: u32 = 0;
-    const terrain_surface: f32 = 0.5;
-    for (0..8) |i| {
-        if (corners[i] > terrain_surface)
-            config_index |= @as(u32, 1) << @intCast(i);
-    }
-    if (config_index == 0 or config_index == 255) return;
-    var edge_index: u32 = 0;
-    for (0..5) |_| {
-        for (0..3) |_| {
-            const index = triangle_table[config_index][edge_index];
-            if (index == -1) return;
-            const vert1 = postion + edge_table[@intFromFloat(index)][0];
-            const vert2 = postion + edge_table[@intFromFloat(index)][1];
-            const devision: nz.Vec3(f32) = .{ 2, 2, 2 };
-            const pos: [3]f32 = @bitCast((vert1 + vert2) / devision);
-
-            try gen_vertices.append(
-                gpa,
-                .{
-                    pos[0],
-                    pos[1],
-                    pos[2],
-                    1,
-                },
-            );
-            try gen_indices.append(gpa, @intCast(gen_vertices.items.len - 1));
-            edge_index += 1;
+        fn getIndex(size: u32, x: usize, y: usize, z: usize) usize {
+            return (x + y * size + z * size * size);
         }
-    }
-}
-
-fn getIndex(size: u32, x: usize, y: usize, z: usize) usize {
-    return (x + y * size + z * size * size);
+    };
 }
 
 const cube_corners = [_]nz.Vec3(f32){

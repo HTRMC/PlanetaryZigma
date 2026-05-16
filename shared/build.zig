@@ -8,7 +8,7 @@ pub fn build(b: *std.Build) void {
     const steamworks = b.dependency("zig_steamworks", .{ .target = target, .optimize = optimize }).module("steamworks");
 
     const shared = b.addModule("shared", .{
-        .root_source_file = b.path("root.zig"),
+        .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{

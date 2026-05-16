@@ -46,7 +46,7 @@ pub const Health = struct {
 pub const Entity = struct {
     id: u32 = 0,
     flags: Flags = .{},
-    kind: shared.EntityKind = .unknown,
+    kind: shared.Entity.Kind = .unknown,
 
     transform: nz.Transform3D(f32) = .{},
     collider: Physics.Collider = undefined,
@@ -71,8 +71,8 @@ pub const Entity = struct {
         if (self.flags.collider) {
             switch (self.collider.shape) {
                 .mesh => |*mesh| {
-                    mesh.indices.deinit(gpa);
-                    mesh.vertices.deinit(gpa);
+                    gpa.free(mesh.indices);
+                    gpa.free(mesh.vertices);
                 },
                 .primitive => {},
             }

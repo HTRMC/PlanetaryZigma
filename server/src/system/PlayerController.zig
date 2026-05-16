@@ -50,7 +50,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         }
 
         controller.attack_cool_down += info.delta_time;
-        if (input.mouse_button_left and controller.attack_cool_down >= 0.001) {
+        if (input.mouse_button_left and controller.attack_cool_down >= 0.1) {
             controller.attack_cool_down = 0;
             const muzzle_speed: f32 = 100;
             const muzzle_velocity = nz.vec.scale(player.transform.forward(), muzzle_speed);
@@ -63,7 +63,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
                 },
             );
         }
-        if (player.controller.input.k and controller.attack_cool_down >= 0.001) {
+        if (player.controller.input.k and controller.attack_cool_down >= 1.0) {
             controller.attack_cool_down = 0;
             _ = try self.spawner.spawn(.{
                 .kind = .enemy,
