@@ -2,7 +2,8 @@ const std = @import("std");
 
 pub const numz = @import("numz");
 pub const net = @import("net.zig");
-pub const Planet = @import("Planet.zig");
+pub const PlanetKind = @import("planet.zig").PlanetKind;
+pub const Planet = @import("planet.zig").Planet;
 
 pub const Watcher = @import("watcher.zig");
 pub const AssetServer = @import("AssetServer.zig");

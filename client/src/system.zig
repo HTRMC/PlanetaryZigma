@@ -82,17 +82,7 @@ pub const Context = struct {
     renderer: Renderer,
     network_manager: NetworkManager,
     spawner: Spawner,
-    planet: PlanetVertices = undefined,
-
-    pub const PlanetVertices = struct {
-        vertices: std.ArrayList(Renderer.Vertex) = .empty,
-        indices: std.ArrayList(u32) = .empty,
-
-        pub fn deinit(self: *@This(), gpa: std.mem.Allocator) !void {
-            self.indices.deinit(gpa);
-            self.vertices.deinit(gpa);
-        }
-    };
+    planet: shared.Planet(.renderable) = undefined,
 
     pub const Data = struct {
         gpa: std.mem.Allocator,
@@ -116,11 +106,10 @@ pub const Context = struct {
         try self.network_manager.init(data.gpa, data.io, data.steam_client, &self.spawner);
     }
 
-    pub fn deinit(self: *@This()) !void {
-        std.log.debug("DEINIT", .{});
+    pub fn deinit(self: *@This()) void {
         self.renderer.deinit(self.gpa);
-        try self.network_manager.deinit();
-        try self.planet.deinit(self.gpa);
+        self.network_manager.deinit();
+        self.planet.deinit(self.gpa);
         self.spawner.deinit();
     }
 
@@ -162,8 +151,8 @@ pub const Context = struct {
             const vulkan_mesh_handle = try self.renderer.inner.createMesh(
                 self.gpa,
                 "planet",
-                self.planet.indices.items,
-                self.planet.vertices.items,
+                self.planet.vertices,
+                self.planet.indices,
             );
             //TODO: take care of handle matching
             _ = vulkan_mesh_handle;
@@ -207,11 +196,7 @@ pub const ffi = struct {
 
     pub export fn systemContextDeinit(context: *Context) void {
         std.log.debug("system context deinit", .{});
-        context.deinit() catch |err| {
-            if (@errorReturnTrace()) |trace| std.debug.dumpErrorReturnTrace(trace);
-            std.log.err("context update: {any}", .{@errorName(err)});
-            return;
-        };
+        context.deinit();
         context.* = undefined;
     }
 

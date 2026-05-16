@@ -6,42 +6,27 @@ const Device = @import("device.zig").Logical;
 const Buffer = @import("Buffer.zig");
 const Vma = @import("Vma.zig");
 
-pub const Planet = @import("Meshes/Planet.zig");
 pub const box = @import("Meshes/box.zig");
 
-// surfaces: std.ArrayList(GeoSurface),
 index_buffer: Buffer,
 vertex_buffer: Buffer,
 name: []const u8,
 
-pub const Vertex = shared.Planet.RenderVertex;
-// pub const Bounds = struct {
-//     origin: nz.Vec3(f32),
-//     sphere_radius: f32,
-//     extents: nz.Vec3(f32),
-// };
-//
-// pub const GeoSurface = struct {
-//     index_start: i32,
-//     index_count: i32,
-//     bounds: Bounds,
-//     material: *const Material.Instance,
-// };
-//
+pub const Vertex = shared.Planet(.renderable).Vertex;
+
 pub fn init(
     gpa: std.mem.Allocator,
     vma: Vma,
     name: []const u8,
     device: Device,
-    // geo_surfaces: []const GeoSurface,
+    comptime VertexType: type,
+    vertices: []const VertexType,
     indices: []const u32,
-    vertex_type: type,
-    vertices: []const vertex_type,
 ) !@This() {
     var vertex_buffer: Buffer = try .init(
         device,
         vma,
-        vertex_type,
+        VertexType,
         vertices.len,
         c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | c.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR,
         .{
@@ -49,7 +34,7 @@ pub fn init(
             .flags = c.VMA_ALLOCATION_CREATE_MAPPED_BIT | c.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
         },
     );
-    vertex_buffer.copy(vertex_type, vertices);
+    vertex_buffer.copy(VertexType, vertices);
 
     var index_buffer: Buffer = try .init(
         device,

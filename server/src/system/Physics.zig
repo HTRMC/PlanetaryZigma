@@ -29,8 +29,8 @@ pub const Collider = struct {
 
     const Mesh = struct {
         // render_handle: usize,
-        indices: std.ArrayList(u32),
-        vertices: std.ArrayList([4]f32),
+        indices: []u32,
+        vertices: [][4]f32,
     };
     shape: union(enum) { primitive: Primitive, mesh: Mesh },
     body_id: ?zphy.BodyId = null,
@@ -198,13 +198,13 @@ pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io) !void {
 
     physics_system.optimizeBroadPhase();
 
-    const planet: shared.Planet = try .init(gpa, 10, .logical);
+    const planet: shared.Planet(.logical) = try .init(gpa, 10);
 
     const mesh_shape_setting = try zphy.MeshShapeSettings.create(
-        planet.vertices.items.ptr,
-        @intCast(planet.vertices.items.len),
+        planet.vertices.ptr,
+        @intCast(planet.vertices.len),
         @sizeOf([4]f32),
-        planet.indices.items,
+        planet.indices,
     );
     zphy.MeshShapeSettings.sanitize(mesh_shape_setting);
     defer mesh_shape_setting.asShapeSettings().release();
@@ -378,10 +378,10 @@ pub fn createBody(self: *@This(), entity: *system.Entity) !void {
         },
         .mesh => |mesh_shape| shape: {
             const settings = try zphy.MeshShapeSettings.create(
-                mesh_shape.vertices.items.ptr,
-                @intCast(mesh_shape.vertices.items.len),
+                mesh_shape.vertices.ptr,
+                @intCast(mesh_shape.vertices.len),
                 @sizeOf([4]f32),
-                mesh_shape.indices.items,
+                mesh_shape.indices,
             );
             zphy.MeshShapeSettings.sanitize(settings);
             defer settings.asShapeSettings().release();

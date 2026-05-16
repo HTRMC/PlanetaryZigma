@@ -93,12 +93,13 @@ pub const Command = union(enum) {
     }
 
     pub fn parse(reader: *std.Io.Reader) !Parsed {
-        const command: Opcode = @enumFromInt(try reader.takeInt(u16, endian));
-        switch (std.meta.activeTag(command)) {
-            inline else => |comptime_tag| return .{
-                .command = try .parseFromOpcode(reader, @enumFromInt(comptime_tag)),
+        const opcode: Opcode = @enumFromInt(try reader.takeInt(u16, endian));
+        switch (opcode) {
+            inline else => |tag| {
+                return .{ .command = try .parseFromOpcode(reader, tag) };
             },
         }
+        unreachable;
     }
 
     fn parseFromOpcode(reader: *std.Io.Reader, comptime opcode: Opcode) !Command {

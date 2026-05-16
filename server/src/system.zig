@@ -71,8 +71,8 @@ pub const Entity = struct {
         if (self.flags.collider) {
             switch (self.collider.shape) {
                 .mesh => |*mesh| {
-                    mesh.indices.deinit(gpa);
-                    mesh.vertices.deinit(gpa);
+                    gpa.free(mesh.indices);
+                    gpa.free(mesh.vertices);
                 },
                 .primitive => {},
             }
