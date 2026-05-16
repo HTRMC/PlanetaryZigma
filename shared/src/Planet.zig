@@ -1,20 +1,27 @@
 const std = @import("std");
 const nz = @import("numz");
 
-vertices: union(enum) {
-    renderer: std.ArrayList(RenderVertex),
-    logical: std.ArrayList([4]f32),
-},
+vertices: std.ArrayList(VerticesType),
 indices: std.ArrayList(u32),
 
-pub const RenderVertex = struct {
-    stuff: u32,
+pub const VerticesType = union(enum) {
+    renderer: RenderVertex,
+    logical: [4]f32,
+};
+
+pub const RenderVertex = extern struct {
+    position: [3]f32 = @splat(0),
+    uv_x: f32 = 0,
+    normal: [3]f32 = @splat(0),
+    uv_y: f32 = 0,
+    color: [4]f32 = @splat(0),
 };
 
 //if size < 3, size = 3. It beaks other ways.
 pub fn init(
     gpa: std.mem.Allocator,
     size: u32,
+    comptime vertices_type: std.meta.Tag(VerticesType),
 ) !@This() {
     const clamped_size = @max(size, 3);
     const radius: f32 = (@as(f32, @floatFromInt(clamped_size)) / 2);
@@ -43,8 +50,7 @@ pub fn init(
             }
         }
     }
-
-    var gen_vertices: std.ArrayList([4]f32) = .empty;
+    var gen_vertices: std.ArrayList(@FieldType(VerticesType, @tagName(vertices_type))) = .empty;
     var gen_indices: std.ArrayList(u32) = .empty;
     for (0..clamped_size) |x| {
         for (0..clamped_size) |y| {
@@ -85,7 +91,7 @@ fn marchCube(
     gpa: std.mem.Allocator,
     postion: nz.Vec3(f32),
     corners: [8]f32,
-    gen_vertices: *std.ArrayList([4]f32),
+    gen_vertices: *std.ArrayList(VerticesType),
     gen_indices: *std.ArrayList(u32),
 ) !void {
     var config_index: u32 = 0;
@@ -105,15 +111,29 @@ fn marchCube(
             const devision: nz.Vec3(f32) = .{ 2, 2, 2 };
             const pos: [3]f32 = @bitCast((vert1 + vert2) / devision);
 
-            try gen_vertices.append(
-                gpa,
-                .{
-                    pos[0],
-                    pos[1],
-                    pos[2],
-                    1,
-                },
-            );
+            if (std.meta.activeTag(gen_vertices) == .logical) {
+                try gen_vertices.append(
+                    gpa,
+                    .{
+                        pos[0],
+                        pos[1],
+                        pos[2],
+                        1,
+                    },
+                );
+            } else {
+                try gen_vertices.append(
+                    gpa,
+                    .{
+                        .position = (vert1 + vert2) / devision,
+                        .color = .{ if (postion[1] < 0) 0 else 1, if (postion[0] < 0) 0 else 1, if (postion[2] < 0) 0 else 1, 1 },
+                        // .color = .{ @mod(static.count + 0, 3), @mod(static.count + 1, 3), @mod(static.count + 2, 3), 1 },
+                        // .normal = .{ 1, 0, 0 },
+                        .uv_x = @floor(@mod(index, 3)),
+                        .uv_y = @ceil(@mod(index + 2, 3)),
+                    },
+                );
+            }
             try gen_indices.append(gpa, @intCast(gen_vertices.items.len - 1));
             edge_index += 1;
         }

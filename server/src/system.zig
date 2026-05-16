@@ -46,7 +46,7 @@ pub const Health = struct {
 pub const Entity = struct {
     id: u32 = 0,
     flags: Flags = .{},
-    kind: shared.EntityKind = .unknown,
+    kind: shared.Entity.Kind = .unknown,
 
     transform: nz.Transform3D(f32) = .{},
     collider: Physics.Collider = undefined,

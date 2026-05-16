@@ -198,7 +198,7 @@ pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io) !void {
 
     physics_system.optimizeBroadPhase();
 
-    const planet: shared.Planet = try .init(gpa, 10);
+    const planet: shared.Planet = try .init(gpa, 10, .logical);
 
     const mesh_shape_setting = try zphy.MeshShapeSettings.create(
         planet.vertices.items.ptr,
@@ -306,15 +306,11 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         const up_len = nz.vec.length(entity.transform.position);
         if (up_len < 0.0001) continue;
         const up = nz.vec.scale(entity.transform.position, 1.0 / up_len);
-        // addForce needs a body pointer; if your wrapper has body_interface.addForce(id, force) use that.
-        // Otherwise: body_interface.addImpulse(id, scale(-up, 1000000 * delta_time))
         body_interface.addForce(body_id, nz.vec.scale(-up, 1000000));
     }
 
-    // 2. Step.
     self.physics_system.update(info.delta_time, .{}) catch unreachable;
 
-    // 3. Read positions back per entity.
     for (info.world.entities.values()) |*entity| {
         if (!entity.flags.collider or !entity.flags.transform) continue;
         const body_id = entity.collider.body_id orelse continue;

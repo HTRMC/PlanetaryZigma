@@ -1,4 +1,5 @@
 const std = @import("std");
+const shared = @import("shared");
 const c = @import("vulkan");
 const nz = @import("shared").numz;
 const Device = @import("device.zig").Logical;
@@ -13,14 +14,7 @@ index_buffer: Buffer,
 vertex_buffer: Buffer,
 name: []const u8,
 
-pub const Vertex = extern struct {
-    position: [3]f32 = @splat(0),
-    uv_x: f32 = 0,
-    normal: [3]f32 = @splat(0),
-    uv_y: f32 = 0,
-    color: [4]f32 = @splat(0),
-};
-
+pub const Vertex = shared.Planet.RenderVertex;
 // pub const Bounds = struct {
 //     origin: nz.Vec3(f32),
 //     sphere_radius: f32,
