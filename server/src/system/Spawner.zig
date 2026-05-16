@@ -5,17 +5,12 @@ const Physics = @import("Physics.zig");
 const Info = system.Info;
 const nz = shared.nz;
 
-const SpawnEntity = struct {
-    kind: shared.EntityKind,
-    id: u32,
-};
-
 const max_despawn_count: u32 = 1000;
 
 gpa: std.mem.Allocator,
 world: *system.World,
 physics: *Physics,
-network_pending_spawn: std.ArrayList(SpawnEntity) = .empty,
+network_pending_spawn: std.ArrayList(shared.Entity.Spawn) = .empty,
 network_pending_despawn: std.ArrayList(u32) = .empty,
 
 pending_despawn: std.ArrayList(u32) = .empty,

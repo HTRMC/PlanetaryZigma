@@ -19,19 +19,18 @@ pub const Info = struct {
 };
 
 pub const Entity = struct {
-    pub const Flags = packed struct(u32) {
-        transform: bool = false,
-        camera: bool = false,
-        mesh: bool = false,
-        _pad: u29 = 0,
-    };
-
     id: u32 = 0,
     flags: Flags = .{},
 
     transform: nz.Transform3D(f32) = .{},
     camera: Camera = .{},
     mesh: Mesh = .{ .id = 0 },
+
+    pub const Flags = packed struct {
+        transform: bool = false,
+        camera: bool = false,
+        mesh: bool = false,
+    };
 
     pub fn deinit(self: *Entity, gpa: std.mem.Allocator) void {
         _ = self;
@@ -187,13 +186,11 @@ pub const ffi = struct {
             var self: @This() = undefined;
             inline for (@typeInfo(@This()).@"struct".fields) |field| {
                 std.log.debug("Looking up symbol: {s}", .{field.name});
-                const ptr = dynlib.lookup(field.type, field.name);
-                if (ptr) |p| {
-                    @field(self, field.name) = p;
-                } else {
+                const ptr = dynlib.lookup(field.type, field.name) orelse {
                     std.log.err("Failed to lookup symbol: {s}", .{field.name});
                     return error.DynlibLookup;
-                }
+                };
+                @field(self, field.name) = ptr;
             }
             return self;
         }

@@ -6,9 +6,9 @@ pub const Client = @import("steamNet/Client.zig");
 
 /// Mirrors steam.HSteamNetConnection (u32). Defined locally so the dynlib
 /// doesn't need to import the steamworks package.
-pub const Conn = u32;
-
 pub const max_msg_bytes: usize = 1024;
+
+pub const Conn = u32;
 
 pub const SendFlags = enum(i32) {
     unreliable = steam.k_nSteamNetworkingSend_Unreliable,

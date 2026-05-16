@@ -1,5 +1,5 @@
 const std = @import("std");
-const EntityKind = @import("root.zig").EntityKind;
+const Entity = @import("root.zig").Entity;
 
 pub const endian: std.builtin.Endian = .little;
 
@@ -23,16 +23,7 @@ pub const Command = union(Opcode) {
     update_transform: UpdateTransform,
     update_camera_rotation: UpdateCameraRotation,
 
-    pub const Opcode = enum(u16) {
-        connect,
-        disconnect,
-        acknowledge,
-        spawn_entity,
-        despawn_entity,
-        input,
-        update_transform,
-        update_camera_rotation,
-    };
+    pub const Opcode = std.meta.Tag(Command);
 
     pub const Header = packed struct {
         opcode: Opcode,
@@ -54,9 +45,10 @@ pub const Command = union(Opcode) {
 
     pub const SpawnEntity = struct {
         id: u32,
-        kind: EntityKind,
+        kind: Entity.Kind,
         data: [4]u8 = @splat(0),
     };
+
     pub const DespawnEntity = struct {
         id: u32,
     };

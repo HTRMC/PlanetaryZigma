@@ -1,8 +1,15 @@
 const std = @import("std");
 const nz = @import("numz");
 
-vertices: std.ArrayList([4]f32),
+vertices: union(enum) {
+    renderer: std.ArrayList(RenderVertex),
+    logical: std.ArrayList([4]f32),
+},
 indices: std.ArrayList(u32),
+
+pub const RenderVertex = struct {
+    stuff: u32,
+};
 
 //if size < 3, size = 3. It beaks other ways.
 pub fn init(
