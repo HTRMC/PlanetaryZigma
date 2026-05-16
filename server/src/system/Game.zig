@@ -84,9 +84,10 @@ pub fn update(self: *@This(), info: *const Info, physics: *const Physics) !void 
         }
 
         if (distance < 10) continue;
-        const power: u32 = 100000;
+        const power: u32 = 1000000;
         const force = nz.vec.scale(nz.vec.normalize(entity.transform.forward()), power);
         // body_interface.addImpulse(body_id, force);
         body_interface.addForce(body_id, force);
+        // body_interface.setPosition(body_id, player.transform.position, .activate);
     }
 }

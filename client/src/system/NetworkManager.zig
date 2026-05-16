@@ -134,6 +134,7 @@ fn handleCommand(self: *@This(), system_context: *system.Context, info: *const I
                 .planet => {
                     const size: u32 = @intCast(spawn_entity.data[0]);
                     const planet: shared.Planet(.renderable) = try .init(self.gpa, size);
+                    system_context.planet = planet;
                     const vulkan_mesh_handle = try system_context.renderer.inner.createMesh(
                         self.gpa,
                         "planet",

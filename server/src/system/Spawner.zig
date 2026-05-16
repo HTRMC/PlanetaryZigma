@@ -54,6 +54,18 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
     //         try self.depspawn(entity.id);
     //     }
     // }
+    // if (info.world.entities.entries.len < 30) {
+    //     _ = try self.spawn(.{
+    //         .kind = .enemy,
+    //         .transform = .{ .position = .{ 0, 0, 100 } },
+    //         .collider = .{
+    //             .shape = .{ .primitive = .{ .box = .{ .size = 1 } } },
+    //             .motion_type = .dynamic,
+    //         },
+    //         .health = .{ .current = 5, .max = 5 },
+    //         .flags = .{ .transform = true, .collider = true, .align_to_planet = true, .health = true },
+    //     });
+    // }
     std.debug.assert(self.pending_despawn.items.len < max_despawn_count);
     for (self.pending_despawn.items) |entity_id| {
         if (self.world.getPtr(entity_id)) |entity| {
