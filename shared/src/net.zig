@@ -80,16 +80,20 @@ pub const Command = union(enum) {
     };
 
     pub fn write(self: *const @This(), writer: *std.Io.Writer) !void {
-        switch (std.meta.activeTag(self.*)) {
-            inline else => |tag| {
-                const tag_name = @tagName(tag);
-                // const opcode = std.meta.stringToEnum(Opcode, tag_name).?;
-                // const header: Header = .{ .opcode = opcode };
-                // try writer.writeStruct(header, endian);
-                try writer.writeInt(u16, @intFromEnum(self.*), endian);
-                try marshal(writer, @field(self.*, tag_name));
+        switch (self.*) {
+            inline else => |payload, tag| {
+                try writer.writeInt(u16, @intFromEnum(tag), endian);
+                try marshal(writer, payload);
             },
         }
+        // switch (std.meta.activeTag(self.*)) {
+        //     inline else => |tag| {
+        //         const tag_name = @tagName(tag);
+        //
+        //         try writer.writeInt(u16, @intFromEnum(self.*), endian);
+        //         try marshal(writer, @field(self.*, tag_name));
+        //     },
+        // }
     }
 
     pub fn parse(reader: *std.Io.Reader) !Parsed {
