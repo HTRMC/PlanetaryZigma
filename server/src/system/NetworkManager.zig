@@ -204,9 +204,6 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
         // transforms
         for (world.entities.values()) |*entity| {
             if (!entity.flags.transform) continue;
-            if (entity.kind == .player) {
-                std.log.debug("send over network: {any}", .{entity.transform.position});
-            }
             try client.sendCommand(writer, .{ .update_transform = .{
                 .id = @intCast(entity.id),
                 .position = @floatCast(entity.transform.position),

@@ -13,6 +13,8 @@ pub fn build(b: *std.Build) void {
     const steam_dep = b.dependency("zig_steamworks", .{ .target = target, .optimize = optimize });
     const steam_module = steam_dep.module("steamworks");
 
+    const zgltf = b.dependency("zgltf", .{ .target = target, .optimize = optimize }).module("zgltf");
+
     const time = std.Io.Timestamp.now(io, .real);
     const system = b.addLibrary(.{
         .name = b.fmt("system_client_{d}", .{time}),
@@ -23,6 +25,7 @@ pub fn build(b: *std.Build) void {
             .imports = &.{
                 .{ .name = "shared", .module = shared },
                 .{ .name = "yes", .module = yes },
+                .{ .name = "zgltf", .module = zgltf },
             },
             .link_libc = true,
         }),
