@@ -172,10 +172,6 @@ fn handleCommand(self: *@This(), system_context: *system.Context, info: *const I
             };
 
             // std.log.debug(" - SERVER ID: {d} == 94, MY_ID {d} == 93 ", .{ update_transform_command.id, id });
-            if (update_transform_command.id == info.world.my_server_id) {
-                std.log.debug("cur-pos: {any}", .{entity.transform.position});
-                std.log.debug("new-pos: {any}", .{update_transform_command.position});
-            }
             entity.transform.position = @floatCast(update_transform_command.position);
             entity.transform.rotation = .fromVec(@floatCast(update_transform_command.rotation));
         },

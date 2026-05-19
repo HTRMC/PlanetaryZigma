@@ -10,6 +10,7 @@ const DebugMessenger = @import("Vulkan/DebugMessenger.zig");
 const PhysicalDevice = @import("Vulkan/device.zig").Physical;
 const Device = @import("Vulkan/device.zig").Logical;
 const Mesh = @import("Vulkan/Mesh.zig");
+const GltfModel = @import("Vulkan/GltfModel.zig");
 const Vma = @import("Vulkan/Vma.zig");
 const Swapchain = @import("Vulkan/Swapchain.zig");
 const Surface = @import("Vulkan/Surface.zig");
@@ -38,6 +39,7 @@ meshes: std.ArrayList(Mesh) = .empty,
 //Temporary
 vertex_shader: *Shader,
 fragment_shader: *Shader,
+model: *GltfModel,
 desciptor_layout: descriptor.Layout,
 pipeline_layout: pipeline.Layout,
 
@@ -102,6 +104,9 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         Mesh.box.verticies,
         Mesh.box.indicies,
     ));
+
+    self.model = try .init(gpa, self.device, asset_server, "objects/BenBozo.glb");
+
     self.vertex_shader = try .init(gpa, self.device, asset_server, .{
         .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
         .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
@@ -136,6 +141,7 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     self.pipeline_layout.deinit(self.device);
     self.vertex_shader.deinit(gpa);
     self.fragment_shader.deinit(gpa);
+    self.model.deinit(gpa);
     self.swapchain.deinit(self.vma, self.device);
     self.vma.deinit();
     self.device.deinit();

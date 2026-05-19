@@ -27,6 +27,10 @@
             .url = "git+https://github.com/menduz/zig-steamworks.git#7ef8943e7aa9e47abc057e32bc1e1ad63b8ca86d",
             .hash = "zig_steamworks-0.0.0-QF-Y-5rWxgB893nUytb-BxR5B8XE8FS4CUA2YoaolUSB",
         },
+        .zgltf = .{
+            .url = "git+https://github.com/HTRMC/zgltf.git#060b06fa6d5116ea2e491ef97d0f7b8dc47ab07f",
+            .hash = "zgltf-0.4.0-i6Tcb7v3AABBk3jqnQ94r0D6drEMBF1RGRH1caYg5r3I",
+        },
     },
     .paths = .{
         "build.zig",
