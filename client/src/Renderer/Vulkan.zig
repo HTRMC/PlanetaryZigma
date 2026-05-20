@@ -40,6 +40,7 @@ meshes: std.ArrayList(Mesh) = .empty,
 vertex_shader: *Shader,
 fragment_shader: *Shader,
 model: *GltfModel,
+texture_test: Image,
 desciptor_layout: descriptor.Layout,
 pipeline_layout: pipeline.Layout,
 
@@ -106,7 +107,11 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         &.{.{ .index_start = 0, .index_count = Mesh.box.indicies.len }},
     ));
 
-    self.model = try .init(gpa, self.vma, self.device, asset_server, "objects/BenBozo.glb");
+    self.texture_test = try .init(self.vma, self.device, c.VK_FORMAT_R8G8B8A8_UNORM, .{ .width = 1, .height = 1, .depth = 1 }, c.VK_IMAGE_USAGE_SAMPLED_BIT, 0, false);
+    // const green_color: nz.color.Rgba(u8) = .green;
+    // try self.texture_test.uploadDataToImage(self.vma, self.device, green_color);
+
+    self.model = try .init(gpa, self.vma, self.device, asset_server, "objects/Cubes.glb");
 
     self.vertex_shader = try .init(gpa, self.device, asset_server, .{
         .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
@@ -128,10 +133,6 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         .pName = "main",
     }, "shaders/fragment.frag");
 
-    for (self.model.mesh.?.surfaces.items) |surf| {
-        std.log.debug("INITs: indices start {d}\n count {d}", .{ surf.index_start, surf.index_count });
-    }
-
     return self;
 }
 
@@ -147,6 +148,7 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     self.vertex_shader.deinit(gpa);
     self.fragment_shader.deinit(gpa);
     self.model.deinit(gpa);
+    self.texture_test.deinit(self.vma, self.device);
     self.swapchain.deinit(self.vma, self.device);
     self.vma.deinit();
     self.device.deinit();
@@ -465,16 +467,6 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
                 0,
                 0,
             );
-            // } else {
-            //     c.vkCmdDrawIndexed(
-            //         cmd,
-            //         @intCast(mesh.surfaces.items[2].index_count),
-            //         1,
-            //         mesh.surfaces.items[2].index_start,
-            //         0,
-            //         0,
-            //     );
-            // }
         }
     }
 
