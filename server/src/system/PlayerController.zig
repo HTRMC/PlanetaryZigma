@@ -107,7 +107,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         if (player.collider.body_id) |id| {
             var move: nz.Vec3(f32) = .{ 0, 0, 0 };
             const velocity: f32 = 1000;
-            if (input.forward) std.log.debug("pressed forward, old pos {any}", .{body_interface.getPosition(id)});
+            // if (input.forward) std.log.debug("pressed forward, old pos {any}", .{body_interface.getPosition(id)});
 
             if (input.forward) move += nz.vec.scale(move_fwd, velocity);
             if (input.backward) move -= nz.vec.scale(move_fwd, velocity);
@@ -122,7 +122,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
             // Body yaw tracks camera yaw (pitch stays on the camera only).
             body_interface.setRotation(id, camera.yaw_rotation.toVec(), .activate);
 
-            if (input.forward) std.log.debug("new pos {any}", .{body_interface.getPosition(id)});
+            // if (input.forward) std.log.debug("new pos {any}", .{body_interface.getPosition(id)});
             if (input.r) {
                 camera.* = .{};
                 transform.* = .{};

@@ -8,11 +8,18 @@ const Vma = @import("Vma.zig");
 
 pub const box = @import("Meshes/box.zig");
 
+surfaces: std.ArrayList(GeoSurface),
 index_buffer: Buffer,
 vertex_buffer: Buffer,
 name: []const u8,
 
 pub const Vertex = shared.Planet(.renderable).Vertex;
+
+pub const GeoSurface = struct {
+    index_start: u32,
+    index_count: u32,
+    // material: *const Material.Instance,
+};
 
 pub fn init(
     gpa: std.mem.Allocator,
@@ -22,6 +29,7 @@ pub fn init(
     comptime VertexType: type,
     vertices: []const VertexType,
     indices: []const u32,
+    surfaces: []const GeoSurface,
 ) !@This() {
     var vertex_buffer: Buffer = try .init(
         device,
@@ -49,13 +57,13 @@ pub fn init(
     );
     index_buffer.copy(u32, indices);
 
-    // var allocated_surfaces: std.ArrayList(GeoSurface) = try .initCapacity(allocator, geo_surfaces.len);
-    // allocated_surfaces.appendSliceAssumeCapacity(geo_surfaces);
+    var allocated_surfaces: std.ArrayList(GeoSurface) = try .initCapacity(gpa, surfaces.len);
+    allocated_surfaces.appendSliceAssumeCapacity(surfaces);
 
     return .{
         .index_buffer = index_buffer,
         .vertex_buffer = vertex_buffer,
-        // .surfaces = allocated_surfaces,
+        .surfaces = allocated_surfaces,
         .name = try gpa.dupe(u8, name),
     };
 }
@@ -64,5 +72,5 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma) void {
     self.index_buffer.deinit(vma);
     self.vertex_buffer.deinit(vma);
     gpa.free(self.name);
-    // self.surfaces.deinit(allocator);
+    self.surfaces.deinit(gpa);
 }

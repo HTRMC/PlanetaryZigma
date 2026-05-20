@@ -58,93 +58,91 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
     const bin = loaded.bin orelse return error.MissingBin;
 
     // std.log.debug("version: {s}\n", .{g.asset.version});
-    // if (g.asset.generator) |gen| std.log.debug("generator: {s}\n", .{gen});
-    // if (g.buffers) |bs| std.log.debug("buffers: {d}\n", .{bs.len});
-    // if (g.bufferViews) |vs| std.log.debug("bufferViews: {d}\n", .{vs.len});
-    // if (g.accessors) |as| {
-    //     std.log.debug("accessors: {d}\n", .{as.len});
-    //
-    //     for (as, 0..) |a, i| {
-    //         const ct: zgltf.ComponentType = @enumFromInt(a.componentType);
-    //         std.log.debug("  [{d}] type={t} componentType={t} count={d} bytes={d}\n", .{
-    //             i, a.type, ct, a.count, ct.byteSize() * a.type.componentCount() * a.count,
-    //         });
-    //     }
-    // }
+    if (g.asset.generator) |gen| std.log.debug("generator: {s}\n", .{gen});
+    if (g.buffers) |bs| std.log.debug("buffers: {d}\n", .{bs.len});
+    if (g.bufferViews) |vs| std.log.debug("bufferViews: {d}\n", .{vs.len});
+    if (g.accessors) |as| {
+        std.log.debug("accessors: {d}\n", .{as.len});
+
+        for (as, 0..) |a, i| {
+            const ct: zgltf.ComponentType = @enumFromInt(a.componentType);
+            std.log.debug("  [{d}] type={t} componentType={t} count={d} bytes={d}\n", .{
+                i, a.type, ct, a.count, ct.byteSize() * a.type.componentCount() * a.count,
+            });
+        }
+    }
 
     if (self.mesh) |*mesh| mesh.deinit(gpa, self.vma);
     if (g.meshes) |meshes| for (meshes) |mesh| {
-        var surfaces: std.ArrayList(Mesh.GeoSurface) = try .initCapacity(gpa, mesh.primitives.len);
-        defer surfaces.deinit(gpa);
         var vertices: std.ArrayList(Mesh.Vertex) = .empty;
         defer vertices.deinit(gpa);
         var indices: std.ArrayList(u32) = .empty;
         defer indices.deinit(gpa);
-        var color: f32 = 0;
 
         std.log.debug("MESH primitives: {d}\n", .{mesh.primitives.len});
         for (mesh.primitives) |p| {
-            color += 1;
             const pos_accessor_idx = p.attributes.map.get("POSITION") orelse return error.NoPosition;
             const pos_accessor = g.accessors.?[pos_accessor_idx];
+            _ = try vertices.addManyAsSlice(gpa, pos_accessor.count);
+            // std.log.debug("primitive-pos: {d}\n", .{pos_accessor_idx});
+            // const ct: zgltf.ComponentType = @enumFromInt(pos_accessor.componentType);
+            // std.log.debug("  type={t} componentType={t} count={d} bytes={d}\n", .{
+            //     pos_accessor.type, ct, pos_accessor.count, ct.byteSize() * pos_accessor.type.componentCount() * pos_accessor.count,
+            // });
 
             //NOTE: Indices
-            var indices_start: u32 = 0;
-            var indices_count: u32 = 0;
             {
-                indices_start = @intCast(indices.items.len);
-
-                const acc_idx = p.indices.?;
-                var acc = g.accessors.?[acc_idx];
-                const bv = g.bufferViews.?[acc.bufferView.?];
+                const acc_idx = p.indices;
+                const acc = g.accessors[acc_idx];
+                const bv = g.bufferViews[acc.bufferView];
+                const buf = g.buffers[bv.buffer];
                 const offset = bv.byteOffset + acc.byteOffset;
+                const element_size = acc_idx.elementSize();
+                const bytes = buf.data[offset .. offset + acc.count * element_size];
+                const parsed_bytes= std.mem.bytesAsSlice(u8,  bytes)
 
-                const element_size = try acc.elementSize();
-                const amount_of_bytes = acc.count * element_size;
-                const bytes = bin[offset .. offset + amount_of_bytes];
-
-                const dst = try indices.addManyAsSlice(gpa, acc.count);
-                for (0..acc.count) |i| {
-                    const off = i * element_size;
-                    dst[i] = switch (element_size) {
-                        1 => bytes[off],
-                        2 => std.mem.readInt(u16, bytes[off..][0..2], .little),
-                        4 => std.mem.readInt(u32, bytes[off..][0..4], .little),
-                        else => return error.BadIndexSize,
-                    };
-                    dst[i] += @intCast(vertices.items.len);
-                }
-                indices_count = @intCast(acc.count);
+                switch (acc.component_type) {
+      .unsigned_byte  => { const idx = ; ...
+   },
+      .unsigned_short => { const idx = std.mem.bytesAsSlice(u16, bytes); ...
+   },
+      .unsigned_int   => { const idx = std.mem.bytesAsSlice(u32, bytes); ...
+   },
+  }
             }
 
             const buffer_view = g.bufferViews.?[pos_accessor.bufferView.?];
+            // const buffer = g.buffers.?[buffer_view.buffer];
             const offset = (pos_accessor.byteOffset + buffer_view.byteOffset);
             const positions = std.mem.bytesAsSlice(
                 [3]f32,
                 bin[offset .. offset + pos_accessor.count * @sizeOf([3]f32)],
             );
-            var dst = try vertices.addManyAsSlice(gpa, pos_accessor.count);
-            for (positions, 0..pos_accessor.count) |v, i| {
-                dst[i] = .{
-                    .color = .{ @mod(color + 0.0, 3), @mod(color + 1.0, 3), @mod(color + 2.0, 3), 1.0 },
-                    // .color = .{ 1, 0, 0, 1 },
+            for (positions) |v| {
+                vertices.appendAssumeCapacity(.{
+                    .color = .{ 0, 0, 0, 1 },
                     .normal = .{ 1, 1, 1 },
                     .position = v,
                     .uv_x = 0,
                     .uv_y = 0,
-                };
+                });
+                // std.log.debug("vertex: {any}", .{v});
             }
-            surfaces.appendAssumeCapacity(.{ .index_count = indices_count, .index_start = indices_start });
+            // if (p.targets) |t| {
+            //     for (t) |tar|{
+            //     }
+            // }
+            // std.log.debug("primitive-attributes: {any}\n", .{p.attributes});
+            // if (p.indices) |ind| std.log.debug("indices: {d}\n", .{ind});
         }
-        self.mesh = try .init(
-            gpa,
-            self.vma,
-            mesh.name orelse "dummy_name",
-            self.device,
-            Mesh.Vertex,
-            vertices.items,
-            indices.items,
-            surfaces.items,
-        );
+        // self.mesh = gpa.create(Mesh);
+        //     self.mesh = .init(
+        //         gpa,
+        //         self.vma,
+        //         mesh.name,
+        //         self.device,
+        //         Mesh.Vertex,
+        //         vertices.items,
+        //     );
     };
 }
