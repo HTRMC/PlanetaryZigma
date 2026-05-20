@@ -28,8 +28,8 @@
             .hash = "zig_steamworks-0.0.0-QF-Y-5rWxgB893nUytb-BxR5B8XE8FS4CUA2YoaolUSB",
         },
         .zgltf = .{
-            .url = "git+https://github.com/HTRMC/zgltf.git#060b06fa6d5116ea2e491ef97d0f7b8dc47ab07f",
-            .hash = "zgltf-0.4.0-i6Tcb7v3AABBk3jqnQ94r0D6drEMBF1RGRH1caYg5r3I",
+            .url = "git+https://github.com/LuEklund/zgltf.git#fbc4cb4baddac9d91b1e5c8105fa8497cfd89c4c",
+            .hash = "zgltf-0.4.0-i6Tcb_b3AACwnqfhPejc-7vtN1JY-ldCzbuuMrynXvO3",
         },
     },
     .paths = .{

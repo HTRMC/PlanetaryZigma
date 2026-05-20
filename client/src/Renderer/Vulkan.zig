@@ -103,9 +103,10 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         Mesh.Vertex,
         Mesh.box.verticies,
         Mesh.box.indicies,
+        &.{.{ .index_start = 0, .index_count = Mesh.box.indicies.len }},
     ));
 
-    self.model = try .init(gpa, self.device, asset_server, "objects/BenBozo.glb");
+    self.model = try .init(gpa, self.vma, self.device, asset_server, "objects/BenBozo.glb");
 
     self.vertex_shader = try .init(gpa, self.device, asset_server, .{
         .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
@@ -126,6 +127,10 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         .pushConstantRangeCount = 1,
         .pName = "main",
     }, "shaders/fragment.frag");
+
+    for (self.model.mesh.?.surfaces.items) |surf| {
+        std.log.debug("INITs: indices start {d}\n count {d}", .{ surf.index_start, surf.index_count });
+    }
 
     return self;
 }
@@ -322,6 +327,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     } else {
         ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_FILL);
 
+        // c.vkCmdSetLineWidth(cmd, 1);
         ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
     }
     ext.vkCmdSetFrontFaceEXT(cmd, c.VK_FRONT_FACE_COUNTER_CLOCKWISE);
@@ -437,25 +443,39 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     const identity_matrix: nz.Mat4x4(f32) = .identity;
     ext.vkCmdBeginRendering(cmd, &render_info);
     var push: Shader.PushConstant = .{ .buffer_address = undefined, .model_matrix = identity_matrix.d };
-    for (info.world.entities.values()) |*entry| {
-        if (!entry.flags.mesh or !entry.flags.transform) continue;
-        var mesh_id = entry.mesh.id;
+    for (info.world.entities.values()) |*entity| {
+        if (!entity.flags.mesh or !entity.flags.transform) continue;
+        var mesh_id = entity.mesh.id;
         mesh_id = if (mesh_id >= self.meshes.items.len) 0 else mesh_id;
-        const mesh = self.meshes.items[mesh_id];
-        const transform = entry.transform;
+        const mesh = if (entity.flags.camera) self.model.mesh.? else self.meshes.items[mesh_id];
+        // const mesh = self.model.mesh.?;
+        // const mesh = self.meshes.items[mesh_id];
+        const transform = entity.transform;
         // std.log.debug("render-quat: {any}", .{transform.rotation});
         const matrix = transform.toMat4x4();
         push = .{ .buffer_address = mesh.vertex_buffer.gpu_address, .model_matrix = matrix.d };
         c.vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
         c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(Shader.PushConstant), &push);
-        c.vkCmdDrawIndexed(
-            cmd,
-            @intCast(mesh.index_buffer.len),
-            1,
-            0,
-            0,
-            0,
-        );
+        for (mesh.surfaces.items) |surface| {
+            c.vkCmdDrawIndexed(
+                cmd,
+                @intCast(surface.index_count),
+                1,
+                surface.index_start,
+                0,
+                0,
+            );
+            // } else {
+            //     c.vkCmdDrawIndexed(
+            //         cmd,
+            //         @intCast(mesh.surfaces.items[2].index_count),
+            //         1,
+            //         mesh.surfaces.items[2].index_start,
+            //         0,
+            //         0,
+            //     );
+            // }
+        }
     }
 
     ext.vkCmdEndRendering(cmd);
@@ -484,6 +504,7 @@ pub fn createMesh(self: *@This(), gpa: std.mem.Allocator, name: []const u8, veri
         Mesh.Vertex,
         verices,
         indices,
+        &.{.{ .index_start = 0, .index_count = @intCast(indices.len) }},
     );
     try self.meshes.append(
         gpa,
