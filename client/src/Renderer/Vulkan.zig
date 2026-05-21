@@ -84,16 +84,22 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
     self.vma = try .init(self.instance, self.physical_device, self.device);
     self.swapchain = try .init(gpa, self.vma, self.physical_device, self.device, self.surface, options.swapchain.width, options.swapchain.heigth);
 
-    self.desciptor_layout = try .init(
-        self.device,
-        &.{.{
+    self.desciptor_layout = try .init(self.device, &.{
+        .{
             .binding = 0,
             .descriptorCount = @sizeOf(Swapchain.FrameData.GPUScene),
             .descriptorType = c.VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK,
             .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT | c.VK_SHADER_STAGE_FRAGMENT_BIT,
-        }},
-        c.VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
-    );
+        },
+        .{
+            .binding = 1,
+            .descriptorCount = 1,
+            .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .pImmutableSamplers = null,
+            .stageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+        },
+    }, c.VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
+
     self.pipeline_layout = try .init(self.device, Shader.PushConstant, self.desciptor_layout);
     self.meshes = .empty;
     try self.meshes.append(gpa, try .init(
@@ -107,11 +113,11 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         &.{.{ .index_start = 0, .index_count = Mesh.box.indicies.len }},
     ));
 
-    self.texture_test = try .init(self.vma, self.device, c.VK_FORMAT_R8G8B8A8_UNORM, .{ .width = 1, .height = 1, .depth = 1 }, c.VK_IMAGE_USAGE_SAMPLED_BIT, 0, false);
-    // const green_color: nz.color.Rgba(u8) = .green;
-    // try self.texture_test.uploadDataToImage(self.vma, self.device, green_color);
+    self.texture_test = try .init(self.vma, self.device, c.VK_FORMAT_R8G8B8A8_UNORM, .{ .width = 1, .height = 1, .depth = 1 }, c.VK_IMAGE_USAGE_SAMPLED_BIT | c.VK_IMAGE_USAGE_TRANSFER_DST_BIT, c.VK_IMAGE_ASPECT_COLOR_BIT, false);
+    var green_color: nz.color.Rgba(u8) = .green;
+    try self.texture_test.uploadDataToImage(self.vma, self.device, &green_color);
 
-    self.model = try .init(gpa, self.vma, self.device, asset_server, "objects/Cubes.glb");
+    self.model = try .init(gpa, self.vma, self.device, asset_server, "objects/BenBozo.glb");
 
     self.vertex_shader = try .init(gpa, self.device, asset_server, .{
         .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
