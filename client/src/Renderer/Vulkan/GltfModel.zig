@@ -57,21 +57,6 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
     const g = loaded.parsed.value;
     const bin = loaded.bin orelse return error.MissingBin;
 
-    // std.log.debug("version: {s}\n", .{g.asset.version});
-    // if (g.asset.generator) |gen| std.log.debug("generator: {s}\n", .{gen});
-    // if (g.buffers) |bs| std.log.debug("buffers: {d}\n", .{bs.len});
-    // if (g.bufferViews) |vs| std.log.debug("bufferViews: {d}\n", .{vs.len});
-    // if (g.accessors) |as| {
-    //     std.log.debug("accessors: {d}\n", .{as.len});
-    //
-    //     for (as, 0..) |a, i| {
-    //         const ct: zgltf.ComponentType = @enumFromInt(a.componentType);
-    //         std.log.debug("  [{d}] type={t} componentType={t} count={d} bytes={d}\n", .{
-    //             i, a.type, ct, a.count, ct.byteSize() * a.type.componentCount() * a.count,
-    //         });
-    //     }
-    // }
-
     if (self.mesh) |*mesh| mesh.deinit(gpa, self.vma);
     if (g.meshes) |meshes| for (meshes) |mesh| {
         var surfaces: std.ArrayList(Mesh.GeoSurface) = try .initCapacity(gpa, mesh.primitives.len);
@@ -80,15 +65,9 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
         defer vertices.deinit(gpa);
         var indices: std.ArrayList(u32) = .empty;
         defer indices.deinit(gpa);
-        var color: f32 = 0;
 
         std.log.debug("MESH primitives: {d}\n", .{mesh.primitives.len});
         for (mesh.primitives) |p| {
-            color += 1;
-            const pos_accessor_idx = p.attributes.map.get("POSITION") orelse return error.NoPosition;
-            const pos_accessor = g.accessors.?[pos_accessor_idx];
-
-            //NOTE: Indices
             var indices_start: u32 = 0;
             var indices_count: u32 = 0;
             {
@@ -117,17 +96,24 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                 indices_count = @intCast(acc.count);
             }
 
+            const pos_accessor_idx = p.attributes.map.get("POSITION") orelse return error.NoPosition;
+            const pos_accessor = g.accessors.?[pos_accessor_idx];
             const buffer_view = g.bufferViews.?[pos_accessor.bufferView.?];
             const offset = (pos_accessor.byteOffset + buffer_view.byteOffset);
             const positions = std.mem.bytesAsSlice(
                 [3]f32,
                 bin[offset .. offset + pos_accessor.count * @sizeOf([3]f32)],
             );
+
+            const material_index = p.material.?;
+            std.log.debug("maertial idx {d}", .{material_index});
+            const material = g.materials.?[material_index];
+            std.log.debug("material: {any}", .{material});
+
             var dst = try vertices.addManyAsSlice(gpa, pos_accessor.count);
             for (positions, 0..pos_accessor.count) |v, i| {
                 dst[i] = .{
-                    .color = .{ @mod(color + 0.0, 3), @mod(color + 1.0, 3), @mod(color + 2.0, 3), 1.0 },
-                    // .color = .{ 1, 0, 0, 1 },
+                    .color = .{ 1, 0, 0, 1 },
                     .normal = .{ 1, 1, 1 },
                     .position = v,
                     .uv_x = 0,

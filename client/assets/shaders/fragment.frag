@@ -5,6 +5,8 @@
 layout(location = 0) in vec4 inColor;
 layout(location = 0) out vec4 outFragColor;
 
+layout(set = 0, binding = 1) uniform sampler2D tex;
+
 layout(set = 0, binding = 0) uniform sceneData {
   mat4 proj_view;
   float time;
