@@ -100,24 +100,36 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
             const pos_accessor = g.accessors.?[pos_accessor_idx];
             const buffer_view = g.bufferViews.?[pos_accessor.bufferView.?];
             const offset = (pos_accessor.byteOffset + buffer_view.byteOffset);
+            std.debug.assert(pos_accessor.componentType == @intFromEnum(zgltf.ComponentType.float));
             const positions = std.mem.bytesAsSlice(
                 [3]f32,
                 bin[offset .. offset + pos_accessor.count * @sizeOf([3]f32)],
             );
 
+            //TODO: Material
             const material_index = p.material.?;
             std.log.debug("maertial idx {d}", .{material_index});
             const material = g.materials.?[material_index];
             std.log.debug("material: {any}", .{material});
 
+            const uv_accessor_idx = p.attributes.map.get("TEXCOORD_0") orelse return error.NoUV;
+            const uv_accessor = g.accessors.?[uv_accessor_idx];
+            std.debug.assert(uv_accessor.componentType == @intFromEnum(zgltf.ComponentType.float));
+            const uv_buffer_view = g.bufferViews.?[uv_accessor.bufferView.?];
+            const uv_offset = (uv_accessor.byteOffset + uv_buffer_view.byteOffset);
+            const uvs = std.mem.bytesAsSlice(
+                [2]f32,
+                bin[uv_offset .. uv_offset + uv_accessor.count * @sizeOf([2]f32)],
+            );
+
             var dst = try vertices.addManyAsSlice(gpa, pos_accessor.count);
-            for (positions, 0..pos_accessor.count) |v, i| {
+            for (0..pos_accessor.count) |i| {
                 dst[i] = .{
                     .color = .{ 1, 0, 0, 1 },
                     .normal = .{ 1, 1, 1 },
-                    .position = v,
-                    .uv_x = 0,
-                    .uv_y = 0,
+                    .position = positions[i],
+                    .uv_x = uvs[i][0],
+                    .uv_y = uvs[i][1],
                 };
             }
             surfaces.appendAssumeCapacity(.{ .index_count = indices_count, .index_start = indices_start });

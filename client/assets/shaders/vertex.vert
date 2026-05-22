@@ -24,7 +24,8 @@ layout(push_constant, std430) uniform pc {
   VertexBuffer vertexBuffer;
 } PushConstant;
 
-layout(location = 0) out vec4 fragColor;
+layout(location = 0) out vec4 outFragColor;
+layout(location = 1) out vec2 outUV;
 
 void main() {
   Vertex v = PushConstant.vertexBuffer.vertices[gl_VertexIndex];
@@ -43,5 +44,6 @@ void main() {
   // vec3 col = vec3(red, 0, 0);
 
   // fragColor = vec4(col, 1);
-  fragColor = vec4(v.color);
+  outUV = vec2(v.uv_x, v.uv_y);
+  outFragColor = vec4(v.color);
 }

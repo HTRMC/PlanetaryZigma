@@ -41,6 +41,7 @@ vertex_shader: *Shader,
 fragment_shader: *Shader,
 model: *GltfModel,
 texture_test: Image,
+sampler_test: c.VkSampler,
 desciptor_layout: descriptor.Layout,
 pipeline_layout: pipeline.Layout,
 
@@ -116,6 +117,21 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
     self.texture_test = try .init(self.vma, self.device, c.VK_FORMAT_R8G8B8A8_UNORM, .{ .width = 1, .height = 1, .depth = 1 }, c.VK_IMAGE_USAGE_SAMPLED_BIT | c.VK_IMAGE_USAGE_TRANSFER_DST_BIT, c.VK_IMAGE_ASPECT_COLOR_BIT, false);
     var green_color: nz.color.Rgba(u8) = .green;
     try self.texture_test.uploadDataToImage(self.vma, self.device, &green_color);
+    const sampler_info: c.VkSamplerCreateInfo = .{
+        .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .addressModeU = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+        .addressModeV = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+        .addressModeW = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+        .magFilter = c.VK_FILTER_LINEAR,
+        .minFilter = c.VK_FILTER_LINEAR,
+        .anisotropyEnable = c.VK_FALSE,
+        .borderColor = c.VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+        .unnormalizedCoordinates = c.VK_TRUE,
+        .compareEnable = c.VK_FALSE,
+        .compareOp = c.VK_COMPARE_OP_ALWAYS,
+        .mipmapMode = c.VK_SAMPLER_MIPMAP_MODE_LINEAR,
+    };
+    try check(c.vkCreateSampler(self.device.handle, &sampler_info, null, &self.sampler_test));
 
     self.model = try .init(gpa, self.vma, self.device, asset_server, "objects/BenBozo.glb");
 
@@ -451,6 +467,10 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     const identity_matrix: nz.Mat4x4(f32) = .identity;
     ext.vkCmdBeginRendering(cmd, &render_info);
     var push: Shader.PushConstant = .{ .buffer_address = undefined, .model_matrix = identity_matrix.d };
+
+    //TODO: per sub-mesh material instance:
+    c.vkCmdBindDescriptorSets(commandBuffer: ?*struct_VkCommandBuffer_T, pipelineBindPoint: c_uint, layout: ?*struct_VkPipelineLayout_T, firstSet: u32, descriptorSetCount: u32, pDescriptorSets: [*c]const ?*struct_VkDescriptorSet_T, dynamicOffsetCount: u32, pDynamicOffsets: [*c]const u32)
+
     for (info.world.entities.values()) |*entity| {
         if (!entity.flags.mesh or !entity.flags.transform) continue;
         var mesh_id = entity.mesh.id;

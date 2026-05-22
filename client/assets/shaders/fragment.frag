@@ -3,9 +3,10 @@
 #extension GL_EXT_buffer_reference : require
 
 layout(location = 0) in vec4 inColor;
+layout(location = 1) in vec2 inUV;
 layout(location = 0) out vec4 outFragColor;
 
-layout(set = 0, binding = 1) uniform sampler2D tex;
+layout(set = 0, binding = 1) uniform sampler2D texSampler;
 
 layout(set = 0, binding = 0) uniform sceneData {
   mat4 proj_view;
@@ -13,5 +14,5 @@ layout(set = 0, binding = 0) uniform sceneData {
 } scene_data;
 
 void main() {
-  outFragColor = inColor;
+  outFragColor = texture(texSampler, inUV);
 }

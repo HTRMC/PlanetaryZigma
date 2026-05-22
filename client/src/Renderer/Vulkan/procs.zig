@@ -56,6 +56,8 @@ pub const device = struct {
         pub var vkGetDescriptorEXT: *const fn (c.VkDevice, [*c]const c.VkDescriptorGetInfoEXT, c.VkDeviceSize, ?*anyopaque) callconv(.c) void = undefined;
         pub var vkCmdBindDescriptorBuffersEXT: *const fn (c.VkCommandBuffer, u32, [*c]const c.VkDescriptorBufferBindingInfoEXT) callconv(.c) void = undefined;
         pub var vkCmdSetDescriptorBufferOffsetsEXT: *const fn (c.VkCommandBuffer, c.VkPipelineBindPoint, c.VkPipelineLayout, u32, u32, [*c]const u32, [*c]const c.VkDeviceSize) callconv(.c) void = undefined;
+        pub var vkGetDescriptorSetLayoutSizeEXT: *const fn (c.VkDevice, c.VkDescriptorSetLayout, *c.VkDeviceSize) callconv(.c) void = undefined;
+        pub var vkGetDescriptorSetLayoutBindingOffsetEXT: *const fn (c.VkDevice, c.VkDescriptorSetLayout, u32, *c.VkDeviceSize) callconv(.c) void = undefined;
     };
     pub fn load(vk_device: c.VkDevice, log: ?bool) void {
         const decls = @typeInfo(ProcTable).@"struct".decls;

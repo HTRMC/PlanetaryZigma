@@ -4,6 +4,10 @@ const Instance = @import("Instance.zig");
 const check = @import("utils.zig").check;
 
 pub const Physical = struct {
+    const Properties = struct {
+        max_anisotropy: f32,
+    };
+
     handle: c.VkPhysicalDevice,
     graphics_queue_family_index: u32,
 
@@ -34,7 +38,10 @@ pub const Physical = struct {
                 if (supports_graphics and present_supported != 0) {
                     std.log.info("found physical device: {s}, queue family: {d}", .{ properties.deviceName, i });
 
-                    return .{ .handle = device, .graphics_queue_family_index = @intCast(i) };
+                    return .{
+                        .handle = device,
+                        .graphics_queue_family_index = @intCast(i),
+                    };
                 }
             }
         }
