@@ -4,11 +4,8 @@ const Instance = @import("Instance.zig");
 const check = @import("utils.zig").check;
 
 pub const Physical = struct {
-    const Properties = struct {
-        max_anisotropy: f32,
-    };
-
     handle: c.VkPhysicalDevice,
+    max_anisotropy: f32,
     graphics_queue_family_index: u32,
 
     pub fn pick(instance: Instance, surface: c.VkSurfaceKHR) !@This() {
@@ -40,6 +37,7 @@ pub const Physical = struct {
 
                     return .{
                         .handle = device,
+                        .max_anisotropy = properties.limits.maxSamplerAnisotropy,
                         .graphics_queue_family_index = @intCast(i),
                     };
                 }

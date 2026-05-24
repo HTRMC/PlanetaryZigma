@@ -6,7 +6,7 @@ const check = @import("utils.zig").check;
 
 buffer: c.VkBuffer,
 vma_allocation: Vma.Allocation,
-gpu_address: c.VkDeviceAddress,
+device_address: c.VkDeviceAddress,
 info: Vma.AllocationInfo,
 len: u32,
 
@@ -40,7 +40,7 @@ pub fn init(device: Device, vma: Vma, comptime T: type, amount: usize, vk_buffer
         .buffer = new_buffer,
         .vma_allocation = allocation,
         .info = info,
-        .gpu_address = gpu_address,
+        .device_address = gpu_address,
         .len = @intCast(amount),
     };
 }

@@ -17,7 +17,12 @@ pub const Layout = struct {
         };
 
         var set: c.VkDescriptorSetLayout = undefined;
-        try check(c.vkCreateDescriptorSetLayout(device.handle, &info, null, &set));
+        try check(c.vkCreateDescriptorSetLayout(
+            device.handle,
+            &info,
+            null,
+            &set,
+        ));
         return .{
             .handle = set,
             .count = @intCast(bindings.len),
