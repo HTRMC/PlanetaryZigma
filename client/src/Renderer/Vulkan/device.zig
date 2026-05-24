@@ -5,6 +5,7 @@ const check = @import("utils.zig").check;
 
 pub const Physical = struct {
     handle: c.VkPhysicalDevice,
+    max_anisotropy: f32,
     graphics_queue_family_index: u32,
 
     pub fn pick(instance: Instance, surface: c.VkSurfaceKHR) !@This() {
@@ -34,7 +35,11 @@ pub const Physical = struct {
                 if (supports_graphics and present_supported != 0) {
                     std.log.info("found physical device: {s}, queue family: {d}", .{ properties.deviceName, i });
 
-                    return .{ .handle = device, .graphics_queue_family_index = @intCast(i) };
+                    return .{
+                        .handle = device,
+                        .max_anisotropy = properties.limits.maxSamplerAnisotropy,
+                        .graphics_queue_family_index = @intCast(i),
+                    };
                 }
             }
         }
