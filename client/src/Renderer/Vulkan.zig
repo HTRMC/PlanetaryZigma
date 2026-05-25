@@ -43,6 +43,9 @@ model: *GltfModel,
 texture_test: Image,
 sampler_test: c.VkSampler,
 desc_buf: Buffer,
+binding_offset: c.VkDeviceSize,
+set_size: c.VkDeviceSize,
+combinedImageSamplerDescriptorSize: usize,
 layouts: DescriptorLayouts,
 scene_layout: descriptor.Layout,
 material_layout: descriptor.Layout,
@@ -124,12 +127,10 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
         .pNext = &db_props,
     };
+    self.combinedImageSamplerDescriptorSize = db_props.combinedImageSamplerDescriptorSize;
     c.vkGetPhysicalDeviceProperties2(self.physical_device.handle, &prop2);
-    var set_size: c.VkDeviceSize = 0;
-    ext.vkGetDescriptorSetLayoutSizeEXT(self.device.handle, self.material_layout.handle, &set_size);
-
-    var binding1_off: c.VkDeviceSize = 0;
-    ext.vkGetDescriptorSetLayoutBindingOffsetEXT(self.device.handle, self.material_layout.handle, 1, &binding1_off);
+    ext.vkGetDescriptorSetLayoutSizeEXT(self.device.handle, self.material_layout.handle, &self.set_size);
+    ext.vkGetDescriptorSetLayoutBindingOffsetEXT(self.device.handle, self.material_layout.handle, 1, &self.binding_offset);
 
     self.texture_test = try .init(self.vma, self.device, c.VK_FORMAT_R8G8B8A8_UNORM, .{ .width = 1, .height = 1, .depth = 1 }, c.VK_IMAGE_USAGE_SAMPLED_BIT | c.VK_IMAGE_USAGE_TRANSFER_DST_BIT, c.VK_IMAGE_ASPECT_COLOR_BIT, false);
     var green_color: nz.color.Rgba(u8) = .{ .r = 255, .g = 0, .b = 0, .a = 255 };
@@ -154,7 +155,7 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         self.device,
         self.vma,
         u8,
-        set_size,
+        self.set_size,
         c.VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
             c.VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT | c.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
         .{ .usage = Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU, .flags = Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT },
@@ -174,7 +175,7 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         self.device.handle,
         &get_info,
         db_props.combinedImageSamplerDescriptorSize, //TODO: double check with set_size.
-        dst + binding1_off,
+        dst + self.binding_offset,
     );
 
     self.pipeline_layout = try .init(
@@ -191,10 +192,19 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         Mesh.Vertex,
         Mesh.box.verticies,
         Mesh.box.indicies,
-        &.{.{ .index_start = 0, .index_count = Mesh.box.indicies.len }},
+        &.{.{ .index_start = 0, .index_count = Mesh.box.indicies.len, .material_index = 0 }},
     ));
 
-    self.model = try .init(gpa, self.vma, self.device, asset_server, "objects/BenBozo.glb");
+    self.model = try .init(
+        gpa,
+        self.vma,
+        self.device,
+        asset_server,
+        "objects/BenBozo.glb",
+        self.set_size,
+        self.binding_offset,
+        self.combinedImageSamplerDescriptorSize,
+    );
 
     self.vertex_shader = try .init(gpa, self.device, asset_server, .{
         .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
@@ -515,46 +525,6 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     };
     current_frame.gpu_scene.copy(Swapchain.FrameData.GPUScene, (&scene_data)[0..1]);
 
-    const bindings = [_]c.VkDescriptorBufferBindingInfoEXT{
-        .{
-            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
-            .address = current_frame.gpu_scene.device_address,
-            .usage = c.VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
-        },
-        .{
-            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
-            .address = self.desc_buf.device_address,
-            .usage = c.VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
-                c.VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT,
-        },
-    };
-    ext.vkCmdBindDescriptorBuffersEXT(cmd, bindings.len, &bindings[0]);
-
-    const set0_buf_idx: u32 = 0;
-    const set0_off: c.VkDeviceSize = 0;
-    ext.vkCmdSetDescriptorBufferOffsetsEXT(
-        cmd,
-        c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-        self.pipeline_layout.handle,
-        0,
-        1,
-        &set0_buf_idx,
-        &set0_off,
-    );
-
-    const set1_buf_idx: u32 = 1;
-    const set1_off: c.VkDeviceSize = 0;
-    //TODO: per sub-mesh material instance:
-    ext.vkCmdSetDescriptorBufferOffsetsEXT(
-        cmd,
-        c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-        self.pipeline_layout.handle,
-        1,
-        1,
-        &set1_buf_idx,
-        &set1_off,
-    );
-
     const identity_matrix: nz.Mat4x4(f32) = .identity;
     ext.vkCmdBeginRendering(cmd, &render_info);
     var push: Shader.PushConstant = .{ .buffer_address = undefined, .model_matrix = identity_matrix.d };
@@ -572,14 +542,34 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         c.vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
         c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(Shader.PushConstant), &push);
         for (mesh.surfaces.items) |surface| {
-            c.vkCmdDrawIndexed(
-                cmd,
-                @intCast(surface.index_count),
-                1,
-                surface.index_start,
-                0,
-                0,
-            );
+            const mat_addr = if (entity.flags.camera)
+                self.model.buffers.items[surface.material_index].device_address
+            else
+                self.desc_buf.device_address;
+
+            const surface_bindings = [_]c.VkDescriptorBufferBindingInfoEXT{
+                .{
+                    .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+                    .address = current_frame.gpu_scene.device_address,
+                    .usage = c.VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
+                },
+                .{
+                    .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+                    .address = mat_addr,
+                    .usage = c.VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
+                        c.VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT,
+                },
+            };
+            ext.vkCmdBindDescriptorBuffersEXT(cmd, surface_bindings.len, &surface_bindings[0]);
+
+            const buf_idx_0: u32 = 0;
+            const off_0: c.VkDeviceSize = 0;
+            ext.vkCmdSetDescriptorBufferOffsetsEXT(cmd, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout.handle, 0, 1, &buf_idx_0, &off_0);
+            const buf_idx_1: u32 = 1;
+            const off_1: c.VkDeviceSize = 0;
+            ext.vkCmdSetDescriptorBufferOffsetsEXT(cmd, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout.handle, 1, 1, &buf_idx_1, &off_1);
+
+            c.vkCmdDrawIndexed(cmd, @intCast(surface.index_count), 1, surface.index_start, 0, 0);
         }
     }
 
@@ -609,7 +599,7 @@ pub fn createMesh(self: *@This(), gpa: std.mem.Allocator, name: []const u8, veri
         Mesh.Vertex,
         verices,
         indices,
-        &.{.{ .index_start = 0, .index_count = @intCast(indices.len) }},
+        &.{.{ .index_start = 0, .index_count = @intCast(indices.len), .material_index = 0 }},
     );
     try self.meshes.append(
         gpa,

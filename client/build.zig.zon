@@ -31,6 +31,10 @@
             .url = "git+https://github.com/LuEklund/zgltf.git#fbc4cb4baddac9d91b1e5c8105fa8497cfd89c4c",
             .hash = "zgltf-0.4.0-i6Tcb_b3AACwnqfhPejc-7vtN1JY-ldCzbuuMrynXvO3",
         },
+        .stb = .{
+            .url = "git+https://github.com/nothings/stb#fede005abaf93d9d7f3a679d1999b2db341b360f",
+            .hash = "N-V-__8AACIvTgCTqOj6KM32YnqNx1bcsaMuGAeKQEIWZ8Ph",
+        },
     },
     .paths = .{
         "build.zig",

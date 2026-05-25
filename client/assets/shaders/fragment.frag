@@ -17,6 +17,5 @@ layout(set = 1, binding = 0) uniform sampler2D texSampler;
 
 void main() {
   float diff = max(dot(normalize(inNormal), normalize(scene_data.global_light_direction)), 0.2);
-  // outFragColor = texture(texSampler, inUV) * diff;
-  outFragColor = inColor * diff;
+  outFragColor = texture(texSampler, inUV) * diff;
 }
