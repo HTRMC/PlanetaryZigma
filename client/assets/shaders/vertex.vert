@@ -4,6 +4,7 @@
 
 layout(set = 0, binding = 0) uniform sceneData {
   mat4 proj_view;
+  vec3 global_light_direction;
   float time;
 } scene_data;
 
@@ -28,6 +29,7 @@ layout(push_constant, std430) uniform pc {
 
 layout(location = 0) out vec4 outFragColor;
 layout(location = 1) out vec2 outUV;
+layout(location = 2) out vec3 outNormal;
 
 void main() {
   Vertex v = PushConstant.vertexBuffer.vertices[gl_VertexIndex];
@@ -39,13 +41,14 @@ void main() {
   // gl_Position = scene_data.proj_view * vec4(x, y, z, 1.0);
 
   // vec3 uv = vec3(v.uv_x, v.uv_y, v.uv_x);
-  // vec3 col = 0.5 + 0.5 * cos(gl_Position.y * scene_data.time + v.uv_x + vec3(0, 2, 4));
+  vec3 col = 0.5 + 0.5 * cos(gl_Position.y * scene_data.time + v.uv_x + vec3(0, 2, 4));
   // vec3 col = vec3(0, 0, 1);
 
   // float red = (y > 0) ? 1 : 0;
   // vec3 col = vec3(red, 0, 0);
 
-  // fragColor = vec4(col, 1);
+  outFragColor = vec4(col, 1);
+  // outFragColor = vec4(v.color);
+  outNormal = (PushConstant.model_matrix * vec4(v.normal, 1)).xyz;
   outUV = vec2(v.uv_x, v.uv_y);
-  outFragColor = vec4(v.color);
 }

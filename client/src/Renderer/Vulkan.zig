@@ -43,9 +43,15 @@ model: *GltfModel,
 texture_test: Image,
 sampler_test: c.VkSampler,
 desc_buf: Buffer,
+layouts: DescriptorLayouts,
 scene_layout: descriptor.Layout,
 material_layout: descriptor.Layout,
 pipeline_layout: pipeline.Layout,
+
+const DescriptorLayouts = struct {
+    layouts: [2]descriptor.Layout,
+    vk_handles: [2]c.VkDescriptorSetLayout,
+};
 
 pub const InitOptions = struct {
     instance: struct {
@@ -105,6 +111,10 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
             .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT | c.VK_SHADER_STAGE_FRAGMENT_BIT,
         },
     }, c.VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
+    self.layouts = .{
+        .layouts = .{ self.scene_layout, self.material_layout },
+        .vk_handles = .{ self.scene_layout.handle, self.material_layout.handle },
+    };
 
     //TODO: maybe move?
     var db_props: c.VkPhysicalDeviceDescriptorBufferPropertiesEXT = .{
@@ -167,12 +177,10 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         dst + binding1_off,
     );
 
-    const descriptor_layouts: []const descriptor.Layout = &.{ self.scene_layout, self.material_layout };
-    const vulkan_descriptor_layout_handles: []const c.VkDescriptorSetLayout = &.{ self.scene_layout.handle, self.material_layout.handle };
     self.pipeline_layout = try .init(
         self.device,
         Shader.PushConstant,
-        descriptor_layouts,
+        &self.layouts.layouts,
     );
     self.meshes = .empty;
     try self.meshes.append(gpa, try .init(
@@ -193,8 +201,8 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
         .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
         .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-        .pSetLayouts = &vulkan_descriptor_layout_handles[0],
-        .setLayoutCount = @intCast(vulkan_descriptor_layout_handles.len),
+        .pSetLayouts = &self.layouts.vk_handles[0],
+        .setLayoutCount = @intCast(self.layouts.vk_handles.len),
         .pushConstantRangeCount = 1,
         .pName = "main",
     }, "shaders/vertex.vert");
@@ -202,8 +210,8 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
         .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
         .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-        .pSetLayouts = &vulkan_descriptor_layout_handles[0],
-        .setLayoutCount = @intCast(vulkan_descriptor_layout_handles.len),
+        .pSetLayouts = &self.layouts.vk_handles[0],
+        .setLayoutCount = @intCast(self.layouts.vk_handles.len),
         .pushConstantRangeCount = 1,
         .pName = "main",
     }, "shaders/fragment.frag");
@@ -226,6 +234,7 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     self.fragment_shader.deinit(gpa);
     self.model.deinit(gpa);
     self.texture_test.deinit(self.vma, self.device);
+    c.vkDestroySampler(self.device.handle, self.sampler_test, null);
     self.swapchain.deinit(self.vma, self.device);
     self.vma.deinit();
     self.device.deinit();
@@ -501,6 +510,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
 
     var scene_data: Swapchain.FrameData.GPUScene = .{
         .view_proj = proj_view.d,
+        .global_light_direction = .{ 0, 1, 0 },
         .time = elapsed_time,
     };
     current_frame.gpu_scene.copy(Swapchain.FrameData.GPUScene, (&scene_data)[0..1]);

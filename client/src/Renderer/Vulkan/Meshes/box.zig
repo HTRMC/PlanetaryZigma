@@ -2,40 +2,40 @@ const Vertex = @import("../Mesh.zig").Vertex;
 
 pub const verticies: []const Vertex = &.{
     // Back (+Z)
-    .{ .position = .{ -1, -1, 1 }, .color = .{ 1, 0, 0, 1 }, .uv_x = 0, .uv_y = 1 },
-    .{ .position = .{ 1, -1, 1 }, .color = .{ 1, 0, 0, 1 }, .uv_x = 1, .uv_y = 1 },
-    .{ .position = .{ -1, 1, 1 }, .color = .{ 1, 0, 0, 1 }, .uv_x = 0, .uv_y = 0 },
-    .{ .position = .{ 1, 1, 1 }, .color = .{ 1, 0, 0, 1 }, .uv_x = 1, .uv_y = 0 },
+    .{ .position = .{ -1, -1, 1 }, .normal = .{ 0, 0, 1 }, .color = .{ 1, 0, 0, 1 }, .uv_x = 0, .uv_y = 1 },
+    .{ .position = .{ 1, -1, 1 }, .normal = .{ 0, 0, 1 }, .color = .{ 1, 0, 0, 1 }, .uv_x = 1, .uv_y = 1 },
+    .{ .position = .{ -1, 1, 1 }, .normal = .{ 0, 0, 1 }, .color = .{ 1, 0, 0, 1 }, .uv_x = 0, .uv_y = 0 },
+    .{ .position = .{ 1, 1, 1 }, .normal = .{ 0, 0, 1 }, .color = .{ 1, 0, 0, 1 }, .uv_x = 1, .uv_y = 0 },
 
     // Front (-Z)
-    .{ .position = .{ 1, -1, -1 }, .color = .{ 0, 1, 0, 1 }, .uv_x = 0, .uv_y = 1 },
-    .{ .position = .{ -1, -1, -1 }, .color = .{ 0, 1, 0, 1 }, .uv_x = 1, .uv_y = 1 },
-    .{ .position = .{ 1, 1, -1 }, .color = .{ 0, 1, 0, 1 }, .uv_x = 0, .uv_y = 0 },
-    .{ .position = .{ -1, 1, -1 }, .color = .{ 0, 1, 0, 1 }, .uv_x = 1, .uv_y = 0 },
+    .{ .position = .{ 1, -1, -1 }, .normal = .{ 0, 0, -1 }, .color = .{ 0, 1, 0, 1 }, .uv_x = 0, .uv_y = 1 },
+    .{ .position = .{ -1, -1, -1 }, .normal = .{ 0, 0, -1 }, .color = .{ 0, 1, 0, 1 }, .uv_x = 1, .uv_y = 1 },
+    .{ .position = .{ 1, 1, -1 }, .normal = .{ 0, 0, -1 }, .color = .{ 0, 1, 0, 1 }, .uv_x = 0, .uv_y = 0 },
+    .{ .position = .{ -1, 1, -1 }, .normal = .{ 0, 0, -1 }, .color = .{ 0, 1, 0, 1 }, .uv_x = 1, .uv_y = 0 },
 
     // Left (-X)
-    .{ .position = .{ -1, -1, -1 }, .color = .{ 0, 1, 1, 1 }, .uv_x = 0, .uv_y = 1 },
-    .{ .position = .{ -1, -1, 1 }, .color = .{ 0, 1, 1, 1 }, .uv_x = 1, .uv_y = 1 },
-    .{ .position = .{ -1, 1, -1 }, .color = .{ 0, 1, 1, 1 }, .uv_x = 0, .uv_y = 0 },
-    .{ .position = .{ -1, 1, 1 }, .color = .{ 0, 1, 1, 1 }, .uv_x = 1, .uv_y = 0 },
+    .{ .position = .{ -1, -1, -1 }, .normal = .{ -1, 0, 0 }, .color = .{ 0, 1, 1, 1 }, .uv_x = 0, .uv_y = 1 },
+    .{ .position = .{ -1, -1, 1 }, .normal = .{ -1, 0, 0 }, .color = .{ 0, 1, 1, 1 }, .uv_x = 1, .uv_y = 1 },
+    .{ .position = .{ -1, 1, -1 }, .normal = .{ -1, 0, 0 }, .color = .{ 0, 1, 1, 1 }, .uv_x = 0, .uv_y = 0 },
+    .{ .position = .{ -1, 1, 1 }, .normal = .{ -1, 0, 0 }, .color = .{ 0, 1, 1, 1 }, .uv_x = 1, .uv_y = 0 },
 
     // Right (+X)
-    .{ .position = .{ 1, -1, 1 }, .color = .{ 0, 0, 1, 1 }, .uv_x = 0, .uv_y = 1 },
-    .{ .position = .{ 1, -1, -1 }, .color = .{ 0, 0, 1, 1 }, .uv_x = 1, .uv_y = 1 },
-    .{ .position = .{ 1, 1, 1 }, .color = .{ 0, 0, 1, 1 }, .uv_x = 0, .uv_y = 0 },
-    .{ .position = .{ 1, 1, -1 }, .color = .{ 0, 0, 1, 1 }, .uv_x = 1, .uv_y = 0 },
+    .{ .position = .{ 1, -1, 1 }, .normal = .{ 1, 0, 0 }, .color = .{ 0, 0, 1, 1 }, .uv_x = 0, .uv_y = 1 },
+    .{ .position = .{ 1, -1, -1 }, .normal = .{ 1, 0, 0 }, .color = .{ 0, 0, 1, 1 }, .uv_x = 1, .uv_y = 1 },
+    .{ .position = .{ 1, 1, 1 }, .normal = .{ 1, 0, 0 }, .color = .{ 0, 0, 1, 1 }, .uv_x = 0, .uv_y = 0 },
+    .{ .position = .{ 1, 1, -1 }, .normal = .{ 1, 0, 0 }, .color = .{ 0, 0, 1, 1 }, .uv_x = 1, .uv_y = 0 },
 
     // Top (+Y)
-    .{ .position = .{ -1, 1, 1 }, .color = .{ 1, 1, 1, 1 }, .uv_x = 0, .uv_y = 1 },
-    .{ .position = .{ 1, 1, 1 }, .color = .{ 1, 1, 1, 1 }, .uv_x = 1, .uv_y = 1 },
-    .{ .position = .{ -1, 1, -1 }, .color = .{ 1, 1, 1, 1 }, .uv_x = 0, .uv_y = 0 },
-    .{ .position = .{ 1, 1, -1 }, .color = .{ 1, 1, 1, 1 }, .uv_x = 1, .uv_y = 0 },
+    .{ .position = .{ -1, 1, 1 }, .normal = .{ 0, 1, 0 }, .color = .{ 1, 1, 1, 1 }, .uv_x = 0, .uv_y = 1 },
+    .{ .position = .{ 1, 1, 1 }, .normal = .{ 0, 1, 0 }, .color = .{ 1, 1, 1, 1 }, .uv_x = 1, .uv_y = 1 },
+    .{ .position = .{ -1, 1, -1 }, .normal = .{ 0, 1, 0 }, .color = .{ 1, 1, 1, 1 }, .uv_x = 0, .uv_y = 0 },
+    .{ .position = .{ 1, 1, -1 }, .normal = .{ 0, 1, 0 }, .color = .{ 1, 1, 1, 1 }, .uv_x = 1, .uv_y = 0 },
 
     // Bottom (-Y)
-    .{ .position = .{ -1, -1, -1 }, .color = .{ 0, 0, 0, 1 }, .uv_x = 0, .uv_y = 1 },
-    .{ .position = .{ 1, -1, -1 }, .color = .{ 0, 0, 0, 1 }, .uv_x = 1, .uv_y = 1 },
-    .{ .position = .{ -1, -1, 1 }, .color = .{ 0, 0, 0, 1 }, .uv_x = 0, .uv_y = 0 },
-    .{ .position = .{ 1, -1, 1 }, .color = .{ 0, 0, 0, 1 }, .uv_x = 1, .uv_y = 0 },
+    .{ .position = .{ -1, -1, -1 }, .normal = .{ 0, -1, 0 }, .color = .{ 0, 0, 0, 1 }, .uv_x = 0, .uv_y = 1 },
+    .{ .position = .{ 1, -1, -1 }, .normal = .{ 0, -1, 0 }, .color = .{ 0, 0, 0, 1 }, .uv_x = 1, .uv_y = 1 },
+    .{ .position = .{ -1, -1, 1 }, .normal = .{ 0, -1, 0 }, .color = .{ 0, 0, 0, 1 }, .uv_x = 0, .uv_y = 0 },
+    .{ .position = .{ 1, -1, 1 }, .normal = .{ 0, -1, 0 }, .color = .{ 0, 0, 0, 1 }, .uv_x = 1, .uv_y = 0 },
 };
 
 pub const indicies: []const u32 = &.{
