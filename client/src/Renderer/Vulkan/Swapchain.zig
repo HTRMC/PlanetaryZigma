@@ -238,6 +238,7 @@ pub const FrameData = struct {
 
     pub const GPUScene = extern struct {
         view_proj: [16]f32,
+        global_light_direction: [3]f32,
         time: f32,
     };
 

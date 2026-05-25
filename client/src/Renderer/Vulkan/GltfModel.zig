@@ -122,11 +122,21 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                 bin[uv_offset .. uv_offset + uv_accessor.count * @sizeOf([2]f32)],
             );
 
+            const normal_accessor_idx = p.attributes.map.get("NORMAL") orelse return error.NoNormal;
+            const normal_accessor = g.accessors.?[normal_accessor_idx];
+            std.debug.assert(normal_accessor.componentType == @intFromEnum(zgltf.ComponentType.float));
+            const normal_buffer_view = g.bufferViews.?[normal_accessor.bufferView.?];
+            const normal_offset = (normal_accessor.byteOffset + normal_buffer_view.byteOffset);
+            const normals = std.mem.bytesAsSlice(
+                [3]f32,
+                bin[normal_offset .. normal_offset + normal_accessor.count * @sizeOf([3]f32)],
+            );
+
             var dst = try vertices.addManyAsSlice(gpa, pos_accessor.count);
             for (0..pos_accessor.count) |i| {
                 dst[i] = .{
                     .color = .{ 1, 0, 0, 1 },
-                    .normal = .{ 1, 1, 1 },
+                    .normal = normals[i],
                     .position = positions[i],
                     .uv_x = uvs[i][0],
                     .uv_y = uvs[i][1],

@@ -94,7 +94,7 @@ pub fn uploadDataToImage(self: *@This(), vma: Vma, device: Device, data: anytype
         vma,
         u8,
         data_size,
-        c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT | c.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
         .{
             .usage = Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU,
             .flags = Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT,

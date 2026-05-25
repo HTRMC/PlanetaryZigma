@@ -103,40 +103,56 @@ pub fn Planet(kind: PlanetKind) type {
             }
             if (config_index == 0 or config_index == 255) return;
             var edge_index: u32 = 0;
+            const two: nz.Vec3(f32) = @splat(2);
             for (0..5) |_| {
-                for (0..3) |_| {
-                    const index = triangle_table[config_index][edge_index];
-                    if (index == -1) return;
-                    const vert1 = postion + edge_table[@intFromFloat(index)][0];
-                    const vert2 = postion + edge_table[@intFromFloat(index)][1];
-                    const devision: nz.Vec3(f32) = .{ 2, 2, 2 };
-                    const pos: [3]f32 = @bitCast((vert1 + vert2) / devision);
+                if (triangle_table[config_index][edge_index] == -1) return;
 
-                    switch (kind) {
-                        .logical => try gen_vertices.append(
-                            gpa,
-                            .{
-                                pos[0],
-                                pos[1],
-                                pos[2],
-                                1,
-                            },
-                        ),
-                        .renderable => try gen_vertices.append(
-                            gpa,
-                            .{
-                                .position = (vert1 + vert2) / devision,
+                switch (kind) {
+                    .logical => {
+                        for (0..3) |_| {
+                            const index = triangle_table[config_index][edge_index];
+                            const vert1 = postion + edge_table[@intFromFloat(index)][0];
+                            const vert2 = postion + edge_table[@intFromFloat(index)][1];
+                            const pos: [3]f32 = @bitCast((vert1 + vert2) / two);
+                            try gen_vertices.append(gpa, .{ pos[0], pos[1], pos[2], 1 });
+                            try gen_indices.append(gpa, @intCast(gen_vertices.items.len - 1));
+                            edge_index += 1;
+                        }
+                    },
+                    .renderable => {
+                        var positions: [3]nz.Vec3(f32) = undefined;
+                        var tri_edge_indices: [3]f32 = undefined;
+                        for (0..3) |i| {
+                            const index = triangle_table[config_index][edge_index];
+                            const vert1 = postion + edge_table[@intFromFloat(index)][0];
+                            const vert2 = postion + edge_table[@intFromFloat(index)][1];
+                            positions[i] = (vert1 + vert2) / two;
+                            tri_edge_indices[i] = index;
+                            edge_index += 1;
+                        }
+
+                        const e1 = positions[1] - positions[0];
+                        const e2 = positions[2] - positions[0];
+                        const cross: nz.Vec3(f32) = .{
+                            e1[1] * e2[2] - e1[2] * e2[1],
+                            e1[2] * e2[0] - e1[0] * e2[2],
+                            e1[0] * e2[1] - e1[1] * e2[0],
+                        };
+                        const len = @sqrt(@reduce(.Add, cross * cross));
+                        const normal: [3]f32 = if (len > 0) @bitCast(cross / @as(nz.Vec3(f32), @splat(len))) else .{ 0, 0, 0 };
+                        _ = normal;
+
+                        for (0..3) |i| {
+                            try gen_vertices.append(gpa, .{
+                                .position = positions[i],
+                                .normal = nz.vec.normalize(positions[i]),
                                 .color = .{ if (postion[1] < 0) 0 else 1, if (postion[0] < 0) 0 else 1, if (postion[2] < 0) 0 else 1, 1 },
-                                // .color = .{ @mod(static.count + 0, 3), @mod(static.count + 1, 3), @mod(static.count + 2, 3), 1 },
-                                // .normal = .{ 1, 0, 0 },
-                                .uv_x = @floor(@mod(index, 3)),
-                                .uv_y = @ceil(@mod(index + 2, 3)),
-                            },
-                        ),
-                    }
-
-                    try gen_indices.append(gpa, @intCast(gen_vertices.items.len - 1));
-                    edge_index += 1;
+                                .uv_x = @floor(@mod(tri_edge_indices[i], 3)),
+                                .uv_y = @ceil(@mod(tri_edge_indices[i] + 2, 3)),
+                            });
+                            try gen_indices.append(gpa, @intCast(gen_vertices.items.len - 1));
+                        }
+                    },
                 }
             }
         }
