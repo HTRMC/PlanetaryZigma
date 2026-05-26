@@ -130,7 +130,7 @@ fn handleCommand(self: *@This(), system_context: *system.Context, info: *const I
                 .flags = .{ .transform = true, .model = true },
             });
             switch (spawn_entity.kind) {
-                .player => new_entity.model_id = 0,
+                .player => new_entity.model_id = 1,
                 .planet => {
                     const size: u32 = @intCast(spawn_entity.data[0]);
                     const planet: shared.Planet(.renderable) = try .init(self.gpa, size);
@@ -144,7 +144,7 @@ fn handleCommand(self: *@This(), system_context: *system.Context, info: *const I
                     std.log.debug("SPAWNED: Planet {d}", .{size});
                     new_entity.model_id = @intCast(vulkan_model_handel);
                 },
-                .enemy => new_entity.model_id = 0,
+                .enemy => new_entity.model_id = 1,
                 .bullet => {
                     new_entity.model_id = 0;
                     new_entity.transform.scale = @splat(0.1);

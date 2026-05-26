@@ -11,7 +11,6 @@ const PhysicalDevice = @import("Vulkan/device.zig").Physical;
 const Device = @import("Vulkan/device.zig").Logical;
 const Mesh = @import("Vulkan/Mesh.zig");
 const Node = @import("Vulkan/Node.zig");
-const Material = @import("Vulkan/Material.zig");
 const GltfModel = @import("Vulkan/GltfModel.zig");
 const Vma = @import("Vulkan/Vma.zig");
 const Swapchain = @import("Vulkan/Swapchain.zig");
@@ -29,19 +28,16 @@ const check = @import("Vulkan/utils.zig").check;
 pub const c = @import("vulkan");
 pub const Vertex = Mesh.Vertex;
 pub const RenderResources = struct {
-    pub const default_material_name: []const u8 = "default";
-    pub const default_mesh_name: []const u8 = "default";
-
     set_size: c.VkDeviceSize,
     combined_image_sampler_descriptor_size: usize,
     meshes: std.StringArrayHashMapUnmanaged(Mesh),
-    materials: std.StringArrayHashMapUnmanaged(Material),
+    materials: std.StringArrayHashMapUnmanaged(Buffer),
     samplers: std.ArrayList(c.VkSampler),
     images: std.ArrayList(Image),
 
     fn init(gpa: std.mem.Allocator, vma: Vma, physical_device: PhysicalDevice, device: Device, layout: descriptor.Layout) !@This() {
         const meshes: std.StringArrayHashMapUnmanaged(Mesh) = .empty;
-        var materials: std.StringArrayHashMapUnmanaged(Material) = .empty;
+        var materials: std.StringArrayHashMapUnmanaged(Buffer) = .empty;
         var samplers: std.ArrayList(c.VkSampler) = .empty;
         var images: std.ArrayList(Image) = .empty;
 
@@ -78,17 +74,34 @@ pub const RenderResources = struct {
         try check(c.vkCreateSampler(device.handle, &sampler_info, null, &default_sampler));
         try samplers.append(gpa, default_sampler);
 
-        const default_material: Material = try .init(
-            gpa,
-            RenderResources.default_material_name,
+        const default_material: Buffer = try .init(
             device,
             vma,
+            u8,
             set_size,
-            db_props.combinedImageSamplerDescriptorSize,
-            default_sampler,
-            default_texture.vk_imageview,
+            c.VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
+                c.VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT | c.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+            .{ .usage = Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU, .flags = Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT },
         );
-        try materials.put(gpa, try gpa.dupe(u8, RenderResources.default_material_name), default_material);
+        try materials.put(gpa, "default", default_material);
+
+        const img_info: c.VkDescriptorImageInfo = .{
+            .sampler = default_sampler,
+            .imageView = default_texture.vk_imageview,
+            .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        };
+        const get_info: c.VkDescriptorGetInfoEXT = .{
+            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+            .type = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .data = .{ .pCombinedImageSampler = &img_info },
+        };
+        const dst: [*]u8 = @ptrCast(default_material.info.pMappedData);
+        ext.vkGetDescriptorEXT(
+            device.handle,
+            &get_info,
+            db_props.combinedImageSamplerDescriptorSize, //TODO: double check with set_size.
+            dst,
+        );
 
         return .{
             .combined_image_sampler_descriptor_size = db_props.combinedImageSamplerDescriptorSize,
@@ -104,7 +117,7 @@ pub const RenderResources = struct {
         {
             var it = self.materials.iterator();
             while (it.next()) |pair| {
-                pair.value_ptr.deinit(gpa, vma);
+                pair.value_ptr.deinit(vma);
             }
             self.materials.deinit(gpa);
         }
@@ -128,28 +141,16 @@ pub const RenderResources = struct {
         }
     }
 
-    pub fn createMesh(self: *@This(), gpa: std.mem.Allocator, mesh: Mesh) !void {
-        try self.meshes.put(gpa, mesh.name, mesh);
-    }
-    pub fn createMaterial(self: *@This(), gpa: std.mem.Allocator, material: Material) !void {
-        try self.materials.put(gpa, material.name, material);
-    }
-
-    pub fn getMeshPtr(self: *@This(), name_id: ?[]const u8) !*Mesh {
-        if (name_id) |name| {
-            std.log.debug("got mesh: {s}", .{name});
-            if (self.meshes.getPtr(name)) |mesh| return mesh;
-        } else {
-            std.log.debug("mesh: NULL", .{});
-        }
-        if (self.meshes.getPtr(RenderResources.default_mesh_name)) |default_mesh| return default_mesh else {
-            return error.NoDefaultMeshFound;
+    pub fn getMeshPtr(self: *@This(), name: []u8) *Mesh {
+        if (self.meshes.getPtr(name)) |mesh| return mesh else {
+            var it = self.meshes.iterator();
+            return it.next().?.value_ptr;
         }
     }
-    pub fn getMaterialPtr(self: *@This(), name_id: ?[]const u8) !*Material {
-        if (name_id) |name| if (self.materials.getPtr(name)) |material| return material;
-        if (self.materials.getPtr(RenderResources.default_material_name)) |default_material| return default_material else {
-            return error.NoDefaultMaterialFound;
+    pub fn getMaterialPtr(self: *@This(), name: []u8) *Buffer {
+        if (self.materials.getPtr(name)) |mesh| return mesh else {
+            var it = self.materials.iterator();
+            return it.next().?.value_ptr;
         }
     }
 };
@@ -248,20 +249,23 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         Shader.PushConstant,
         &self.layouts.layouts,
     );
-
-    _ = try createModelWithMesh(
-        self,
-        gpa,
-        RenderResources.default_mesh_name,
-        Mesh.box.verticies,
-        Mesh.box.indicies,
-    );
+    // try self.render_resources.meshes.append(gpa, try .init(
+    //     gpa,
+    //     self.vma,
+    //     "box",
+    //     self.device,
+    //     Mesh.Vertex,
+    //     Mesh.box.verticies,
+    //     Mesh.box.indicies,
+    //     &.{.{ .index_start = 0, .index_count = Mesh.box.indicies.len, .material_index = 0 }},
+    // ));
+    //
     const model: *GltfModel = try .init(
         gpa,
         self.vma,
         self.device,
         asset_server,
-        "objects/mecha.glb",
+        "objects/Cubes.glb",
         &self.render_resources,
     );
     try self.models.append(gpa, model);
@@ -293,7 +297,9 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     check(c.vkDeviceWaitIdle(self.device.handle)) catch {};
 
     self.render_resources.deinit(gpa, self.vma, self.device);
-
+    // for (self.models.items) |model| {
+    //     model.deinit(gpa);
+    // }
     self.models.deinit(gpa);
 
     self.material_layout.deinit(self.device);
@@ -587,11 +593,10 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         var model_id = entity.model_id;
         model_id = if (model_id >= self.models.items.len) 0 else model_id;
         const model = self.models.items[model_id];
-        std.log.debug("modelID: {d}", .{model_id});
-        std.log.debug("position: {any}", .{entity.transform.position});
+        // std.log.debug("modelID: {d}", .{model_id});
 
         for (model.top_nodes.items) |top_node| {
-            try draw(self, cmd, current_frame, top_node, entity.transform);
+            draw(self, cmd, current_frame, top_node, entity.transform);
         }
     }
 
@@ -600,25 +605,17 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     draw_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_READ_BIT);
 }
 
-pub fn draw(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *const Swapchain.FrameData, node: *Node, top_transform: nz.Transform3D(f32)) !void {
-    // const node_transform: nz.Transform3D(f32) = .fromMat4x4(top_transform.toMat4x4().mul(node.world_transform.toMat4x4()));
-    // TODO: World tansform incorrect?
-    const node_transform = top_transform;
-
-    std.log.debug("top_pos: {any}", .{top_transform});
-    std.log.debug("\nworld: {any}", .{node.world_transform});
-    std.log.debug("\nNODE PTR: {*}", .{node});
-
-    // if (true) @panic("LOLXD")
+pub fn draw(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *const Swapchain.FrameData, node: *Node, top_transform: nz.Transform3D(f32)) void {
+    const node_transform: nz.Transform3D(f32) = .fromMat4x4(top_transform.toMat4x4().mul(node.world_transform.toMat4x4()));
 
     if (node.mesh_id) |mesh_id| {
-        const mesh = try self.render_resources.getMeshPtr(mesh_id);
+        const firtst_mesh = self.render_resources.getMeshPtr(mesh_id);
 
-        var push: Shader.PushConstant = .{ .buffer_address = mesh.vertex_buffer.device_address, .model_matrix = node_transform.toMat4x4().d };
-        c.vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
+        var push: Shader.PushConstant = .{ .buffer_address = firtst_mesh.vertex_buffer.device_address, .model_matrix = node_transform.toMat4x4().d };
+        c.vkCmdBindIndexBuffer(cmd, firtst_mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
         c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(Shader.PushConstant), &push);
-        for (mesh.surfaces.items) |surface| {
-            const mat_addr = (try self.render_resources.getMaterialPtr(surface.material_name)).buffer.device_address;
+        for (firtst_mesh.surfaces.items) |surface| {
+            const mat_addr = self.render_resources.materials.items[surface.material_index].device_address;
             const surface_bindings = [_]c.VkDescriptorBufferBindingInfoEXT{
                 .{
                     .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
@@ -646,7 +643,7 @@ pub fn draw(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *const Swapch
     }
 
     for (node.children.items) |child| {
-        try draw(self, cmd, current_frame, child, node_transform);
+        draw(self, cmd, current_frame, child, node_transform);
     }
 }
 
@@ -662,7 +659,7 @@ pub fn resize(self: *@This(), gpa: std.mem.Allocator, width: u32, height: u32) !
     );
 }
 
-pub fn createModelWithMesh(self: *@This(), gpa: std.mem.Allocator, name: []const u8, verices: []const Mesh.Vertex, indices: []const u32) !usize {
+pub fn createModelWithMesh(self: *@This(), gpa: std.mem.Allocator, name: []const u8, verices: []Mesh.Vertex, indices: []u32) !usize {
     const mesh = try Mesh.init(
         gpa,
         self.vma,
@@ -671,21 +668,20 @@ pub fn createModelWithMesh(self: *@This(), gpa: std.mem.Allocator, name: []const
         Mesh.Vertex,
         verices,
         indices,
-        &.{.{
-            .index_start = 0,
-            .index_count = @intCast(indices.len),
-            .material_name = RenderResources.default_material_name,
-        }},
+        &.{.{ .index_start = 0, .index_count = @intCast(indices.len), .material_index = 0 }},
     );
-    try self.render_resources.createMesh(gpa, mesh);
+    try self.render_resources.meshes.append(
+        gpa,
+        mesh,
+    );
     const model: *GltfModel = try gpa.create(GltfModel);
     model.* = .{
         .device = self.device,
         .render_resources = &self.render_resources,
         .vma = self.vma,
-        .model_name = try gpa.dupe(u8, name),
+        .model_name = name,
     };
-    try model.nodes.append(gpa, .{ .mesh_id = mesh.name });
+    try model.nodes.append(gpa, .{ .mesh_id = @intCast(self.render_resources.meshes.items.len - 1) });
     try model.top_nodes.append(gpa, &model.nodes.items[0]);
     try self.models.append(gpa, model);
     return (self.models.items.len - 1);

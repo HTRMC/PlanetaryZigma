@@ -1,5 +1,6 @@
 const std = @import("std");
 const c = @import("vulkan");
+const nz = @import("shared").numz;
 const zgltf = @import("zgltf");
 const stb = @import("stb");
 const Vma = @import("Vma.zig");
@@ -18,16 +19,9 @@ device: Device,
 vma: Vma,
 model_name: []const u8,
 render_resources: *RenderResources,
-mesh_id: u32 = 0,
-// default_image: Image,
-// material_data_buffer: vk.Buffer = undefined,
-// storage for all the data on a given glTF file
-// meshes: std.StringHashMapUnmanaged(*Mesh) = .empty,
-// nodes: std.StringHashMapUnmanaged(*Node) = .empty,
-// materials: std.StringHashMapUnmanaged(*Material.Instance) = .empty,
-// nodes that dont have a parent, for iterating through the file in tree order
-// top_nodes: std.ArrayList(*Node) = .empty,
-//
+
+nodes: std.ArrayList(Node) = .empty,
+top_nodes: std.ArrayList(*Node) = .empty,
 pub fn init(
     gpa: std.mem.Allocator,
     vma: Vma,
@@ -42,6 +36,8 @@ pub fn init(
         .device = device,
         .model_name = model_name,
         .render_resources = render_resources,
+        .nodes = .empty,
+        .top_nodes = .empty,
     };
     try asset_server.loadAsset(@This(), self, model_name, loadModel);
     return self;
@@ -91,6 +87,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
 
     // self.clear(gpa);
 
+    const original_sample_count = self.render_resources.samplers.items.len - 1;
     if (g.samplers) |samplers| {
         std.log.info("Sampler count was {d}", .{samplers.len});
         for (samplers) |sampler| {
@@ -128,6 +125,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
 
     // var images: std.ArrayList(Image) = .empty;
     // defer images.deinit(gpa);
+    const original_image_count = self.render_resources.images.items.len - 1;
     if (g.images) |images| {
         std.log.info("image count was {d}", .{images.len});
         for (images) |image| {
@@ -158,7 +156,6 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                 true,
             );
             try new_image.uploadDataToImage(self.vma, self.device, pixels);
-            //TODO: map images when getting more meshes
             try self.render_resources.images.append(gpa, new_image);
         }
     } else {
@@ -215,37 +212,34 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
 
             const material_index = p.material.?;
             const material = g.materials.?[material_index];
-            const texture_index = material.pbrMetallicRoughness.?.baseColorTexture.?.index;
-            const texture_info = g.textures.?[texture_index];
-            const image_index = texture_info.source.?;
-            const sampler_index = texture_info.sampler.?;
-
-            //TODO: Material
-            // create a buffer sized to one descriptor set
-            const new_desc_buf = try Buffer.init(
-                self.device,
-                self.vma,
-                u8,
-                self.render_resources.set_size,
-                c.VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
-                    c.VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT | c.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-                .{ .usage = Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU, .flags = Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT },
-            );
-
-            // write the descriptor at offset 0
-            const img_info: c.VkDescriptorImageInfo = .{
-                .sampler = self.render_resources.samplers.items[sampler_index],
-                .imageView = self.render_resources.images.items[image_index].vk_imageview,
-                .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            };
-            const get_info: c.VkDescriptorGetInfoEXT = .{
-                .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
-                .type = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .data = .{ .pCombinedImageSampler = &img_info },
-            };
-            const material_dst: [*]u8 = @ptrCast(new_desc_buf.info.pMappedData);
-            ext.vkGetDescriptorEXT(self.device.handle, &get_info, self.render_resources.combined_image_sampler_descriptor_size, material_dst);
-            try self.render_resources.materials.append(gpa, new_desc_buf);
+            var material_name: ?[]const u8 = null;
+            if (material.pbrMetallicRoughness.?.baseColorTexture) |basecolor| {
+                if (material.name != null and self.render_resources.materials.contains(material.name.?)) {
+                    material_name = (try self.render_resources.getMaterialPtr(material.name.?)).name;
+                } else {
+                    const texture_index = basecolor.index;
+                    const texture_info = g.textures.?[texture_index];
+                    const image_index = texture_info.source.?;
+                    const sampler_index = texture_info.sampler.?;
+                    const new_material: Material = try .init(
+                        gpa,
+                        material.name.?,
+                        self.device,
+                        self.vma,
+                        self.render_resources.set_size,
+                        self.render_resources.combined_image_sampler_descriptor_size,
+                        self.render_resources.samplers.items[original_sample_count + sampler_index],
+                        self.render_resources.images.items[original_image_count + image_index].vk_imageview,
+                    );
+                    try self.render_resources.createMaterial(gpa, new_material);
+                    material_name = new_material.name;
+                }
+            }
+            surfaces.appendAssumeCapacity(.{
+                .index_count = indices_count,
+                .index_start = indices_start,
+                .material_name = if (material_name) |name| name else RenderResources.default_material_name,
+            });
 
             const uv_accessor_idx = p.attributes.map.get("TEXCOORD_0") orelse return error.NoUV;
             const uv_accessor = g.accessors.?[uv_accessor_idx];
@@ -277,18 +271,69 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                     .uv_y = uvs[i][1],
                 };
             }
-            surfaces.appendAssumeCapacity(.{ .index_count = indices_count, .index_start = indices_start, .material_index = @intCast(self.render_resources.materials.items.len - 1) });
         }
-        const new_mesh: Mesh = try .init(
-            gpa,
-            self.vma,
-            mesh.name orelse "dummy_name",
-            self.device,
-            Mesh.Vertex,
-            vertices.items,
-            indices.items,
-            surfaces.items,
-        );
-        try self.render_resources.meshes.append(gpa, new_mesh);
+
+        if (mesh.name != null and !self.render_resources.meshes.contains(mesh.name.?)) {
+            const new_mesh: Mesh = try .init(
+                gpa,
+                self.vma,
+                mesh.name.?,
+                self.device,
+                Mesh.Vertex,
+                vertices.items,
+                indices.items,
+                surfaces.items,
+            );
+            try self.render_resources.createMesh(gpa, new_mesh);
+        }
     };
+
+    if (g.nodes) |nodes| {
+        _ = try self.nodes.addManyAsSlice(gpa, nodes.len);
+        for (nodes, self.nodes.items) |gltf_node, *scene_node| {
+            scene_node.* = .{};
+            if (gltf_node.mesh) |mesh_id| {
+                const gltf_mesh = g.meshes.?[mesh_id];
+                // std.log.debug("try load mesh name: {s}", .{gltf_mesh.name.?});
+                const mesh = try self.render_resources.getMeshPtr(gltf_mesh.name);
+                std.log.debug("laoded mesh name: {s}", .{mesh.name});
+                scene_node.mesh_id = mesh.name;
+            }
+
+            if (gltf_node.matrix) |matrix| {
+                const local_matrix: nz.Mat4x4(f32) = .{ .d = matrix };
+                scene_node.local_transform = .fromMat4x4(local_matrix);
+            } else {
+                const tl = if (gltf_node.translation) |translation| nz.Mat4x4(f32).translate(translation) else nz.Mat4x4(f32).identity;
+                const rot = if (gltf_node.rotation) |rotation| nz.quat.Hamiltonian(f32).fromVec(rotation).toMat4x4() else nz.quat.Hamiltonian(f32).identity.toMat4x4();
+                const scale = if (gltf_node.scale) |scale| nz.Mat4x4(f32).scale(scale) else nz.Mat4x4(f32).identity;
+                scene_node.local_transform = .fromMat4x4(scale.mul(rot).mul(tl));
+            }
+            std.log.debug("gltfdata {any}", .{gltf_node});
+            std.log.debug("\n\n\nOWN {any}", .{scene_node});
+            std.log.debug("\nNODE PTR: {*}", .{scene_node});
+
+            if (gltf_node.children) |children| {
+                for (children) |child_id| {
+                    try scene_node.children.append(gpa, &self.nodes.items[child_id]);
+                    self.nodes.items[child_id].parent = scene_node;
+                }
+            }
+
+            //TODO: do this when lib is ready.
+            // if (gltf_node.parent == null) {
+            //     try self.top_nodes.append(gpa, scene_node);
+            //     var top_transform: nz.Transform3D(f32) = .{};
+            //     gltf_node.refreshTransform(&top_transform);
+            // }
+        }
+    }
+    for (self.nodes.items) |*node| {
+        if (node.parent == null) {
+            try self.top_nodes.append(gpa, node);
+            var top_transform: nz.Transform3D(f32) = .{};
+            node.refreshTransform(&top_transform);
+            std.log.debug("\n\n\nPARENT {any}", .{node});
+        }
+    }
 }
