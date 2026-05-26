@@ -19,7 +19,6 @@ pub const GeoSurface = struct {
     index_start: u32,
     index_count: u32,
     material_index: u32,
-    // material: *const Material.Instance,
 };
 
 pub fn init(

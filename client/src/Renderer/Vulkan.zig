@@ -26,6 +26,110 @@ const check = @import("Vulkan/utils.zig").check;
 
 pub const c = @import("vulkan");
 pub const Vertex = Mesh.Vertex;
+pub const RenderResources = struct {
+    set_size: c.VkDeviceSize,
+    combined_image_sampler_descriptor_size: usize,
+    default_texture: Image,
+    default_sampler: c.VkSampler,
+    default_material: Buffer,
+    meshes: std.ArrayList(Mesh) = .empty,
+    materials: std.ArrayList(Buffer) = .empty,
+    samplers: std.ArrayList(c.VkSampler) = .empty,
+    images: std.ArrayList(Image) = .empty,
+
+    fn init(vma: Vma, physical_device: PhysicalDevice, device: Device, layout: descriptor.Layout) !@This() {
+        var db_props: c.VkPhysicalDeviceDescriptorBufferPropertiesEXT = .{
+            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT,
+        };
+        var prop2: c.VkPhysicalDeviceProperties2 = .{
+            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+            .pNext = &db_props,
+        };
+        var set_size: c.VkDeviceSize = 0;
+        c.vkGetPhysicalDeviceProperties2(physical_device.handle, &prop2);
+        ext.vkGetDescriptorSetLayoutSizeEXT(device.handle, layout.handle, &set_size);
+
+        var default_texture: Image = try .init(vma, device, c.VK_FORMAT_R8G8B8A8_UNORM, .{ .width = 1, .height = 1, .depth = 1 }, c.VK_IMAGE_USAGE_SAMPLED_BIT | c.VK_IMAGE_USAGE_TRANSFER_DST_BIT, c.VK_IMAGE_ASPECT_COLOR_BIT, false);
+        var green_color: nz.color.Rgba(u8) = .{ .r = 255, .g = 0, .b = 0, .a = 255 };
+        try default_texture.uploadDataToImage(vma, device, &green_color);
+        const sampler_info: c.VkSamplerCreateInfo = .{
+            .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+            .addressModeU = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+            .addressModeV = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+            .addressModeW = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+            .magFilter = c.VK_FILTER_LINEAR,
+            .minFilter = c.VK_FILTER_LINEAR,
+            .anisotropyEnable = c.VK_FALSE,
+            .borderColor = c.VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+            .unnormalizedCoordinates = c.VK_FALSE,
+            .compareEnable = c.VK_FALSE,
+            .compareOp = c.VK_COMPARE_OP_ALWAYS,
+            .mipmapMode = c.VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        };
+        var default_sampler: c.VkSampler = undefined;
+        try check(c.vkCreateSampler(device.handle, &sampler_info, null, &default_sampler));
+
+        const default_material: Buffer = try .init(
+            device,
+            vma,
+            u8,
+            set_size,
+            c.VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
+                c.VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT | c.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+            .{ .usage = Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU, .flags = Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT },
+        );
+        const img_info: c.VkDescriptorImageInfo = .{
+            .sampler = default_sampler,
+            .imageView = default_texture.vk_imageview,
+            .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        };
+        const get_info: c.VkDescriptorGetInfoEXT = .{
+            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+            .type = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .data = .{ .pCombinedImageSampler = &img_info },
+        };
+        const dst: [*]u8 = @ptrCast(default_material.info.pMappedData);
+        ext.vkGetDescriptorEXT(
+            device.handle,
+            &get_info,
+            db_props.combinedImageSamplerDescriptorSize, //TODO: double check with set_size.
+            dst,
+        );
+        return .{
+            .combined_image_sampler_descriptor_size = db_props.combinedImageSamplerDescriptorSize,
+            .set_size = set_size,
+            .default_sampler = default_sampler,
+            .default_texture = default_texture,
+            .default_material = default_material,
+        };
+    }
+
+    fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma, device: Device) void {
+        self.default_material.deinit(vma);
+        self.default_texture.deinit(vma, device);
+        c.vkDestroySampler(device.handle, self.default_sampler, null);
+
+        for (self.materials.items) |*material| {
+            material.deinit(vma);
+        }
+        self.materials.clearRetainingCapacity();
+
+        for (self.images.items) |*image| {
+            image.deinit(vma, device);
+        }
+        self.images.clearRetainingCapacity();
+
+        for (self.samplers.items) |sampler| {
+            c.vkDestroySampler(device.handle, sampler, null);
+        }
+        self.samplers.clearRetainingCapacity();
+
+        for (self.meshes.items) |*mesh| {
+            mesh.deinit(gpa, vma);
+        }
+        self.meshes.clearRetainingCapacity();
+    }
+};
 
 instance: Instance,
 debug_messenger: DebugMessenger,
@@ -34,18 +138,12 @@ physical_device: PhysicalDevice,
 device: Device,
 vma: Vma,
 swapchain: Swapchain,
+render_resources: RenderResources,
+models: std.ArrayList(*GltfModel) = .empty,
 
 //Temporary
 vertex_shader: *Shader,
 fragment_shader: *Shader,
-meshes: std.ArrayList(Mesh) = .empty,
-model: *GltfModel,
-texture_test: Image,
-sampler_test: c.VkSampler,
-desc_buf: Buffer,
-binding_offset: c.VkDeviceSize,
-set_size: c.VkDeviceSize,
-combinedImageSamplerDescriptorSize: usize,
 layouts: DescriptorLayouts,
 scene_layout: descriptor.Layout,
 material_layout: descriptor.Layout,
@@ -76,6 +174,7 @@ pub const InitOptions = struct {
 
 pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOptions) !*@This() {
     const self = try gpa.create(@This());
+    self.models = .empty;
 
     self.instance = try .init(gpa, options.instance.extensions, options.instance.layers);
     procs.instance.load(self.instance.handle, null);
@@ -119,92 +218,33 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         .vk_handles = .{ self.scene_layout.handle, self.material_layout.handle },
     };
 
-    //TODO: maybe move?
-    var db_props: c.VkPhysicalDeviceDescriptorBufferPropertiesEXT = .{
-        .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT,
-    };
-    var prop2: c.VkPhysicalDeviceProperties2 = .{
-        .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
-        .pNext = &db_props,
-    };
-    self.combinedImageSamplerDescriptorSize = db_props.combinedImageSamplerDescriptorSize;
-    c.vkGetPhysicalDeviceProperties2(self.physical_device.handle, &prop2);
-    ext.vkGetDescriptorSetLayoutSizeEXT(self.device.handle, self.material_layout.handle, &self.set_size);
-    ext.vkGetDescriptorSetLayoutBindingOffsetEXT(self.device.handle, self.material_layout.handle, 1, &self.binding_offset);
-
-    self.texture_test = try .init(self.vma, self.device, c.VK_FORMAT_R8G8B8A8_UNORM, .{ .width = 1, .height = 1, .depth = 1 }, c.VK_IMAGE_USAGE_SAMPLED_BIT | c.VK_IMAGE_USAGE_TRANSFER_DST_BIT, c.VK_IMAGE_ASPECT_COLOR_BIT, false);
-    var green_color: nz.color.Rgba(u8) = .{ .r = 255, .g = 0, .b = 0, .a = 255 };
-    try self.texture_test.uploadDataToImage(self.vma, self.device, &green_color);
-    const sampler_info: c.VkSamplerCreateInfo = .{
-        .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .addressModeU = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-        .addressModeV = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-        .addressModeW = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-        .magFilter = c.VK_FILTER_LINEAR,
-        .minFilter = c.VK_FILTER_LINEAR,
-        .anisotropyEnable = c.VK_FALSE,
-        .borderColor = c.VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-        .unnormalizedCoordinates = c.VK_FALSE,
-        .compareEnable = c.VK_FALSE,
-        .compareOp = c.VK_COMPARE_OP_ALWAYS,
-        .mipmapMode = c.VK_SAMPLER_MIPMAP_MODE_LINEAR,
-    };
-    try check(c.vkCreateSampler(self.device.handle, &sampler_info, null, &self.sampler_test));
-
-    self.desc_buf = try .init(
-        self.device,
-        self.vma,
-        u8,
-        self.set_size,
-        c.VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
-            c.VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT | c.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        .{ .usage = Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU, .flags = Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT },
-    );
-    const img_info: c.VkDescriptorImageInfo = .{
-        .sampler = self.sampler_test,
-        .imageView = self.texture_test.vk_imageview,
-        .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    };
-    const get_info: c.VkDescriptorGetInfoEXT = .{
-        .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
-        .type = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .data = .{ .pCombinedImageSampler = &img_info },
-    };
-    const dst: [*]u8 = @ptrCast(self.desc_buf.info.pMappedData);
-    ext.vkGetDescriptorEXT(
-        self.device.handle,
-        &get_info,
-        db_props.combinedImageSamplerDescriptorSize, //TODO: double check with set_size.
-        dst + self.binding_offset,
-    );
+    self.render_resources = try .init(self.vma, self.physical_device, self.device, self.material_layout);
 
     self.pipeline_layout = try .init(
         self.device,
         Shader.PushConstant,
         &self.layouts.layouts,
     );
-    self.meshes = .empty;
-    try self.meshes.append(gpa, try .init(
-        gpa,
-        self.vma,
-        "box",
-        self.device,
-        Mesh.Vertex,
-        Mesh.box.verticies,
-        Mesh.box.indicies,
-        &.{.{ .index_start = 0, .index_count = Mesh.box.indicies.len, .material_index = 0 }},
-    ));
-
-    self.model = try .init(
+    // try self.render_resources.meshes.append(gpa, try .init(
+    //     gpa,
+    //     self.vma,
+    //     "box",
+    //     self.device,
+    //     Mesh.Vertex,
+    //     Mesh.box.verticies,
+    //     Mesh.box.indicies,
+    //     &.{.{ .index_start = 0, .index_count = Mesh.box.indicies.len, .material_index = 0 }},
+    // ));
+    //
+    const model: *GltfModel = try .init(
         gpa,
         self.vma,
         self.device,
         asset_server,
         "objects/BenBozo.glb",
-        self.set_size,
-        self.binding_offset,
-        self.combinedImageSamplerDescriptorSize,
+        &self.render_resources,
     );
+    try self.models.append(gpa, model);
 
     self.vertex_shader = try .init(gpa, self.device, asset_server, .{
         .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
@@ -232,19 +272,17 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     check(c.vkDeviceWaitIdle(self.device.handle)) catch {};
 
-    for (self.meshes.items) |*mesh| {
-        mesh.deinit(gpa, self.vma);
-    }
-    self.meshes.deinit(gpa);
+    self.render_resources.deinit(gpa, self.vma, self.device);
+    // for (self.models.items) |model| {
+    //     model.deinit(gpa);
+    // }
+    self.models.deinit(gpa);
+
     self.material_layout.deinit(self.device);
     self.scene_layout.deinit(self.device);
-    self.desc_buf.deinit(self.vma);
     self.pipeline_layout.deinit(self.device);
     self.vertex_shader.deinit(gpa);
     self.fragment_shader.deinit(gpa);
-    self.model.deinit(gpa);
-    self.texture_test.deinit(self.vma, self.device);
-    c.vkDestroySampler(self.device.handle, self.sampler_test, null);
     self.swapchain.deinit(self.vma, self.device);
     self.vma.deinit();
     self.device.deinit();
@@ -520,7 +558,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
 
     var scene_data: Swapchain.FrameData.GPUScene = .{
         .view_proj = proj_view.d,
-        .global_light_direction = .{ 0, 1, 0 },
+        .global_light_direction = .{ @cos(info.elapsed_time), @sin(info.elapsed_time), 0 },
         .time = elapsed_time,
     };
     current_frame.gpu_scene.copy(Swapchain.FrameData.GPUScene, (&scene_data)[0..1]);
@@ -529,24 +567,22 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     ext.vkCmdBeginRendering(cmd, &render_info);
     var push: Shader.PushConstant = .{ .buffer_address = undefined, .model_matrix = identity_matrix.d };
     for (info.world.entities.values()) |*entity| {
-        if (!entity.flags.mesh or !entity.flags.transform) continue;
-        var mesh_id = entity.mesh.id;
-        mesh_id = if (mesh_id >= self.meshes.items.len) 0 else mesh_id;
-        const mesh = if (entity.flags.camera) self.model.mesh.? else self.meshes.items[mesh_id];
+        if (!entity.flags.model or !entity.flags.transform) continue;
+        var model_id = entity.model_id;
+        model_id = if (model_id >= self.models.items.len) 0 else model_id;
+        const model = self.models.items[model_id];
+        const firtst_mesh = self.render_resources.meshes.items[model.mesh_id];
+        // const mesh = if (entity.flags.camera) self.model.mesh.? else self.meshes.items[mesh_id];
         // const mesh = self.model.mesh.?;
         // const mesh = self.meshes.items[mesh_id];
         const transform = entity.transform;
         // std.log.debug("render-quat: {any}", .{transform.rotation});
         const matrix = transform.toMat4x4();
-        push = .{ .buffer_address = mesh.vertex_buffer.device_address, .model_matrix = matrix.d };
-        c.vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
+        push = .{ .buffer_address = firtst_mesh.vertex_buffer.device_address, .model_matrix = matrix.d };
+        c.vkCmdBindIndexBuffer(cmd, firtst_mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
         c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(Shader.PushConstant), &push);
-        for (mesh.surfaces.items) |surface| {
-            const mat_addr = if (entity.flags.camera)
-                self.model.buffers.items[surface.material_index].device_address
-            else
-                self.desc_buf.device_address;
-
+        for (firtst_mesh.surfaces.items) |surface| {
+            const mat_addr = self.render_resources.materials.items[surface.material_index].device_address;
             const surface_bindings = [_]c.VkDescriptorBufferBindingInfoEXT{
                 .{
                     .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
@@ -590,7 +626,7 @@ pub fn resize(self: *@This(), gpa: std.mem.Allocator, width: u32, height: u32) !
     );
 }
 
-pub fn createMesh(self: *@This(), gpa: std.mem.Allocator, name: []const u8, verices: []Mesh.Vertex, indices: []u32) !usize {
+pub fn createModelWithMesh(self: *@This(), gpa: std.mem.Allocator, name: []const u8, verices: []Mesh.Vertex, indices: []u32) !usize {
     const mesh = try Mesh.init(
         gpa,
         self.vma,
@@ -601,11 +637,20 @@ pub fn createMesh(self: *@This(), gpa: std.mem.Allocator, name: []const u8, veri
         indices,
         &.{.{ .index_start = 0, .index_count = @intCast(indices.len), .material_index = 0 }},
     );
-    try self.meshes.append(
+    try self.render_resources.meshes.append(
         gpa,
         mesh,
     );
-    return (self.meshes.items.len - 1);
+    const model: *GltfModel = try gpa.create(GltfModel);
+    model.* = .{
+        .device = self.device,
+        .render_resources = &self.render_resources,
+        .vma = self.vma,
+        .model_name = name,
+        .mesh_id = @intCast(self.render_resources.meshes.items.len - 1),
+    };
+    try self.models.append(gpa, model);
+    return (self.models.items.len - 1);
 }
 
 fn getViewMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {
