@@ -41,8 +41,8 @@ void main() {
   // gl_Position = scene_data.proj_view * vec4(x, y, z, 1.0);
 
   // vec3 uv = vec3(v.uv_x, v.uv_y, v.uv_x);
-  // vec3 col = 0.5 + 0.5 * cos(gl_Position.y * scene_data.time + v.uv_x + vec3(0, 2, 4));
-  vec3 col = vec3(1, 0, 0);
+  vec3 col = 0.5 + 0.5 * cos(gl_Position.y * scene_data.time + v.uv_x + vec3(0, 2, 4));
+  // vec3 col = vec3(1, 0, 0);
 
   // float red = (y > 0) ? 1 : 0;
   // vec3 col = vec3(red, 0, 0);
