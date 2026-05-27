@@ -57,7 +57,7 @@ pub const RenderResources = struct {
         ext.vkGetDescriptorSetLayoutSizeEXT(device.handle, layout.handle, &set_size);
 
         var default_texture: Image = try .init(vma, device, c.VK_FORMAT_R8G8B8A8_UNORM, .{ .width = 1, .height = 1, .depth = 1 }, c.VK_IMAGE_USAGE_SAMPLED_BIT | c.VK_IMAGE_USAGE_TRANSFER_DST_BIT, c.VK_IMAGE_ASPECT_COLOR_BIT, false);
-        var green_color: nz.color.Rgba(u8) = .{ .r = 255, .g = 0, .b = 0, .a = 255 };
+        var green_color: nz.color.Rgba(u8) = .{ .r = 255, .g = 255, .b = 0, .a = 255 };
         try default_texture.uploadDataToImage(vma, device, &green_color);
         try images.append(gpa, default_texture);
         const sampler_info: c.VkSamplerCreateInfo = .{
@@ -137,7 +137,7 @@ pub const RenderResources = struct {
 
     pub fn getMeshPtr(self: *@This(), name_id: ?[]const u8) !*Mesh {
         if (name_id) |name| {
-            std.log.debug("got mesh: {s}", .{name});
+            // std.log.debug("got mesh: {s}", .{name});
             if (self.meshes.getPtr(name)) |mesh| return mesh;
         } else {
             std.log.debug("mesh: NULL", .{});
@@ -261,7 +261,7 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         self.vma,
         self.device,
         asset_server,
-        "objects/mecha.glb",
+        "objects/BenBozo.glb",
         &self.render_resources,
     );
     try self.models.append(gpa, model);
@@ -587,8 +587,8 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         var model_id = entity.model_id;
         model_id = if (model_id >= self.models.items.len) 0 else model_id;
         const model = self.models.items[model_id];
-        std.log.debug("modelID: {d}", .{model_id});
-        std.log.debug("position: {any}", .{entity.transform.position});
+        // std.log.debug("modelID: {d}", .{model_id});
+        // std.log.debug("position: {any}", .{entity.transform.position});
 
         for (model.top_nodes.items) |top_node| {
             try draw(self, cmd, current_frame, top_node, entity.transform);
@@ -605,9 +605,9 @@ pub fn draw(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *const Swapch
     // TODO: World tansform incorrect?
     const node_transform = top_transform;
 
-    std.log.debug("top_pos: {any}", .{top_transform});
-    std.log.debug("\nworld: {any}", .{node.world_transform});
-    std.log.debug("\nNODE PTR: {*}", .{node});
+    // std.log.debug("top_pos: {any}", .{top_transform});
+    // std.log.debug("\nworld: {any}", .{node.world_transform});
+    // std.log.debug("\nNODE PTR: {*}", .{node});
 
     // if (true) @panic("LOLXD")
 
@@ -618,7 +618,10 @@ pub fn draw(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *const Swapch
         c.vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
         c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(Shader.PushConstant), &push);
         for (mesh.surfaces.items) |surface| {
-            const mat_addr = (try self.render_resources.getMaterialPtr(surface.material_name)).buffer.device_address;
+            // std.log.debug("MATERIAL NAME {s}", .{surface.material_name});
+            // std.log.debug("MATERIAs {d}", .{self.render_resources.materials.entries.len});
+            const material = try self.render_resources.getMaterialPtr(surface.material_name);
+            // std.log.debug("GOT NAME  {s}, address: {d}\n\n", .{ material.name, material.buffer.device_address });
             const surface_bindings = [_]c.VkDescriptorBufferBindingInfoEXT{
                 .{
                     .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
@@ -627,7 +630,7 @@ pub fn draw(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *const Swapch
                 },
                 .{
                     .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
-                    .address = mat_addr,
+                    .address = material.buffer.device_address,
                     .usage = c.VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
                         c.VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT,
                 },
