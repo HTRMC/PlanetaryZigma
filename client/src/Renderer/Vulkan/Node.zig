@@ -10,6 +10,10 @@ children: std.ArrayList(*@This()) = .empty,
 local_transform: nz.Transform3D(f32) = undefined,
 world_transform: nz.Transform3D(f32) = undefined,
 
+pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
+    self.children.deinit(gpa);
+}
+
 pub fn refreshTransform(self: *@This(), parent_transform: *nz.Transform3D(f32)) void {
     self.world_transform = nz.Transform3D(f32).fromMat4x4(parent_transform.toMat4x4().mul(self.local_transform.toMat4x4()));
     for (self.children.items[0..self.children.items.len]) |child| {

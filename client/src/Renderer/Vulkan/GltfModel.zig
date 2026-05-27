@@ -12,7 +12,7 @@ const Node = @import("Node.zig");
 const Material = @import("Material.zig");
 const Buffer = @import("Buffer.zig");
 const ext = @import("procs.zig").device.ProcTable;
-const RenderResources = @import("../Vulkan.zig").RenderResources;
+const RenderResources = @import("RenderResources.zig");
 pub const check = @import("utils.zig").check;
 
 device: Device,
@@ -34,7 +34,7 @@ pub fn init(
     self.* = .{
         .vma = vma,
         .device = device,
-        .model_name = model_name,
+        .model_name = try gpa.dupe(u8, model_name),
         .render_resources = render_resources,
         .nodes = .empty,
         .top_nodes = .empty,
@@ -42,16 +42,14 @@ pub fn init(
     try asset_server.loadAsset(@This(), self, model_name, loadModel);
     return self;
 }
-// pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
-//     // ext.vkDestroyShaderEXT(self.device.handle, self.handle, null);
-//     self.clear(gpa);
-//     self.samplers.deinit(gpa);
-//     self.images.deinit(gpa);
-//     self.buffers.deinit(gpa);
-//     if (self.mesh) |*mesh| mesh.deinit(gpa, self.vma);
-//     self.* = undefined;
-//     gpa.destroy(self);
-// }
+pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
+    for (self.nodes.items) |*node| node.deinit(gpa);
+    self.nodes.deinit(gpa);
+    self.top_nodes.deinit(gpa);
+    gpa.free(self.model_name);
+    gpa.destroy(self);
+    self.* = undefined;
+}
 
 // fn clear(self: *@This(), gpa: std.mem.Allocator) void {
 //     _ = gpa;
