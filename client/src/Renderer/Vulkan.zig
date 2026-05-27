@@ -125,19 +125,19 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         &self.layouts.layouts,
     );
 
-    // _ = try createModelWithMesh(
-    //     self,
-    //     gpa,
-    //     RenderResources.default_mesh_name,
-    //     Mesh.box.verticies,
-    //     Mesh.box.indicies,
-    // );
+    _ = try createModelWithMesh(
+        self,
+        gpa,
+        RenderResources.default_mesh_name,
+        Mesh.box.verticies,
+        Mesh.box.indicies,
+    );
     const model: *GltfModel = try .init(
         gpa,
         self.vma,
         self.device,
         asset_server,
-        "objects/BenBozo.glb",
+        "objects/BenRun.glb",
         &self.render_resources,
     );
     try self.models.append(gpa, model);

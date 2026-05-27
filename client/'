@@ -272,35 +272,35 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
 
                 const skins = gltf_loaded.skins.?;
                 std.log.debug("skin {any}", .{skins});
-                for (skins) |skin| {
-                    if (skin.inverseBindMatrices.? > -1) {
-                        const skin_viewbuffer = gltf_loaded.bufferViews.?[skin.inverseBindMatrices.?];
+                for (skins) |skin|{
+                    if (skin.inverseBindMatrices > -1) |viewbuffer_index|{
 
-                        std.log.debug("bufferview {any}", .{skin_viewbuffer});
-                    }
+        const skin_viewbuffer = gltf_loaded.viewBuffers.?[viewbuffer_index];
+            }
                 }
-
-                // for (size_t i = 0; i < input.skins.size(); i++)
-                // {
-                // tinygltf::Skin glTFSkin = input.skins[i];
-                // ...
-                // if (glTFSkin.inverseBindMatrices > -1)
-                // {
-                // const tinygltf::Accessor &  accessor   = input.accessors[glTFSkin.inverseBindMatrices];
-                // const tinygltf::BufferView &bufferView = input.bufferViews[accessor.bufferView];
-                // const tinygltf::Buffer &    buffer     = input.buffers[bufferView.buffer];
-                // skins[i].inverseBindMatrices.resize(accessor.count);
-                // memcpy(skins[i].inverseBindMatrices.data(), &buffer.data[accessor.byteOffset + bufferView.byteOffset], accessor.count * sizeof(glm::mat4));
-                //
-                // vulkanDevice->createBuffer(
-                //     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                //     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                //     &skins[i].ssbo,
-                //     sizeof(glm::mat4) * skins[i].inverseBindMatrices.size(),
-                //     skins[i].inverseBindMatrices.data());
-                // ...
-                // }
-                // }
+                
+                
+	// for (size_t i = 0; i < input.skins.size(); i++)
+	// {
+	// 	tinygltf::Skin glTFSkin = input.skins[i];
+	// 	...
+	// 	if (glTFSkin.inverseBindMatrices > -1)
+	// 	{
+	// 		const tinygltf::Accessor &  accessor   = input.accessors[glTFSkin.inverseBindMatrices];
+	// 		const tinygltf::BufferView &bufferView = input.bufferViews[accessor.bufferView];
+	// 		const tinygltf::Buffer &    buffer     = input.buffers[bufferView.buffer];
+	// 		skins[i].inverseBindMatrices.resize(accessor.count);
+	// 		memcpy(skins[i].inverseBindMatrices.data(), &buffer.data[accessor.byteOffset + bufferView.byteOffset], accessor.count * sizeof(glm::mat4));
+	//
+	// 		vulkanDevice->createBuffer(
+	// 		    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+	// 		    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+	// 		    &skins[i].ssbo,
+	// 		    sizeof(glm::mat4) * skins[i].inverseBindMatrices.size(),
+	// 		    skins[i].inverseBindMatrices.data());
+	// 		...
+	// 	}
+	// }
 
                 // std.debug.assert(joint_accessor.componentType == @intFromEnum(zgltf.ComponentType.float));
                 // const joint_buffer_view = gltf_loaded.bufferViews.?[joint_accessor.bufferView.?];
