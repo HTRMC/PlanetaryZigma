@@ -15,6 +15,14 @@ pub fn build(b: *std.Build) void {
 
     const zgltf = b.dependency("zgltf", .{ .target = target, .optimize = optimize }).module("zgltf");
 
+    const stb_dep = b.dependency("stb", .{});
+    const stb = b.addTranslateC(.{
+        .root_source_file = stb_dep.path("stb_image.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    stb.addIncludePath(b.dependency("stb", .{}).path("."));
+
     const time = std.Io.Timestamp.now(io, .real);
     const system = b.addLibrary(.{
         .name = b.fmt("system_client_{d}", .{time}),
@@ -26,6 +34,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "shared", .module = shared },
                 .{ .name = "yes", .module = yes },
                 .{ .name = "zgltf", .module = zgltf },
+                .{ .name = "stb", .module = stb.createModule() },
             },
             .link_libc = true,
         }),
@@ -33,6 +42,14 @@ pub fn build(b: *std.Build) void {
         .use_llvm = true,
         .linkage = .dynamic,
     });
+
+    system.root_module.addCSourceFile(.{
+        .file = b.addWriteFiles().add("stbi_impl.c",
+            \\#define STB_IMAGE_IMPLEMENTATION
+            \\#include "stb_image.h"
+        ),
+    });
+    system.root_module.addIncludePath(stb_dep.path("."));
 
     const exe = b.addExecutable(.{
         .name = "client",

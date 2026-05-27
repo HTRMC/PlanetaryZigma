@@ -1,15 +1,18 @@
 const std = @import("std");
 const vk = @import("vulkan");
-const nz = @import("numz");
+const nz = @import("shared").numz;
 const Mesh = @import("Mesh.zig");
 const Material = @import("Material.zig");
 
 parent: ?*@This() = null,
-mesh: ?*Mesh = null,
-material: *const Material.Instance = undefined,
+mesh_id: ?[]const u8 = null,
 children: std.ArrayList(*@This()) = .empty,
 local_transform: nz.Transform3D(f32) = undefined,
 world_transform: nz.Transform3D(f32) = undefined,
+
+pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
+    self.children.deinit(gpa);
+}
 
 pub fn refreshTransform(self: *@This(), parent_transform: *nz.Transform3D(f32)) void {
     self.world_transform = nz.Transform3D(f32).fromMat4x4(parent_transform.toMat4x4().mul(self.local_transform.toMat4x4()));

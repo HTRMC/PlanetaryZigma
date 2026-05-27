@@ -8,9 +8,6 @@ const Spawner = @import("system/Spawner.zig");
 pub const Renderer = @import("Renderer.zig");
 
 pub const Camera = @import("system/Camera.zig");
-pub const Mesh = struct {
-    id: u32,
-};
 
 pub const Info = struct {
     delta_time: f32,
@@ -24,12 +21,12 @@ pub const Entity = struct {
 
     transform: nz.Transform3D(f32) = .{},
     camera: Camera = .{},
-    mesh: Mesh = .{ .id = 0 },
+    model_id: u32 = 0,
 
     pub const Flags = packed struct {
         transform: bool = false,
         camera: bool = false,
-        mesh: bool = false,
+        model: bool = false,
     };
 
     pub fn deinit(self: *Entity, gpa: std.mem.Allocator) void {
@@ -148,7 +145,7 @@ pub const Context = struct {
         } else {
             std.log.debug("post-hotreload", .{});
             self.renderer = try .init(self.gpa, self.asset_server, self.platform, self.window);
-            const vulkan_mesh_handle = try self.renderer.inner.createMesh(
+            const vulkan_mesh_handle = try self.renderer.inner.createModelWithMesh(
                 self.gpa,
                 "planet",
                 self.planet.vertices,

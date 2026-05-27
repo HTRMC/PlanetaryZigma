@@ -115,8 +115,8 @@ fn handleCommand(self: *@This(), system_context: *system.Context, info: *const I
             const new_player = try self.spawner.spawn(.{
                 .camera = .{ .transform = .{ .position = .{ 0, 0, 0 } } },
                 .transform = .{ .position = .{ 0, 0, 0 } },
-                .mesh = .{ .id = 0 },
-                .flags = .{ .camera = true, .transform = true, .mesh = true },
+                .model_id = 1,
+                .flags = .{ .camera = true, .transform = true, .model = true },
             });
             try info.world.enitity_mapping.put(self.gpa, acknowledge.id, new_player.id);
             info.world.my_server_id = acknowledge.id;
@@ -127,26 +127,26 @@ fn handleCommand(self: *@This(), system_context: *system.Context, info: *const I
             if (info.world.enitity_mapping.contains(spawn_entity.id)) return;
             const new_entity = try self.spawner.spawn(.{
                 .transform = .{ .position = .{ 0, 0, 0 } },
-                .flags = .{ .transform = true, .mesh = true },
+                .flags = .{ .transform = true, .model = true },
             });
             switch (spawn_entity.kind) {
-                .player => new_entity.mesh = .{ .id = 0 },
+                .player => new_entity.model_id = 1,
                 .planet => {
                     const size: u32 = @intCast(spawn_entity.data[0]);
                     const planet: shared.Planet(.renderable) = try .init(self.gpa, size);
                     system_context.planet = planet;
-                    const vulkan_mesh_handle = try system_context.renderer.inner.createMesh(
+                    const vulkan_model_handel = try system_context.renderer.inner.createModelWithMesh(
                         self.gpa,
                         "planet",
                         planet.vertices,
                         planet.indices,
                     );
                     std.log.debug("SPAWNED: Planet {d}", .{size});
-                    new_entity.mesh = .{ .id = @intCast(vulkan_mesh_handle) };
+                    new_entity.model_id = @intCast(vulkan_model_handel);
                 },
-                .enemy => new_entity.mesh = .{ .id = 0 },
+                .enemy => new_entity.model_id = 0,
                 .bullet => {
-                    new_entity.mesh = .{ .id = 0 };
+                    new_entity.model_id = 0;
                     new_entity.transform.scale = @splat(0.1);
                 },
                 .unknown => @panic("unknown entity type... wtf"),
