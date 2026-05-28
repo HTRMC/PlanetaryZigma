@@ -176,11 +176,11 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                 const acc_idx = primitive.indices.?;
                 var acc = gltf_loaded.accessors.?[acc_idx];
                 const bv = gltf_loaded.bufferViews.?[acc.bufferView.?];
-                const offset = bv.byteOffset + acc.byteOffset;
+                const index_offset = bv.byteOffset + acc.byteOffset;
 
                 const element_size = try acc.elementSize();
                 const amount_of_bytes = acc.count * element_size;
-                const bytes = bin[offset .. offset + amount_of_bytes];
+                const bytes = bin[index_offset .. index_offset + amount_of_bytes];
 
                 const dst = try indices.addManyAsSlice(gpa, acc.count);
                 for (0..acc.count) |i| {
@@ -198,12 +198,12 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
 
             const pos_accessor_idx = primitive.attributes.map.get("POSITION") orelse return error.NoPosition;
             const pos_accessor = gltf_loaded.accessors.?[pos_accessor_idx];
-            const buffer_view = gltf_loaded.bufferViews.?[pos_accessor.bufferView.?];
-            const offset = (pos_accessor.byteOffset + buffer_view.byteOffset);
+            const pos_buffer_view = gltf_loaded.bufferViews.?[pos_accessor.bufferView.?];
+            const pos_offset = (pos_accessor.byteOffset + pos_buffer_view.byteOffset);
             std.debug.assert(pos_accessor.componentType == @intFromEnum(zgltf.ComponentType.float));
             const positions = std.mem.bytesAsSlice(
                 [3]f32,
-                bin[offset .. offset + pos_accessor.count * @sizeOf([3]f32)],
+                bin[pos_offset .. pos_offset + pos_accessor.count * @sizeOf([3]f32)],
             );
 
             const material_index = primitive.material.?;
@@ -261,6 +261,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
             );
 
             //TODO: ANIMATIONS!
+            //https://github.com/SaschaWillems/Vulkan/tree/master/examples/gltfskinning
             {
                 const joint_accessor_idx = primitive.attributes.map.get("JOINTS_0") orelse return error.NoJoints;
                 const joint_accessor = gltf_loaded.accessors.?[joint_accessor_idx];
@@ -274,41 +275,52 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                 std.log.debug("skin {any}", .{skins});
                 for (skins) |skin| {
                     if (skin.inverseBindMatrices.? > -1) {
-                        const skin_viewbuffer = gltf_loaded.bufferViews.?[skin.inverseBindMatrices.?];
-
-                        std.log.debug("bufferview {any}", .{skin_viewbuffer});
+                        const accessor = gltf_loaded.accessors.?[skin.inverseBindMatrices.?];
+                        const mat_buffer_view = gltf_loaded.bufferViews.?[@intCast(accessor.bufferView.?)];
+                        const matrix_data = bin[accessor.byteOffset + mat_buffer_view.byteOffset .. accessor.byteOffset + mat_buffer_view.byteOffset + mat_buffer_view.byteLength];
+                        for (0..accessor.count) |i| {
+                            var mat: nz.Mat4x4(f32) = .identity;
+                            mat.d = @bitCast(matrix_data[i * 64 ..][0..64].*);
+                            std.log.debug("matrix {any}", .{mat});
+                        }
                     }
                 }
 
-                // for (size_t i = 0; i < input.skins.size(); i++)
-                // {
-                // tinygltf::Skin glTFSkin = input.skins[i];
-                // ...
-                // if (glTFSkin.inverseBindMatrices > -1)
-                // {
-                // const tinygltf::Accessor &  accessor   = input.accessors[glTFSkin.inverseBindMatrices];
-                // const tinygltf::BufferView &bufferView = input.bufferViews[accessor.bufferView];
-                // const tinygltf::Buffer &    buffer     = input.buffers[bufferView.buffer];
-                // skins[i].inverseBindMatrices.resize(accessor.count);
-                // memcpy(skins[i].inverseBindMatrices.data(), &buffer.data[accessor.byteOffset + bufferView.byteOffset], accessor.count * sizeof(glm::mat4));
-                //
-                // vulkanDevice->createBuffer(
-                //     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                //     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                //     &skins[i].ssbo,
-                //     sizeof(glm::mat4) * skins[i].inverseBindMatrices.size(),
-                //     skins[i].inverseBindMatrices.data());
-                // ...
-                // }
-                // }
-
-                // std.debug.assert(joint_accessor.componentType == @intFromEnum(zgltf.ComponentType.float));
-                // const joint_buffer_view = gltf_loaded.bufferViews.?[joint_accessor.bufferView.?];
-                // const joint_offset = (joint_accessor.byteOffset + joint_buffer_view.byteOffset);
-                // const joints = std.mem.bytesAsSlice(
-                //     [3]f32,
-                //     bin[joint_offset .. joint_offset + joint_accessor.count * @sizeOf([3]f32)],
-                // );
+                if (gltf_loaded.animations) |animations| for (animations) |animation| {
+                    for (animation.samplers) |sampler| {
+                        {
+                            const accessor = gltf_loaded.accessors.?[sampler.input];
+                            const buffer_view = gltf_loaded.bufferViews.?[@intCast(accessor.bufferView.?)];
+                            const offset = accessor.byteOffset + buffer_view.byteOffset;
+                            const sampler_input_data = bin[offset .. offset + buffer_view.byteLength];
+                            for (0..accessor.count) |i| {
+                                const value: f32 = @bitCast(sampler_input_data[i * 4 ..][0..4].*);
+                                std.log.debug("sampler Value {d}", .{value});
+                            }
+                        }
+                        {
+                            const accessor = gltf_loaded.accessors.?[sampler.output];
+                            const buffer_view = gltf_loaded.bufferViews.?[@intCast(accessor.bufferView.?)];
+                            const offset = accessor.byteOffset + buffer_view.byteOffset;
+                            const sampler_input_data = bin[offset .. offset + buffer_view.byteLength];
+                            switch (accessor.type) {
+                                .VEC3 => {
+                                    for (0..accessor.count) |i| {
+                                        const value: [3]f32 = @bitCast(sampler_input_data[i * 12 ..][0..12].*);
+                                        std.log.debug("output Value {any}", .{value});
+                                    }
+                                },
+                                .VEC4 => {
+                                    for (0..accessor.count) |i| {
+                                        const value: [4]f32 = @bitCast(sampler_input_data[i * 16 ..][0..16].*);
+                                        std.log.debug("output Value {any}", .{value});
+                                    }
+                                },
+                                else => {},
+                            }
+                        }
+                    }
+                };
             }
 
             var dst = try vertices.addManyAsSlice(gpa, pos_accessor.count);
