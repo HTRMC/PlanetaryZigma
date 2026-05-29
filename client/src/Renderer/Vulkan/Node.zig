@@ -3,26 +3,35 @@ const vk = @import("vulkan");
 const nz = @import("shared").numz;
 const Mesh = @import("Mesh.zig");
 const Material = @import("Material.zig");
+const Node = @This();
 
 parent: ?*@This() = null,
-mesh_id: ?[]const u8 = null,
+index: u32,
 children: std.ArrayList(*@This()) = .empty,
-local_transform: nz.Transform3D(f32) = undefined,
-world_transform: nz.Transform3D(f32) = undefined,
+mesh_id: ?[]const u8 = null,
+translation: nz.Vec3(f32) = @splat(0),
+scale: nz.Vec3(f32) = @splat(1),
+rotation: nz.quat.Hamiltonian(f32) = .identity,
+skin_id: i32 = -1,
+world_matrix: nz.Mat4x4(f32) = undefined,
 
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     self.children.deinit(gpa);
 }
 
+pub fn getLocalMatrix(self: *@This()) nz.Mat4x4(f32) {
+    return nz.Mat4x4(f32).scale(self.scale).mul(self.rotation.toMat4x4()).mul(.translate(self.translation));
+}
+
 pub fn refreshTransform(self: *@This(), parent_transform: *nz.Transform3D(f32)) void {
-    self.world_transform = nz.Transform3D(f32).fromMat4x4(parent_transform.toMat4x4().mul(self.local_transform.toMat4x4()));
+    self.world_matrix = nz.Transform3D(f32).fromMat4x4(parent_transform.toMat4x4().mul(self.local_transform.toMat4x4()));
     for (self.children.items[0..self.children.items.len]) |child| {
-        child.refreshTransform(&self.world_transform);
+        child.refreshTransform(&self.world_matrix);
     }
 }
 
 pub fn draw(self: *@This(), allocator: std.mem.Allocator, top_transform: nz.Transform3D(f32), ctx: *DrawContext) !void {
-    const node_transform: nz.Transform3D(f32) = .fromMat4x4(top_transform.toMat4x4().mul(self.world_transform.toMat4x4()));
+    const node_transform: nz.Transform3D(f32) = .fromMat4x4(top_transform.toMat4x4().mul(self.world_matrix.toMat4x4()));
     if (self.mesh) |mesh| {
         for (mesh.surfaces.items[0..mesh.surfaces.items.len]) |surface| {
             const render_obj: RenderObject = .{

@@ -262,6 +262,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
 
             //TODO: ANIMATIONS!
             //https://github.com/SaschaWillems/Vulkan/tree/master/examples/gltfskinning
+            //
             {
                 const joint_accessor_idx = primitive.attributes.map.get("JOINTS_0") orelse return error.NoJoints;
                 const joint_accessor = gltf_loaded.accessors.?[joint_accessor_idx];
@@ -288,37 +289,39 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
 
                 if (gltf_loaded.animations) |animations| for (animations) |animation| {
                     for (animation.samplers) |sampler| {
-                        {
-                            const accessor = gltf_loaded.accessors.?[sampler.input];
-                            const buffer_view = gltf_loaded.bufferViews.?[@intCast(accessor.bufferView.?)];
-                            const offset = accessor.byteOffset + buffer_view.byteOffset;
-                            const sampler_input_data = bin[offset .. offset + buffer_view.byteLength];
-                            for (0..accessor.count) |i| {
-                                const value: f32 = @bitCast(sampler_input_data[i * 4 ..][0..4].*);
-                                std.log.debug("sampler Value {d}", .{value});
-                            }
+                        const in_sampler_accessor = gltf_loaded.accessors.?[sampler.input];
+                        const in_sampler_buffer_view = gltf_loaded.bufferViews.?[@intCast(in_sampler_accessor.bufferView.?)];
+                        const in_sampler_offset = in_sampler_accessor.byteOffset + in_sampler_buffer_view.byteOffset;
+                        const in_sampler_input_data = bin[in_sampler_offset .. in_sampler_offset + in_sampler_buffer_view.byteLength];
+                        for (0..in_sampler_accessor.count) |i| {
+                            const value: f32 = @bitCast(in_sampler_input_data[i * 4 ..][0..4].*);
+                            std.log.debug("sampler Value {d}", .{value});
                         }
-                        {
-                            const accessor = gltf_loaded.accessors.?[sampler.output];
-                            const buffer_view = gltf_loaded.bufferViews.?[@intCast(accessor.bufferView.?)];
-                            const offset = accessor.byteOffset + buffer_view.byteOffset;
-                            const sampler_input_data = bin[offset .. offset + buffer_view.byteLength];
-                            switch (accessor.type) {
-                                .VEC3 => {
-                                    for (0..accessor.count) |i| {
-                                        const value: [3]f32 = @bitCast(sampler_input_data[i * 12 ..][0..12].*);
-                                        std.log.debug("output Value {any}", .{value});
-                                    }
-                                },
-                                .VEC4 => {
-                                    for (0..accessor.count) |i| {
-                                        const value: [4]f32 = @bitCast(sampler_input_data[i * 16 ..][0..16].*);
-                                        std.log.debug("output Value {any}", .{value});
-                                    }
-                                },
-                                else => {},
-                            }
+
+                        const out_sampler_accessor = gltf_loaded.accessors.?[sampler.output];
+                        const out_sampler_buffer_view = gltf_loaded.bufferViews.?[@intCast(out_sampler_accessor.bufferView.?)];
+                        const offset = out_sampler_accessor.byteOffset + out_sampler_buffer_view.byteOffset;
+                        const out_sampler_input_data = bin[offset .. offset + out_sampler_buffer_view.byteLength];
+                        switch (out_sampler_accessor.type) {
+                            .VEC3 => {
+                                for (0..out_sampler_accessor.count) |i| {
+                                    const value: [3]f32 = @bitCast(out_sampler_input_data[i * 12 ..][0..12].*);
+                                    std.log.debug("output Value {any}", .{value});
+                                }
+                            },
+                            .VEC4 => {
+                                for (0..out_sampler_accessor.count) |i| {
+                                    const value: [4]f32 = @bitCast(out_sampler_input_data[i * 16 ..][0..16].*);
+                                    std.log.debug("output Value {any}", .{value});
+                                }
+                            },
+                            else => {},
                         }
+                    }
+                    for (animation.channels) |channel| {
+                        const target = channel.target;
+                        const sampler_index = channel.sampler;
+                        std.log.debug("TARGET-path; {s}\nsampler:INDEX {d}\n", .{ target.path, sampler_index });
                     }
                 };
             }
