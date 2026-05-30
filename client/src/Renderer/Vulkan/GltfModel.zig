@@ -10,6 +10,7 @@ const Image = @import("Image.zig");
 const Mesh = @import("Mesh.zig");
 const Node = @import("Node.zig");
 const Material = @import("Material.zig");
+const Animation = @import("Animation.zig");
 const Buffer = @import("Buffer.zig");
 const ext = @import("procs.zig").device.ProcTable;
 const RenderResources = @import("RenderResources.zig");
@@ -21,6 +22,7 @@ model_name: []const u8,
 render_resources: *RenderResources,
 nodes: std.ArrayList(Node) = .empty,
 top_nodes: std.ArrayList(*Node) = .empty,
+animations: std.ArrayList(Animation) = .empty,
 
 pub fn init(
     gpa: std.mem.Allocator,
@@ -38,6 +40,7 @@ pub fn init(
         .render_resources = render_resources,
         .nodes = .empty,
         .top_nodes = .empty,
+        .animations = .empty,
     };
     try asset_server.loadAsset(@This(), self, model_name, loadModel);
     return self;
@@ -45,6 +48,8 @@ pub fn init(
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     for (self.nodes.items) |*node| node.deinit(gpa);
     self.nodes.deinit(gpa);
+    for (self.animations.items) |*animation| animation.deinit(gpa);
+    self.animations.deinit(gpa);
     self.top_nodes.deinit(gpa);
     gpa.free(self.model_name);
     gpa.destroy(self);
@@ -299,43 +304,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
             //         }
             //     }
             //
-            //     if (gltf_loaded.animations) |animations| for (animations) |animation| {
-            //         for (animation.samplers) |sampler| {
-            //             const in_sampler_accessor = gltf_loaded.accessors.?[sampler.input];
-            //             const in_sampler_buffer_view = gltf_loaded.bufferViews.?[@intCast(in_sampler_accessor.bufferView.?)];
-            //             const in_sampler_offset = in_sampler_accessor.byteOffset + in_sampler_buffer_view.byteOffset;
-            //             const in_sampler_input_data = bin[in_sampler_offset .. in_sampler_offset + in_sampler_buffer_view.byteLength];
-            //             for (0..in_sampler_accessor.count) |i| {
-            //                 const value: f32 = @bitCast(in_sampler_input_data[i * 4 ..][0..4].*);
-            //                 std.log.debug("sampler Value {d}", .{value});
-            //             }
-            //
-            //             const out_sampler_accessor = gltf_loaded.accessors.?[sampler.output];
-            //             const out_sampler_buffer_view = gltf_loaded.bufferViews.?[@intCast(out_sampler_accessor.bufferView.?)];
-            //             const offset = out_sampler_accessor.byteOffset + out_sampler_buffer_view.byteOffset;
-            //             const out_sampler_input_data = bin[offset .. offset + out_sampler_buffer_view.byteLength];
-            //             switch (out_sampler_accessor.type) {
-            //                 .VEC3 => {
-            //                     for (0..out_sampler_accessor.count) |i| {
-            //                         const value: [3]f32 = @bitCast(out_sampler_input_data[i * 12 ..][0..12].*);
-            //                         std.log.debug("output Value {any}", .{value});
-            //                     }
-            //                 },
-            //                 .VEC4 => {
-            //                     for (0..out_sampler_accessor.count) |i| {
-            //                         const value: [4]f32 = @bitCast(out_sampler_input_data[i * 16 ..][0..16].*);
-            //                         std.log.debug("output Value {any}", .{value});
-            //                     }
-            //                 },
-            //                 else => {},
-            //             }
-            //         }
-            //         for (animation.channels) |channel| {
-            //             const target = channel.target;
-            //             const sampler_index = channel.sampler;
-            //             std.log.debug("TARGET-path; {s}\nsampler:INDEX {d}\n", .{ target.path, sampler_index });
-            //         }
-            //     };
+
             // }
 
             var dst = try vertices.addManyAsSlice(gpa, pos_accessor.count);
@@ -408,6 +377,65 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
             try self.top_nodes.append(gpa, node);
             // var top_transform: nz.Transform3D(f32) = .{};
             // node.refreshTransform(&top_transform);
+        }
+    }
+
+    if (gltf_loaded.animations) |animations| {
+        const model_animations = try self.animations.addManyAsSlice(gpa, animations.len);
+        for (animations, model_animations) |gltf_animation, *model_animation| {
+            model_animation.* = try .init(
+                gpa,
+                gltf_animation.name orelse "animation",
+                gltf_animation.samplers.len,
+                gltf_animation.channels.len,
+            );
+            for (gltf_animation.samplers) |sampler| {
+                const in_sampler_accessor = gltf_loaded.accessors.?[sampler.input];
+                const out_sampler_accessor = gltf_loaded.accessors.?[sampler.output];
+
+                const model_sampler = model_animation.samplers.addOneAssumeCapacity();
+                model_sampler.* = try .init(gpa, sampler.interpolation, in_sampler_accessor.count, out_sampler_accessor.count);
+
+                const in_sampler_buffer_view = gltf_loaded.bufferViews.?[@intCast(in_sampler_accessor.bufferView.?)];
+                const in_sampler_offset = in_sampler_accessor.byteOffset + in_sampler_buffer_view.byteOffset;
+                const in_sampler_input_data = bin[in_sampler_offset .. in_sampler_offset + in_sampler_buffer_view.byteLength];
+                for (0..in_sampler_accessor.count) |i| {
+                    const value: f32 = @bitCast(in_sampler_input_data[i * 4 ..][0..4].*);
+                    model_sampler.inputs.appendAssumeCapacity(value);
+                }
+                for (model_sampler.inputs.items) |input| {
+                    if (input < model_animation.start) model_animation.start = input;
+                    if (input > model_animation.end) model_animation.end = input;
+                }
+
+                const out_sampler_buffer_view = gltf_loaded.bufferViews.?[@intCast(out_sampler_accessor.bufferView.?)];
+                const offset = out_sampler_accessor.byteOffset + out_sampler_buffer_view.byteOffset;
+                const out_sampler_input_data = bin[offset .. offset + out_sampler_buffer_view.byteLength];
+                switch (out_sampler_accessor.type) {
+                    .VEC3 => {
+                        for (0..out_sampler_accessor.count) |i| {
+                            const value: [3]f32 = @bitCast(out_sampler_input_data[i * 12 ..][0..12].*);
+                            model_sampler.outputs.appendAssumeCapacity(.{ value[0], value[1], value[2], 0 });
+                        }
+                    },
+                    .VEC4 => {
+                        for (0..out_sampler_accessor.count) |i| {
+                            const value: [4]f32 = @bitCast(out_sampler_input_data[i * 16 ..][0..16].*);
+                            model_sampler.outputs.appendAssumeCapacity(value);
+                        }
+                    },
+                    else => {},
+                }
+            }
+            for (gltf_animation.channels) |channel| {
+                const model_channel = model_animation.channels.addOneAssumeCapacity();
+                model_channel.* = try .init(
+                    gpa,
+                    channel.target.path,
+                    if (channel.target.node) |node_index| &self.nodes.items[node_index] else null,
+                    channel.sampler,
+                );
+            }
         }
     }
 }
