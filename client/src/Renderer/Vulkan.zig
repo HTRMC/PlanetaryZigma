@@ -387,38 +387,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     ext.vkCmdSetAlphaToOneEnableEXT(cmd, c.VK_FALSE);
     ext.vkCmdSetLogicOpEnableEXT(cmd, c.VK_FALSE);
 
-    const vertex_input_binding: c.VkVertexInputBindingDescription2EXT = .{
-        .sType = c.VK_STRUCTURE_TYPE_VERTEX_INPUT_BINDING_DESCRIPTION_2_EXT,
-        .binding = 0,
-        .inputRate = c.VK_VERTEX_INPUT_RATE_VERTEX,
-        .stride = @sizeOf(Mesh.Vertex),
-        .divisor = 1,
-    };
-    const vertex_attributes = &[_]c.VkVertexInputAttributeDescription2EXT{
-        .{
-            .sType = c.VK_STRUCTURE_TYPE_VERTEX_INPUT_ATTRIBUTE_DESCRIPTION_2_EXT,
-            .location = 0,
-            .binding = 0,
-            .format = c.VK_FORMAT_R32G32B32_SFLOAT,
-            .offset = 0,
-        },
-        .{
-            .sType = c.VK_STRUCTURE_TYPE_VERTEX_INPUT_ATTRIBUTE_DESCRIPTION_2_EXT,
-            .location = 1,
-            .binding = 0,
-            .format = c.VK_FORMAT_R32G32B32_SFLOAT,
-            .offset = @sizeOf([4]f32),
-        },
-        .{
-            .sType = c.VK_STRUCTURE_TYPE_VERTEX_INPUT_ATTRIBUTE_DESCRIPTION_2_EXT,
-            .location = 2,
-            .binding = 0,
-            .format = c.VK_FORMAT_R32G32B32A32_SFLOAT,
-            .offset = 2 * @sizeOf([4]f32),
-        },
-    };
-
-    ext.vkCmdSetVertexInputEXT(cmd, 1, &vertex_input_binding, 3, &vertex_attributes[0]);
+    ext.vkCmdSetVertexInputEXT(cmd, 0, null, 0, null);
 
     var render_info: c.VkRenderingInfo = .{
         .sType = c.VK_STRUCTURE_TYPE_RENDERING_INFO,
@@ -491,7 +460,11 @@ pub fn draw(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *const Swapch
     if (node.mesh_id) |mesh_id| {
         const mesh = try self.render_resources.getMeshPtr(mesh_id);
 
-        var push: Shader.PushConstant = .{ .buffer_address = mesh.vertex_buffer.device_address, .model_matrix = node_transform.toMat4x4().d };
+        var push: Shader.PushConstant = .{
+            .vertex_buffer_address = mesh.vertex_buffer.device_address,
+            .model_matrix = node_transform.toMat4x4().d,
+            .inverse_bind_matrices_addess = undefined,
+        };
         c.vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
         c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(Shader.PushConstant), &push);
         for (mesh.surfaces.items) |surface| {
@@ -565,7 +538,7 @@ pub fn createModelWithMesh(self: *@This(), gpa: std.mem.Allocator, name: []const
         .vma = self.vma,
         .model_name = try gpa.dupe(u8, name),
     };
-    try model.nodes.append(gpa, .{ .mesh_id = mesh.name });
+    try model.nodes.append(gpa, .{ .mesh_id = mesh.name, .index = 0 });
     try model.top_nodes.append(gpa, &model.nodes.items[0]);
     try self.models.append(gpa, model);
     return (self.models.items.len - 1);

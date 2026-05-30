@@ -260,71 +260,83 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                 bin[normal_offset .. normal_offset + normal_accessor.count * @sizeOf([3]f32)],
             );
 
+            const joint_accessor_idx = primitive.attributes.map.get("JOINTS_0") orelse return error.NoJoints;
+            const joint_accessor = gltf_loaded.accessors.?[joint_accessor_idx];
+            std.debug.assert(joint_accessor.componentType == @intFromEnum(zgltf.ComponentType.unsigned_byte));
+            const joint_buffer_view = gltf_loaded.bufferViews.?[joint_accessor.bufferView.?];
+            const joint_offset = (joint_accessor.byteOffset + joint_buffer_view.byteOffset);
+            const joints = std.mem.bytesAsSlice(
+                [4]u8,
+                bin[joint_offset .. joint_offset + joint_accessor.count * @sizeOf([4]u8)],
+            );
+
+            const weights_accessor_idx = primitive.attributes.map.get("WEIGHTS_0") orelse return error.NoJoints;
+            const weights_accessor = gltf_loaded.accessors.?[weights_accessor_idx];
+            std.debug.assert(weights_accessor.componentType == @intFromEnum(zgltf.ComponentType.float));
+            const weights_buffer_view = gltf_loaded.bufferViews.?[weights_accessor.bufferView.?];
+            const weights_offset = (weights_accessor.byteOffset + weights_buffer_view.byteOffset);
+            const weights = std.mem.bytesAsSlice(
+                [4]f32,
+                bin[weights_offset .. weights_offset + weights_accessor.count * @sizeOf([4]f32)],
+            );
+
             //TODO: ANIMATIONS!
             //https://github.com/SaschaWillems/Vulkan/tree/master/examples/gltfskinning
             //
-            {
-                const joint_accessor_idx = primitive.attributes.map.get("JOINTS_0") orelse return error.NoJoints;
-                const joint_accessor = gltf_loaded.accessors.?[joint_accessor_idx];
-                std.log.debug("joint_acc {any}", .{joint_accessor});
-
-                const weght_accessor_idx = primitive.attributes.map.get("WEIGHTS_0") orelse return error.NoJoints;
-                const weght_accessor = gltf_loaded.accessors.?[weght_accessor_idx];
-                std.log.debug("weght_acc {any}", .{weght_accessor});
-
-                const skins = gltf_loaded.skins.?;
-                std.log.debug("skin {any}", .{skins});
-                for (skins) |skin| {
-                    if (skin.inverseBindMatrices.? > -1) {
-                        const accessor = gltf_loaded.accessors.?[skin.inverseBindMatrices.?];
-                        const mat_buffer_view = gltf_loaded.bufferViews.?[@intCast(accessor.bufferView.?)];
-                        const matrix_data = bin[accessor.byteOffset + mat_buffer_view.byteOffset .. accessor.byteOffset + mat_buffer_view.byteOffset + mat_buffer_view.byteLength];
-                        for (0..accessor.count) |i| {
-                            var mat: nz.Mat4x4(f32) = .identity;
-                            mat.d = @bitCast(matrix_data[i * 64 ..][0..64].*);
-                            std.log.debug("matrix {any}", .{mat});
-                        }
-                    }
-                }
-
-                if (gltf_loaded.animations) |animations| for (animations) |animation| {
-                    for (animation.samplers) |sampler| {
-                        const in_sampler_accessor = gltf_loaded.accessors.?[sampler.input];
-                        const in_sampler_buffer_view = gltf_loaded.bufferViews.?[@intCast(in_sampler_accessor.bufferView.?)];
-                        const in_sampler_offset = in_sampler_accessor.byteOffset + in_sampler_buffer_view.byteOffset;
-                        const in_sampler_input_data = bin[in_sampler_offset .. in_sampler_offset + in_sampler_buffer_view.byteLength];
-                        for (0..in_sampler_accessor.count) |i| {
-                            const value: f32 = @bitCast(in_sampler_input_data[i * 4 ..][0..4].*);
-                            std.log.debug("sampler Value {d}", .{value});
-                        }
-
-                        const out_sampler_accessor = gltf_loaded.accessors.?[sampler.output];
-                        const out_sampler_buffer_view = gltf_loaded.bufferViews.?[@intCast(out_sampler_accessor.bufferView.?)];
-                        const offset = out_sampler_accessor.byteOffset + out_sampler_buffer_view.byteOffset;
-                        const out_sampler_input_data = bin[offset .. offset + out_sampler_buffer_view.byteLength];
-                        switch (out_sampler_accessor.type) {
-                            .VEC3 => {
-                                for (0..out_sampler_accessor.count) |i| {
-                                    const value: [3]f32 = @bitCast(out_sampler_input_data[i * 12 ..][0..12].*);
-                                    std.log.debug("output Value {any}", .{value});
-                                }
-                            },
-                            .VEC4 => {
-                                for (0..out_sampler_accessor.count) |i| {
-                                    const value: [4]f32 = @bitCast(out_sampler_input_data[i * 16 ..][0..16].*);
-                                    std.log.debug("output Value {any}", .{value});
-                                }
-                            },
-                            else => {},
-                        }
-                    }
-                    for (animation.channels) |channel| {
-                        const target = channel.target;
-                        const sampler_index = channel.sampler;
-                        std.log.debug("TARGET-path; {s}\nsampler:INDEX {d}\n", .{ target.path, sampler_index });
-                    }
-                };
-            }
+            // {
+            //     const skins = gltf_loaded.skins.?;
+            //     std.log.debug("skin {any}", .{skins});
+            //     for (skins) |skin| {
+            //         if (skin.inverseBindMatrices.? > -1) {
+            //             const accessor = gltf_loaded.accessors.?[skin.inverseBindMatrices.?];
+            //             const mat_buffer_view = gltf_loaded.bufferViews.?[@intCast(accessor.bufferView.?)];
+            //             const matrix_data = bin[accessor.byteOffset + mat_buffer_view.byteOffset .. accessor.byteOffset + mat_buffer_view.byteOffset + mat_buffer_view.byteLength];
+            //             for (0..accessor.count) |i| {
+            //                 var mat: nz.Mat4x4(f32) = .identity;
+            //                 mat.d = @bitCast(matrix_data[i * 64 ..][0..64].*);
+            //                 std.log.debug("matrix {any}", .{mat});
+            //             }
+            //         }
+            //     }
+            //
+            //     if (gltf_loaded.animations) |animations| for (animations) |animation| {
+            //         for (animation.samplers) |sampler| {
+            //             const in_sampler_accessor = gltf_loaded.accessors.?[sampler.input];
+            //             const in_sampler_buffer_view = gltf_loaded.bufferViews.?[@intCast(in_sampler_accessor.bufferView.?)];
+            //             const in_sampler_offset = in_sampler_accessor.byteOffset + in_sampler_buffer_view.byteOffset;
+            //             const in_sampler_input_data = bin[in_sampler_offset .. in_sampler_offset + in_sampler_buffer_view.byteLength];
+            //             for (0..in_sampler_accessor.count) |i| {
+            //                 const value: f32 = @bitCast(in_sampler_input_data[i * 4 ..][0..4].*);
+            //                 std.log.debug("sampler Value {d}", .{value});
+            //             }
+            //
+            //             const out_sampler_accessor = gltf_loaded.accessors.?[sampler.output];
+            //             const out_sampler_buffer_view = gltf_loaded.bufferViews.?[@intCast(out_sampler_accessor.bufferView.?)];
+            //             const offset = out_sampler_accessor.byteOffset + out_sampler_buffer_view.byteOffset;
+            //             const out_sampler_input_data = bin[offset .. offset + out_sampler_buffer_view.byteLength];
+            //             switch (out_sampler_accessor.type) {
+            //                 .VEC3 => {
+            //                     for (0..out_sampler_accessor.count) |i| {
+            //                         const value: [3]f32 = @bitCast(out_sampler_input_data[i * 12 ..][0..12].*);
+            //                         std.log.debug("output Value {any}", .{value});
+            //                     }
+            //                 },
+            //                 .VEC4 => {
+            //                     for (0..out_sampler_accessor.count) |i| {
+            //                         const value: [4]f32 = @bitCast(out_sampler_input_data[i * 16 ..][0..16].*);
+            //                         std.log.debug("output Value {any}", .{value});
+            //                     }
+            //                 },
+            //                 else => {},
+            //             }
+            //         }
+            //         for (animation.channels) |channel| {
+            //             const target = channel.target;
+            //             const sampler_index = channel.sampler;
+            //             std.log.debug("TARGET-path; {s}\nsampler:INDEX {d}\n", .{ target.path, sampler_index });
+            //         }
+            //     };
+            // }
 
             var dst = try vertices.addManyAsSlice(gpa, pos_accessor.count);
             for (0..pos_accessor.count) |i| {
@@ -334,6 +346,16 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                     .position = positions[i],
                     .uv_x = uvs[i][0],
                     .uv_y = uvs[i][1],
+                    .joint_indices = blk: {
+                        var joint_indices: [4]i32 = undefined;
+                        inline for (0..4) |j| joint_indices[j] = joints[i][j];
+                        break :blk joint_indices;
+                    },
+                    .weight_indices = blk: {
+                        var weights_indices: [4]f32 = undefined;
+                        inline for (0..4) |j| weights_indices[j] = weights[i][j];
+                        break :blk weights_indices;
+                    },
                 };
             }
         }
@@ -365,12 +387,13 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
 
             if (gltf_node.matrix) |matrix| {
                 const local_matrix: nz.Mat4x4(f32) = .{ .d = matrix };
-                scene_node.local_transform = .fromMat4x4(local_matrix);
+                scene_node.rotation = nz.quat.Hamiltonian(f32).fromMat4x4(local_matrix);
+                scene_node.translation = local_matrix.vecPosition();
+                scene_node.scale = local_matrix.vecScale();
             } else {
-                const tl = if (gltf_node.translation) |translation| nz.Mat4x4(f32).translate(translation) else nz.Mat4x4(f32).identity;
-                const rot = if (gltf_node.rotation) |rotation| nz.quat.Hamiltonian(f32).fromVec(rotation).toMat4x4() else nz.quat.Hamiltonian(f32).identity.toMat4x4();
-                const scale = if (gltf_node.scale) |scale| nz.Mat4x4(f32).scale(scale) else nz.Mat4x4(f32).identity;
-                scene_node.local_transform = .fromMat4x4(scale.mul(rot).mul(tl));
+                scene_node.translation = if (gltf_node.translation) |translation| translation else @splat(0);
+                scene_node.rotation = if (gltf_node.rotation) |r| .{ .w = r[3], .x = r[0], .y = r[1], .z = r[2] } else nz.quat.Hamiltonian(f32).identity;
+                scene_node.scale = if (gltf_node.scale) |scale| scale else @splat(1);
             }
             if (gltf_node.children) |children| {
                 for (children) |child_id| {
@@ -383,8 +406,8 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
     for (self.nodes.items) |*node| {
         if (node.parent == null) {
             try self.top_nodes.append(gpa, node);
-            var top_transform: nz.Transform3D(f32) = .{};
-            node.refreshTransform(&top_transform);
+            // var top_transform: nz.Transform3D(f32) = .{};
+            // node.refreshTransform(&top_transform);
         }
     }
 }

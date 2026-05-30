@@ -16,25 +16,31 @@ struct Vertex {
   vec3 normal;
   float uv_y;
   vec4 color;
-  vec4 in_joint_indices;
-  vec4 in_joint_weights;
+  vec4 joint_indices;
+  vec4 weights_indices;
 };
 
 layout(buffer_reference, std430) readonly buffer VertexBuffer {
   Vertex vertices[];
 };
 
+layout(buffer_reference, std430) readonly buffer InverseBindMatrices {
+  mat4 matrices[];
+};
+
 layout(push_constant, std430) uniform pc {
   mat4 model_matrix;
-  VertexBuffer vertexBuffer;
+  VertexBuffer vertex_buffer;
+  InverseBindMatrices inverse_bind_matrices;
 } push_constant;
 
 layout(location = 0) out vec4 out_frag_color;
 layout(location = 1) out vec2 out_uv;
 layout(location = 2) out vec3 out_normal;
+layout(location = 3) out vec4 out_joints;
 
 void main() {
-  Vertex v = push_constant.vertexBuffer.vertices[gl_VertexIndex];
+  Vertex v = push_constant.vertex_buffer.vertices[gl_VertexIndex];
   float time = scene_data.time;
   float x = v.position.x;
   float y = v.position.y;
@@ -48,6 +54,8 @@ void main() {
 
   // float red = (y > 0) ? 1 : 0;
   // vec3 col = vec3(red, 0, 0);
+
+  out_joints = v.weights_indices;
 
   out_frag_color = vec4(col, 1);
   // outFragColor = vec4(v.color);

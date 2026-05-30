@@ -13,7 +13,8 @@ shader_name: []const u8,
 
 pub const PushConstant = extern struct {
     model_matrix: [16]f32,
-    buffer_address: c.VkDeviceAddress,
+    vertex_buffer_address: c.VkDeviceAddress,
+    inverse_bind_matrices_addess: c.VkDeviceAddress,
 };
 
 pub fn init(gpa: std.mem.Allocator, device: Device, asset_server: *AssetServer, sahder_create_info: c.VkShaderCreateInfoEXT, shader_name: []const u8) !*@This() {
