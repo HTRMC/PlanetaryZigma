@@ -16,28 +16,36 @@ struct Vertex {
   vec3 normal;
   float uv_y;
   vec4 color;
+  vec4 joint_indices;
+  vec4 weights_indices;
 };
 
 layout(buffer_reference, std430) readonly buffer VertexBuffer {
   Vertex vertices[];
 };
 
+layout(buffer_reference, std430) readonly buffer InverseBindMatrices {
+  mat4 matrices[];
+};
+
 layout(push_constant, std430) uniform pc {
   mat4 model_matrix;
-  VertexBuffer vertexBuffer;
-} PushConstant;
+  VertexBuffer vertex_buffer;
+  InverseBindMatrices inverse_bind_matrices;
+} push_constant;
 
-layout(location = 0) out vec4 outFragColor;
-layout(location = 1) out vec2 outUV;
-layout(location = 2) out vec3 outNormal;
+layout(location = 0) out vec4 out_frag_color;
+layout(location = 1) out vec2 out_uv;
+layout(location = 2) out vec3 out_normal;
+layout(location = 3) out vec4 out_joints;
 
 void main() {
-  Vertex v = PushConstant.vertexBuffer.vertices[gl_VertexIndex];
+  Vertex v = push_constant.vertex_buffer.vertices[gl_VertexIndex];
   float time = scene_data.time;
   float x = v.position.x;
   float y = v.position.y;
   float z = v.position.z;
-  gl_Position = scene_data.proj_view * PushConstant.model_matrix * vec4(x, y, z, 1.0);
+  gl_Position = scene_data.proj_view * push_constant.model_matrix * vec4(x, y, z, 1.0);
   // gl_Position = scene_data.proj_view * vec4(x, y, z, 1.0);
 
   // vec3 uv = vec3(v.uv_x, v.uv_y, v.uv_x);
@@ -47,8 +55,10 @@ void main() {
   // float red = (y > 0) ? 1 : 0;
   // vec3 col = vec3(red, 0, 0);
 
-  outFragColor = vec4(col, 1);
+  out_joints = v.weights_indices;
+
+  out_frag_color = vec4(col, 1);
   // outFragColor = vec4(v.color);
-  outNormal = (PushConstant.model_matrix * vec4(v.normal, 1)).xyz;
-  outUV = vec2(v.uv_x, v.uv_y);
+  out_normal = (push_constant.model_matrix * vec4(v.normal, 1)).xyz;
+  out_uv = vec2(v.uv_x, v.uv_y);
 }
