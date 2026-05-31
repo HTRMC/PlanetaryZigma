@@ -2,7 +2,6 @@ const std = @import("std");
 const nz = @import("shared").numz;
 const AssetServer = @import("shared").AssetServer;
 const system = @import("../system.zig");
-const Info = system.Info;
 const World = system.World;
 const shaderc = @import("shaderc");
 const Instance = @import("Vulkan/Instance.zig");
@@ -27,6 +26,7 @@ const ext = procs.device.ProcTable;
 
 const check = @import("Vulkan/utils.zig").check;
 
+pub const Info = system.Info;
 pub const c = @import("vulkan");
 pub const Vertex = Mesh.Vertex;
 

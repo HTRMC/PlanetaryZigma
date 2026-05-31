@@ -11,52 +11,38 @@ name: []const u8,
 buffer: Buffer,
 skeleton_root: ?Node,
 inverse_bind_matrices: std.ArrayList(nz.Mat4x4(f32)),
-joints: std.ArrayList(*Node),
+// joints: std.ArrayList(*Node),
 
 pub fn init(
     gpa: std.mem.Allocator,
-    name: []const u8,
-    device: Device,
     vma: Vma,
-    inversse_bind_matrices_count: u32,
-    joints: u32,
-    set_size: c.VkDeviceSize,
-    combined_image_sampler_descriptor_size: c.VkDeviceSize,
+    device: Device,
+    name: []const u8,
+    inversse_bind_matrices: []nz.Mat4x4(f32),
+    // joints: u32,
 ) !@This() {
-    if (true) @panic("implement the SSBO for skin");
-    _ = combined_image_sampler_descriptor_size;
-    _ = inversse_bind_matrices_count;
-    _ = joints;
-    const new_desc_buf = try Buffer.init(
+    const inverse_matrix_buffer: Buffer = try .init(
         device,
         vma,
-        u8,
-        set_size,
-        c.VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
-            c.VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT | c.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        .{ .usage = Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU, .flags = Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT },
+        nz.Mat4x4(f32),
+        inversse_bind_matrices.len,
+        c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | c.VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | c.VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT,
+        .{
+            .usage = Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU,
+            .flags = Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        },
     );
-
-    // const img_info: c.VkDescriptorImageInfo = .{
-    //     .sampler = sampler,
-    //     .imageView = view_image,
-    //     .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    // };
-    // const get_info: c.VkDescriptorGetInfoEXT = .{
-    //     .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
-    //     .type = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-    //     .data = .{ .pCombinedImageSampler = &img_info },
-    // };
-    // const skin_dst: [*]u8 = @ptrCast(new_desc_buf.info.pMappedData);
-    // ext.vkGetDescriptorEXT(device.handle, &get_info, combined_image_sampler_descriptor_size, skin_dst);
 
     return .{
         .name = try gpa.dupe(u8, name),
-        .buffer = new_desc_buf,
+        .buffer = inverse_matrix_buffer,
+        .inverse_bind_matrices = .fromOwnedSlice(inversse_bind_matrices),
+        .skeleton_root = null,
     };
 }
 
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma) void {
     self.buffer.deinit(vma);
     gpa.free(self.name);
+    self.inverse_bind_matrices.deinit(gpa);
 }

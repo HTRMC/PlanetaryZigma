@@ -2,6 +2,7 @@ const std = @import("std");
 const nz = @import("shared").numz;
 const Node = @import("Node.zig");
 const Interpolation = @import("zgltf").Interpolation;
+const AnimationPathCore = @import("zgltf").AnimationPathCore;
 
 const Sampler = struct {
     interpolation: Interpolation,
@@ -22,21 +23,9 @@ const Sampler = struct {
 };
 
 const Channel = struct {
-    path: []const u8,
+    path: AnimationPathCore,
     node: ?*Node,
     sampler_index: u32,
-
-    pub fn init(gpa: std.mem.Allocator, path: []const u8, node: ?*Node, sampler_index: u32) !@This() {
-        return .{
-            .path = try gpa.dupe(u8, path),
-            .node = node,
-            .sampler_index = sampler_index,
-        };
-    }
-
-    pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
-        gpa.free(self.path);
-    }
 };
 
 name: []const u8,
@@ -56,7 +45,6 @@ pub fn init(gpa: std.mem.Allocator, name: []const u8, num_samplers: usize, num_c
 
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     gpa.free(self.name);
-    for (self.channels.items) |*channel| channel.deinit(gpa);
     self.channels.deinit(gpa);
     for (self.samplers.items) |*sampler| sampler.deinit(gpa);
     self.samplers.deinit(gpa);
