@@ -351,15 +351,28 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
     if (gltf_loaded.skins) |skins| {
         const model_skins = try self.skins.addManyAsSlice(gpa, skins.len);
         for (skins, model_skins) |skin, *model_skin| {
+            const joints = try gpa.alloc(*Node, skin.joints.len);
+            for (skin.joints) |i| {
+                joints[i] = &self.nodes.items[i];
+            }
+            var matrices: ?[]nz.Mat4x4(f32) = null;
             if (skin.inverseBindMatrices.? > -1) {
                 const accessor = gltf_loaded.accessors.?[skin.inverseBindMatrices.?];
                 const mat_buffer_view = gltf_loaded.bufferViews.?[@intCast(accessor.bufferView.?)];
                 const matrix_data = bin[accessor.byteOffset + mat_buffer_view.byteOffset .. accessor.byteOffset + mat_buffer_view.byteOffset + mat_buffer_view.byteLength];
-                const ma = try gpa.alloc(nz.Mat4x4(f32), accessor.count);
-                const data = @as([]u8, @ptrCast(ma));
+                matrices = try gpa.alloc(nz.Mat4x4(f32), accessor.count);
+                const data = @as([]u8, @ptrCast(matrices));
                 @memcpy(data, matrix_data);
-                model_skin.* = try .init(gpa, self.vma, self.device, skin.name orelse "skin", ma);
             }
+            model_skin.* = try .init(
+                gpa,
+                self.vma,
+                self.device,
+                skin.name orelse "skin",
+                matrices,
+                if (skin.skeleton) |root_id| &self.nodes.items[root_id] else null,
+                joints,
+            );
         }
     }
 
@@ -417,32 +430,6 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                     .node = if (channel.target.node) |node_index| &self.nodes.items[node_index] else null,
                     .sampler_index = channel.sampler,
                 };
-            }
-        }
-    }
-}
-
-pub fn update(
-    self: *@This(),
-    info: *const Info,
-) !void {
-    const animation = self.animations.items[self.active_animation];
-    animation.current_time += info.delta_time;
-    if (animation.current_time > animation.end) animation -= animation.end;
-    for (animation.channels) |channel| {
-        const sampler = animation.samplers.items[channel.sampler_index];
-        for (0..sampler.inputs.items.len - 1) |i| {
-            const sampler_in = sampler.inputs.items[i];
-            const sampler_in_next = sampler.inputs.items[i + 1];
-            if (animation.current_time >= sampler_in and animation.current_time <= sampler_in_next) {
-                const interpolate_value: f32 = (animation.current_time - sampler_in) / (sampler_in_next - sampler_in);
-                _ = interpolate_value;
-                switch (channel.path) {
-                    .rotation => {},
-                    .translation => {},
-                    .scale => {},
-                    .weights => {},
-                }
             }
         }
     }
