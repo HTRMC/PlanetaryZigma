@@ -10,11 +10,13 @@ const Image = @import("Image.zig");
 const Mesh = @import("Mesh.zig");
 const Node = @import("Node.zig");
 const Material = @import("Material.zig");
+const Skin = @import("Skin.zig");
 const Animation = @import("Animation.zig");
 const Buffer = @import("Buffer.zig");
 const ext = @import("procs.zig").device.ProcTable;
 const RenderResources = @import("RenderResources.zig");
 const check = @import("utils.zig").check;
+const Info = @import("../Vulkan.zig").Info;
 
 device: Device,
 vma: Vma,
@@ -23,6 +25,8 @@ render_resources: *RenderResources,
 nodes: std.ArrayList(Node) = .empty,
 top_nodes: std.ArrayList(*Node) = .empty,
 animations: std.ArrayList(Animation) = .empty,
+active_animation: usize = 0,
+skins: std.ArrayList(Skin) = .empty,
 
 pub fn init(
     gpa: std.mem.Allocator,
@@ -41,6 +45,8 @@ pub fn init(
         .nodes = .empty,
         .top_nodes = .empty,
         .animations = .empty,
+        .skins = .empty,
+        .active_animation = 0,
     };
     try asset_server.loadAsset(@This(), self, model_name, loadModel);
     return self;
@@ -50,29 +56,13 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     self.nodes.deinit(gpa);
     for (self.animations.items) |*animation| animation.deinit(gpa);
     self.animations.deinit(gpa);
+    for (self.skins.items) |*skin| skin.deinit(gpa, self.vma);
+    self.skins.deinit(gpa);
     self.top_nodes.deinit(gpa);
     gpa.free(self.model_name);
     gpa.destroy(self);
     self.* = undefined;
 }
-
-// fn clear(self: *@This(), gpa: std.mem.Allocator) void {
-//     _ = gpa;
-//     for (self.samplers.items) |sampler| {
-//         c.vkDestroySampler(self.device.handle, sampler, null);
-//     }
-//     self.samplers.clearRetainingCapacity();
-//
-//     for (self.images.items) |*image| {
-//         image.deinit(self.vma, self.device);
-//     }
-//     self.images.clearRetainingCapacity();
-//
-//     for (self.buffers.items) |*buffer| {
-//         buffer.deinit(self.vma);
-//     }
-//     self.buffers.clearRetainingCapacity();
-// }
 
 fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: std.Io.File, file_path: []const u8) !void {
     _ = file_path;
@@ -265,67 +255,58 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                 bin[normal_offset .. normal_offset + normal_accessor.count * @sizeOf([3]f32)],
             );
 
-            const joint_accessor_idx = primitive.attributes.map.get("JOINTS_0") orelse return error.NoJoints;
-            const joint_accessor = gltf_loaded.accessors.?[joint_accessor_idx];
-            std.debug.assert(joint_accessor.componentType == @intFromEnum(zgltf.ComponentType.unsigned_byte));
-            const joint_buffer_view = gltf_loaded.bufferViews.?[joint_accessor.bufferView.?];
-            const joint_offset = (joint_accessor.byteOffset + joint_buffer_view.byteOffset);
-            const joints = std.mem.bytesAsSlice(
-                [4]u8,
-                bin[joint_offset .. joint_offset + joint_accessor.count * @sizeOf([4]u8)],
-            );
+            if (gltf_loaded.animations != null) {
+                const joint_accessor_idx = primitive.attributes.map.get("JOINTS_0") orelse return error.NoJoints;
+                const joint_accessor = gltf_loaded.accessors.?[joint_accessor_idx];
+                std.debug.assert(joint_accessor.componentType == @intFromEnum(zgltf.ComponentType.unsigned_byte));
+                const joint_buffer_view = gltf_loaded.bufferViews.?[joint_accessor.bufferView.?];
+                const joint_offset = (joint_accessor.byteOffset + joint_buffer_view.byteOffset);
+                const joints = std.mem.bytesAsSlice(
+                    [4]u8,
+                    bin[joint_offset .. joint_offset + joint_accessor.count * @sizeOf([4]u8)],
+                );
 
-            const weights_accessor_idx = primitive.attributes.map.get("WEIGHTS_0") orelse return error.NoJoints;
-            const weights_accessor = gltf_loaded.accessors.?[weights_accessor_idx];
-            std.debug.assert(weights_accessor.componentType == @intFromEnum(zgltf.ComponentType.float));
-            const weights_buffer_view = gltf_loaded.bufferViews.?[weights_accessor.bufferView.?];
-            const weights_offset = (weights_accessor.byteOffset + weights_buffer_view.byteOffset);
-            const weights = std.mem.bytesAsSlice(
-                [4]f32,
-                bin[weights_offset .. weights_offset + weights_accessor.count * @sizeOf([4]f32)],
-            );
+                const weights_accessor_idx = primitive.attributes.map.get("WEIGHTS_0") orelse return error.NoJoints;
+                const weights_accessor = gltf_loaded.accessors.?[weights_accessor_idx];
+                std.debug.assert(weights_accessor.componentType == @intFromEnum(zgltf.ComponentType.float));
+                const weights_buffer_view = gltf_loaded.bufferViews.?[weights_accessor.bufferView.?];
+                const weights_offset = (weights_accessor.byteOffset + weights_buffer_view.byteOffset);
+                const weights = std.mem.bytesAsSlice(
+                    [4]f32,
+                    bin[weights_offset .. weights_offset + weights_accessor.count * @sizeOf([4]f32)],
+                );
 
-            //TODO: ANIMATIONS!
-            //https://github.com/SaschaWillems/Vulkan/tree/master/examples/gltfskinning
-            //
-            // {
-            //     const skins = gltf_loaded.skins.?;
-            //     std.log.debug("skin {any}", .{skins});
-            //     for (skins) |skin| {
-            //         if (skin.inverseBindMatrices.? > -1) {
-            //             const accessor = gltf_loaded.accessors.?[skin.inverseBindMatrices.?];
-            //             const mat_buffer_view = gltf_loaded.bufferViews.?[@intCast(accessor.bufferView.?)];
-            //             const matrix_data = bin[accessor.byteOffset + mat_buffer_view.byteOffset .. accessor.byteOffset + mat_buffer_view.byteOffset + mat_buffer_view.byteLength];
-            //             for (0..accessor.count) |i| {
-            //                 var mat: nz.Mat4x4(f32) = .identity;
-            //                 mat.d = @bitCast(matrix_data[i * 64 ..][0..64].*);
-            //                 std.log.debug("matrix {any}", .{mat});
-            //             }
-            //         }
-            //     }
-            //
-
-            // }
-
-            var dst = try vertices.addManyAsSlice(gpa, pos_accessor.count);
-            for (0..pos_accessor.count) |i| {
-                dst[i] = .{
-                    .color = .{ 1, 0, 0, 1 },
-                    .normal = normals[i],
-                    .position = positions[i],
-                    .uv_x = uvs[i][0],
-                    .uv_y = uvs[i][1],
-                    .joint_indices = blk: {
-                        var joint_indices: [4]i32 = undefined;
-                        inline for (0..4) |j| joint_indices[j] = joints[i][j];
-                        break :blk joint_indices;
-                    },
-                    .weight_indices = blk: {
-                        var weights_indices: [4]f32 = undefined;
-                        inline for (0..4) |j| weights_indices[j] = weights[i][j];
-                        break :blk weights_indices;
-                    },
-                };
+                var dst = try vertices.addManyAsSlice(gpa, pos_accessor.count);
+                for (0..pos_accessor.count) |i| {
+                    dst[i] = .{
+                        .color = .{ 1, 0, 0, 1 },
+                        .normal = normals[i],
+                        .position = positions[i],
+                        .uv_x = uvs[i][0],
+                        .uv_y = uvs[i][1],
+                        .joint_indices = blk: {
+                            var joint_indices: [4]i32 = undefined;
+                            inline for (0..4) |j| joint_indices[j] = joints[i][j];
+                            break :blk joint_indices;
+                        },
+                        .weight_indices = blk: {
+                            var weights_indices: [4]f32 = undefined;
+                            inline for (0..4) |j| weights_indices[j] = weights[i][j];
+                            break :blk weights_indices;
+                        },
+                    };
+                }
+            } else {
+                var dst = try vertices.addManyAsSlice(gpa, pos_accessor.count);
+                for (0..pos_accessor.count) |i| {
+                    dst[i] = .{
+                        .color = .{ 1, 0, 0, 1 },
+                        .normal = normals[i],
+                        .position = positions[i],
+                        .uv_x = uvs[i][0],
+                        .uv_y = uvs[i][1],
+                    };
+                }
             }
         }
 
@@ -347,7 +328,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
     if (gltf_loaded.nodes) |nodes| {
         _ = try self.nodes.addManyAsSlice(gpa, nodes.len);
         for (nodes, self.nodes.items) |gltf_node, *scene_node| {
-            scene_node.* = .{};
+            scene_node.* = .{ .skin_id = if (gltf_node.skin) |skin_id| @intCast(skin_id) else -1 };
             if (gltf_node.mesh) |mesh_id| {
                 const gltf_mesh = gltf_loaded.meshes.?[mesh_id];
                 const mesh = try self.render_resources.getMeshPtr(gltf_mesh.name);
@@ -359,10 +340,12 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                 scene_node.rotation = nz.quat.Hamiltonian(f32).fromMat4x4(local_matrix);
                 scene_node.translation = local_matrix.vecPosition();
                 scene_node.scale = local_matrix.vecScale();
+                std.log.debug("MATRIX - pos: {any}", .{scene_node.translation});
             } else {
                 scene_node.translation = if (gltf_node.translation) |translation| translation else @splat(0);
                 scene_node.rotation = if (gltf_node.rotation) |r| .{ .w = r[3], .x = r[0], .y = r[1], .z = r[2] } else nz.quat.Hamiltonian(f32).identity;
                 scene_node.scale = if (gltf_node.scale) |scale| scale else @splat(1);
+                std.log.debug("pos: {any}", .{scene_node.translation});
             }
             if (gltf_node.children) |children| {
                 for (children) |child_id| {
@@ -375,8 +358,36 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
     for (self.nodes.items) |*node| {
         if (node.parent == null) {
             try self.top_nodes.append(gpa, node);
-            // var top_transform: nz.Transform3D(f32) = .{};
-            // node.refreshTransform(&top_transform);
+            var top_matrix: nz.Mat4x4(f32) = .identity;
+            node.refreshMatrices(&top_matrix);
+        }
+    }
+
+    if (gltf_loaded.skins) |skins| {
+        const model_skins = try self.skins.addManyAsSlice(gpa, skins.len);
+        for (skins, model_skins) |skin, *model_skin| {
+            const joints = try gpa.alloc(*Node, skin.joints.len);
+            for (skin.joints) |i| {
+                joints[i] = &self.nodes.items[i];
+            }
+            var matrices: ?[]nz.Mat4x4(f32) = null;
+            if (skin.inverseBindMatrices.? > -1) {
+                const accessor = gltf_loaded.accessors.?[skin.inverseBindMatrices.?];
+                const mat_buffer_view = gltf_loaded.bufferViews.?[@intCast(accessor.bufferView.?)];
+                const matrix_data = bin[accessor.byteOffset + mat_buffer_view.byteOffset .. accessor.byteOffset + mat_buffer_view.byteOffset + mat_buffer_view.byteLength];
+                matrices = try gpa.alloc(nz.Mat4x4(f32), accessor.count);
+                const data = @as([]u8, @ptrCast(matrices));
+                @memcpy(data, matrix_data);
+            }
+            model_skin.* = try .init(
+                gpa,
+                self.vma,
+                self.device,
+                skin.name orelse "skin",
+                matrices,
+                if (skin.skeleton) |root_id| &self.nodes.items[root_id] else null,
+                joints,
+            );
         }
     }
 
@@ -429,12 +440,11 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
             }
             for (gltf_animation.channels) |channel| {
                 const model_channel = model_animation.channels.addOneAssumeCapacity();
-                model_channel.* = try .init(
-                    gpa,
-                    channel.target.path,
-                    if (channel.target.node) |node_index| &self.nodes.items[node_index] else null,
-                    channel.sampler,
-                );
+                model_channel.* = .{
+                    .path = channel.target.coreKind() orelse return error.AnimationTargetPath,
+                    .node = if (channel.target.node) |node_index| &self.nodes.items[node_index] else null,
+                    .sampler_index = channel.sampler,
+                };
             }
         }
     }

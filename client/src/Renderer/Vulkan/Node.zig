@@ -19,15 +19,18 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
 }
 
 pub fn getLocalMatrix(self: *@This()) nz.Mat4x4(f32) {
-    return nz.Mat4x4(f32).scale(self.scale).mul(self.rotation.toMat4x4()).mul(.translate(self.translation));
+    return nz.Mat4x4(f32).translate(self.translation)
+        .mul(self.rotation.toMat4x4())
+        .mul(.scale(self.scale));
 }
 
-// pub fn refreshTransform(self: *@This(), parent_transform: *nz.Transform3D(f32)) void {
-//     self.world_matrix = nz.Transform3D(f32).fromMat4x4(parent_transform.toMat4x4().mul(self.local_transform.toMat4x4()));
-//     for (self.children.items[0..self.children.items.len]) |child| {
-//         child.refreshTransform(&self.world_matrix);
-//     }
-// }
+pub fn refreshMatrices(self: *@This(), parent_matrix: *nz.Mat4x4(f32)) void {
+    self.world_matrix = parent_matrix.mul(self.getLocalMatrix());
+    for (self.children.items[0..self.children.items.len]) |child| {
+        child.refreshMatrices(&self.world_matrix);
+    }
+}
+
 //
 // pub fn draw(self: *@This(), allocator: std.mem.Allocator, top_transform: nz.Transform3D(f32), ctx: *DrawContext) !void {
 //     const node_transform: nz.Transform3D(f32) = .fromMat4x4(top_transform.toMat4x4().mul(self.world_matrix.toMat4x4()));
