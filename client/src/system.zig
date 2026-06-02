@@ -5,6 +5,7 @@ const yes = @import("yes");
 const NetworkManager = @import("system/NetworkManager.zig");
 const AssetServer = @import("shared").AssetServer;
 const Spawner = @import("system/Spawner.zig");
+const Animation = @import("system/Animations.zig");
 pub const Renderer = @import("Renderer.zig");
 
 pub const Camera = @import("system/Camera.zig");
@@ -79,6 +80,7 @@ pub const Context = struct {
     renderer: Renderer,
     network_manager: NetworkManager,
     spawner: Spawner,
+    animation: Animation,
     planet: shared.Planet(.renderable) = undefined,
 
     pub const Data = struct {
@@ -101,6 +103,7 @@ pub const Context = struct {
         self.renderer = try .init(data.gpa, data.asset_server, data.platform, data.window);
         try self.spawner.init(data.gpa, data.world);
         try self.network_manager.init(data.gpa, data.io, data.steam_client, &self.spawner);
+        self.animation.init(data.gpa);
     }
 
     pub fn deinit(self: *@This()) void {
@@ -123,6 +126,7 @@ pub const Context = struct {
             // }
             entity.camera.update(info);
             try self.renderer.update(info);
+            try self.animation.update(info, &self.renderer.inner.models);
             break;
         }
         try self.asset_server.update();

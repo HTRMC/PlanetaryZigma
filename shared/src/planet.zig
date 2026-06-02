@@ -19,8 +19,8 @@ pub fn Planet(kind: PlanetKind) type {
                 normal: [3]f32 = @splat(0),
                 uv_y: f32 = 0,
                 color: [4]f32 = @splat(0),
-                joint_indices: [4]i32 = @splat(0),
-                weight_indices: [4]f32 = @splat(0),
+                joint_indices: [4]i32 = @splat(-1),
+                weight_indices: [4]f32 = @splat(-1),
             },
         };
 
@@ -151,6 +151,7 @@ pub fn Planet(kind: PlanetKind) type {
                                 .color = .{ if (postion[1] < 0) 0 else 1, if (postion[0] < 0) 0 else 1, if (postion[2] < 0) 0 else 1, 1 },
                                 .uv_x = @floor(@mod(tri_edge_indices[i], 3)),
                                 .uv_y = @ceil(@mod(tri_edge_indices[i] + 2, 3)),
+                                .joint_indices = @splat(-1),
                             });
                             try gen_indices.append(gpa, @intCast(gen_vertices.items.len - 1));
                         }

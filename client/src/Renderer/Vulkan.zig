@@ -437,7 +437,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         // std.log.debug("position: {any}", .{entity.transform.position});
 
         for (model.top_nodes.items) |top_node| {
-            try draw(self, cmd, current_frame, top_node, entity.transform);
+            try draw(self, cmd, current_frame, model, top_node, entity.transform.toMat4x4());
         }
     }
 
@@ -446,14 +446,26 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     draw_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_READ_BIT);
 }
 
-pub fn draw(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *const Swapchain.FrameData, node: *Node, top_transform: nz.Transform3D(f32)) !void {
+pub fn draw(
+    self: *@This(),
+    cmd: c.VkCommandBuffer,
+    current_frame: *const Swapchain.FrameData,
+    model: *const GltfModel,
+    node: *Node,
+    top_matrix: nz.Mat4x4(f32),
+) !void {
     // const node_transform: nz.Transform3D(f32) = .fromMat4x4(top_transform.toMat4x4().mul(node.world_transform.toMat4x4()));
     // TODO: World tansform incorrect?
-    const node_transform = top_transform;
-
+    const node_matrix = top_matrix.mul(node.world_matrix);
+    // const node_matrix = top_matrix;
     // std.log.debug("top_pos: {any}", .{top_transform});
-    // std.log.debug("\nworld: {any}", .{node.world_transform});
-    // std.log.debug("\nNODE PTR: {*}", .{node});
+    // std.log.debug("\nworld: {any}", .{node.world_matrix});
+    // std.log.debug("\nNODE matrix : {any}", .{node_matrix});
+
+    // if (true) return;
+    // std.log.debug("quat: {any}", .{nz.quat.Hamiltonian(f32).fromMat4x4(node_matrix)});
+    // std.log.debug("pos: {any}", .{node_matrix.vecPosition()});
+    // std.log.debug("scale: {any}", .{node_matrix.vecScale()});
 
     // if (true) @panic("LOLXD")
 
@@ -462,9 +474,11 @@ pub fn draw(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *const Swapch
 
         var push: Shader.PushConstant = .{
             .vertex_buffer_address = mesh.vertex_buffer.device_address,
-            .model_matrix = node_transform.toMat4x4().d,
-            .inverse_bind_matrices_addess = undefined,
+            .model_matrix = node_matrix.d,
+            .inverse_bind_matrices_addess = if (node.skin_id > -1) model.skins.items[@intCast(node.skin_id)].buffer.?.device_address else undefined,
         };
+        // if (node.skin_id > -1) std.log.debug("skin ID  {d}", .{node.skin_id});
+
         c.vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
         c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(Shader.PushConstant), &push);
         for (mesh.surfaces.items) |surface| {
@@ -499,7 +513,7 @@ pub fn draw(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *const Swapch
     }
 
     for (node.children.items) |child| {
-        try draw(self, cmd, current_frame, child, node_transform);
+        try draw(self, cmd, current_frame, model, child, node_matrix);
     }
 }
 
@@ -538,7 +552,7 @@ pub fn createModelWithMesh(self: *@This(), gpa: std.mem.Allocator, name: []const
         .vma = self.vma,
         .model_name = try gpa.dupe(u8, name),
     };
-    try model.nodes.append(gpa, .{ .mesh_id = mesh.name, .index = 0 });
+    try model.nodes.append(gpa, .{ .mesh_id = mesh.name, .index = 0, .world_matrix = nz.Mat4x4(f32).identity });
     try model.top_nodes.append(gpa, &model.nodes.items[0]);
     try self.models.append(gpa, model);
     return (self.models.items.len - 1);
