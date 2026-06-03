@@ -67,7 +67,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
             controller.attack_cool_down = 0;
             _ = try self.spawner.spawn(.{
                 .kind = .enemy,
-                .transform = .{ .position = .{ 0, 0, 100 } },
+                .transform = .{ .position = .{ 0, 100, 0 } },
                 .collider = .{
                     .shape = .{ .primitive = .{ .box = .{ .size = 1 } } },
                     .motion_type = .dynamic,

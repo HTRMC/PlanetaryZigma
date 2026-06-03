@@ -19,15 +19,17 @@ pub fn update(
     models: *std.ArrayList(*Model),
 ) !void {
     _ = self;
+
     // std.log.debug("render ptr {*}, model ptr{*}", .{ self.renderer, models });
     for (info.world.entities.values()) |*entity| {
         if (!entity.flags.model) continue;
-        const model = models.items[entity.model_id];
+        const model = models.items[entity.model.id];
         if (model.animations.items.len == 0) continue;
-        var animation = model.animations.items[model.active_animation];
+        var animation = &model.animations.items[model.active_animation];
         animation.current_time += info.delta_time;
+
         if (animation.current_time > animation.end) animation.current_time -= animation.end;
-        for (animation.channels.items) |channel| {
+        for (animation.channels.items) |*channel| {
             const sampler = animation.samplers.items[channel.sampler_index];
             for (0..sampler.inputs.items.len - 1) |i| {
                 const sampler_in = sampler.inputs.items[i];
@@ -69,6 +71,10 @@ pub fn update(
             }
         }
         for (model.top_nodes.items) |node| {
+            var top_matrix: nz.Mat4x4(f32) = .identity;
+            node.refreshMatrices(&top_matrix);
+        }
+        for (model.top_nodes.items) |node| {
             updateJoints(node, model);
         }
     }
@@ -76,20 +82,16 @@ pub fn update(
 
 fn updateJoints(node: *Node, model: *Model) void {
     if (node.skin_id > -1) {
-        const inverse_transform: nz.Mat4x4(f32) = node.getLocalMatrix().inverse();
-        std.log.debug("translation: {any}", .{node.translation});
-        var skin = model.skins.items[@intCast(node.skin_id)];
-        const num_joints = skin.joints.items.len;
-        const matrices = skin.inverse_bind_matrices.?;
-        for (0..num_joints) |i| {
-            const joint_matrix = model.nodes.items[i].world_matrix;
-            const inverse_matrix = matrices.items[i];
-            matrices.items[i] = joint_matrix.mul(inverse_matrix);
-            matrices.items[i] = inverse_transform.mul(joint_matrix);
+        const skin = &model.skins.items[@intCast(node.skin_id)];
+        const inverse_bind_matrices = skin.inverse_bind_matrices.?;
+        const inverse_transform: nz.Mat4x4(f32) = node.world_matrix.inverse();
+        const joint_matrices: [*]nz.Mat4x4(f32) = @ptrCast(@alignCast(skin.buffer.?.info.pMappedData));
+        for (skin.joints.items, 0..) |joint, i| {
+            joint_matrices[i] = inverse_transform.mul(joint.world_matrix.mul(inverse_bind_matrices.items[i]));
         }
-        skin.buffer.?.copy(nz.Mat4x4(f32), matrices.items);
     }
     for (node.children.items) |child_node| {
+        // std.log.debug("Update Child", .{node.translation});
         updateJoints(child_node, model);
     }
 }
