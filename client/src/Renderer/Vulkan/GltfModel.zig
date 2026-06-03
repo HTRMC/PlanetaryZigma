@@ -27,6 +27,7 @@ top_nodes: std.ArrayList(*Node) = .empty,
 animations: std.ArrayList(Animation) = .empty,
 active_animation: usize = 0,
 skins: std.ArrayList(Skin) = .empty,
+offset: nz.Transform3D(f32) = .{},
 
 pub fn init(
     gpa: std.mem.Allocator,
@@ -35,6 +36,7 @@ pub fn init(
     asset_server: *AssetServer,
     model_name: []const u8,
     render_resources: *RenderResources,
+    offset: nz.Transform3D(f32),
 ) !*@This() {
     const self = try gpa.create(@This());
     self.* = .{
@@ -47,6 +49,7 @@ pub fn init(
         .animations = .empty,
         .skins = .empty,
         .active_animation = 0,
+        .offset = offset,
     };
     try asset_server.loadAsset(@This(), self, model_name, loadModel);
     return self;
@@ -204,31 +207,36 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
             const material_index = primitive.material.?;
             const material = gltf_loaded.materials.?[material_index];
             // std.log.debug("MATERIAL : {any}", .{material});
+            var base_color: [4]f32 = .{ 1, 0, 0, 1 };
             var material_name: ?[]const u8 = null;
-            if (material.pbrMetallicRoughness.?.baseColorTexture) |basecolor| {
-                if (material.name != null and self.render_resources.materials.contains(material.name.?)) {
-                    material_name = (try self.render_resources.getMaterialPtr(material.name.?)).name;
-                } else {
-                    const texture_index = basecolor.index;
+            if (material.pbrMetallicRoughness) |matallic_roughness| {
+                base_color = matallic_roughness.baseColorFactor;
+                if (matallic_roughness.baseColorTexture) |base_texture| {
+                    if (material.name != null and self.render_resources.materials.contains(material.name.?)) {
+                        material_name = (try self.render_resources.getMaterialPtr(material.name.?)).name;
+                    } else {
+                        const texture_index = base_texture.index;
 
-                    const texture_info = gltf_loaded.textures.?[texture_index];
-                    const image_index = texture_info.source.?;
-                    const sampler_index = texture_info.sampler.?;
+                        const texture_info = gltf_loaded.textures.?[texture_index];
+                        const image_index = texture_info.source.?;
+                        const sampler_index = texture_info.sampler.?;
 
-                    const new_material: Material = try .init(
-                        gpa,
-                        material.name.?,
-                        self.device,
-                        self.vma,
-                        self.render_resources.set_size,
-                        self.render_resources.combined_image_sampler_descriptor_size,
-                        self.render_resources.samplers.items[original_sample_count + sampler_index],
-                        self.render_resources.images.items[original_image_count + image_index].vk_imageview,
-                    );
-                    try self.render_resources.createMaterial(gpa, new_material);
-                    material_name = new_material.name;
+                        const new_material: Material = try .init(
+                            gpa,
+                            material.name.?,
+                            self.device,
+                            self.vma,
+                            self.render_resources.set_size,
+                            self.render_resources.combined_image_sampler_descriptor_size,
+                            self.render_resources.samplers.items[original_sample_count + sampler_index],
+                            self.render_resources.images.items[original_image_count + image_index].vk_imageview,
+                        );
+                        try self.render_resources.createMaterial(gpa, new_material);
+                        material_name = new_material.name;
+                    }
                 }
             }
+
             surfaces.appendAssumeCapacity(.{
                 .index_count = indices_count,
                 .index_start = indices_start,
@@ -269,6 +277,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                 const weights_accessor_idx = primitive.attributes.map.get("WEIGHTS_0") orelse return error.NoJoints;
                 const weights_accessor = gltf_loaded.accessors.?[weights_accessor_idx];
                 std.debug.assert(weights_accessor.componentType == @intFromEnum(zgltf.ComponentType.float));
+                std.debug.assert(weights_accessor.type == .VEC4);
                 const weights_buffer_view = gltf_loaded.bufferViews.?[weights_accessor.bufferView.?];
                 const weights_offset = (weights_accessor.byteOffset + weights_buffer_view.byteOffset);
                 const weights = std.mem.bytesAsSlice(
@@ -279,7 +288,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                 var dst = try vertices.addManyAsSlice(gpa, pos_accessor.count);
                 for (0..pos_accessor.count) |i| {
                     dst[i] = .{
-                        .color = .{ 1, 0, 0, 1 },
+                        .color = base_color,
                         .normal = normals[i],
                         .position = positions[i],
                         .uv_x = uvs[i][0],
@@ -289,10 +298,11 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                             inline for (0..4) |j| joint_indices[j] = joints[i][j];
                             break :blk joint_indices;
                         },
-                        .weight_indices = blk: {
-                            var weights_indices: [4]f32 = undefined;
-                            inline for (0..4) |j| weights_indices[j] = weights[i][j];
-                            break :blk weights_indices;
+                        .joint_weights = blk: {
+                            var joint_weights: [4]f32 = undefined;
+                            inline for (0..4) |j| joint_weights[j] = weights[i][j];
+                            std.log.debug("val: {any}", .{joint_weights});
+                            break :blk joint_weights;
                         },
                     };
                 }
@@ -300,7 +310,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                 var dst = try vertices.addManyAsSlice(gpa, pos_accessor.count);
                 for (0..pos_accessor.count) |i| {
                     dst[i] = .{
-                        .color = .{ 1, 0, 0, 1 },
+                        .color = base_color,
                         .normal = normals[i],
                         .position = positions[i],
                         .uv_x = uvs[i][0],
@@ -367,8 +377,8 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
         const model_skins = try self.skins.addManyAsSlice(gpa, skins.len);
         for (skins, model_skins) |skin, *model_skin| {
             const joints = try gpa.alloc(*Node, skin.joints.len);
-            for (skin.joints) |i| {
-                joints[i] = &self.nodes.items[i];
+            for (skin.joints, 0..) |node_index, joint_index| {
+                joints[joint_index] = &self.nodes.items[node_index];
             }
             var matrices: ?[]nz.Mat4x4(f32) = null;
             if (skin.inverseBindMatrices.? > -1) {
@@ -376,8 +386,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                 const mat_buffer_view = gltf_loaded.bufferViews.?[@intCast(accessor.bufferView.?)];
                 const matrix_data = bin[accessor.byteOffset + mat_buffer_view.byteOffset .. accessor.byteOffset + mat_buffer_view.byteOffset + mat_buffer_view.byteLength];
                 matrices = try gpa.alloc(nz.Mat4x4(f32), accessor.count);
-                const data = @as([]u8, @ptrCast(matrices));
-                @memcpy(data, matrix_data);
+                @memcpy(std.mem.sliceAsBytes(matrices.?), matrix_data);
             }
             model_skin.* = try .init(
                 gpa,

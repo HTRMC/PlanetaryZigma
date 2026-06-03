@@ -63,11 +63,11 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
                 },
             );
         }
-        if (player.controller.input.k and controller.attack_cool_down >= 1.0) {
+        if (player.controller.input.k and controller.attack_cool_down >= 0.1) {
             controller.attack_cool_down = 0;
             _ = try self.spawner.spawn(.{
                 .kind = .enemy,
-                .transform = .{ .position = .{ 0, 0, 100 } },
+                .transform = .{ .position = .{ 0, 100, 0 } },
                 .collider = .{
                     .shape = .{ .primitive = .{ .box = .{ .size = 1 } } },
                     .motion_type = .dynamic,

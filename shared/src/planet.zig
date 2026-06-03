@@ -20,7 +20,7 @@ pub fn Planet(kind: PlanetKind) type {
                 uv_y: f32 = 0,
                 color: [4]f32 = @splat(0),
                 joint_indices: [4]i32 = @splat(-1),
-                weight_indices: [4]f32 = @splat(-1),
+                joint_weights: [4]f32 = @splat(-1),
             },
         };
 

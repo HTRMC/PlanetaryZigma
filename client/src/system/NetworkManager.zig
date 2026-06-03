@@ -115,7 +115,7 @@ fn handleCommand(self: *@This(), system_context: *system.Context, info: *const I
             const new_player = try self.spawner.spawn(.{
                 .camera = .{ .transform = .{ .position = .{ 0, 0, 0 } } },
                 .transform = .{ .position = .{ 0, 0, 0 } },
-                .model_id = 1,
+                .model = .{ .id = 1 },
                 .flags = .{ .camera = true, .transform = true, .model = true },
             });
             try info.world.enitity_mapping.put(self.gpa, acknowledge.id, new_player.id);
@@ -130,7 +130,7 @@ fn handleCommand(self: *@This(), system_context: *system.Context, info: *const I
                 .flags = .{ .transform = true, .model = true },
             });
             switch (spawn_entity.kind) {
-                .player => new_entity.model_id = 1,
+                .player => new_entity.model = .{ .id = 1 },
                 .planet => {
                     const size: u32 = @intCast(spawn_entity.data[0]);
                     const planet: shared.Planet(.renderable) = try .init(self.gpa, size);
@@ -142,11 +142,11 @@ fn handleCommand(self: *@This(), system_context: *system.Context, info: *const I
                         planet.indices,
                     );
                     std.log.debug("SPAWNED: Planet {d}", .{size});
-                    new_entity.model_id = @intCast(vulkan_model_handel);
+                    new_entity.model = .{ .id = @intCast(vulkan_model_handel) };
                 },
-                .enemy => new_entity.model_id = 0,
+                .enemy => new_entity.model = .{ .id = 0 },
                 .bullet => {
-                    new_entity.model_id = 0;
+                    new_entity.model = .{ .id = 0 };
                     new_entity.transform.scale = @splat(0.1);
                 },
                 .unknown => @panic("unknown entity type... wtf"),

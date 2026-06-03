@@ -17,18 +17,22 @@ pub const Info = struct {
 };
 
 pub const Entity = struct {
-    id: u32 = 0,
-    flags: Flags = .{},
-
-    transform: nz.Transform3D(f32) = .{},
-    camera: Camera = .{},
-    model_id: u32 = 0,
-
     pub const Flags = packed struct {
         transform: bool = false,
         camera: bool = false,
         model: bool = false,
     };
+    pub const Model = struct {
+        id: u32 = 0,
+        offset: nz.Transform3D(f32) = .{},
+    };
+
+    id: u32 = 0,
+    flags: Flags = .{},
+    model: Model = .{},
+
+    transform: nz.Transform3D(f32) = .{},
+    camera: Camera = .{},
 
     pub fn deinit(self: *Entity, gpa: std.mem.Allocator) void {
         _ = self;
@@ -125,6 +129,8 @@ pub const Context = struct {
             //     std.log.debug("MyserverID: {d}, ", .{info.world.my_server_id});
             // }
             entity.camera.update(info);
+            // entity.transform.scale = @splat(1);
+            // entity.model_id = 0;
             try self.renderer.update(info);
             try self.animation.update(info, &self.renderer.inner.models);
             break;

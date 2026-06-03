@@ -139,6 +139,10 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         asset_server,
         "objects/BenRun.glb",
         &self.render_resources,
+        .{
+            .position = .{ 0, -1, 0 },
+            .rotation = nz.Quat(f32).angleAxis(std.math.pi, .{ 0, 1, 0 }),
+        },
     );
     try self.models.append(gpa, model);
 
@@ -430,14 +434,17 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     ext.vkCmdBeginRendering(cmd, &render_info);
     for (info.world.entities.values()) |*entity| {
         if (!entity.flags.model or !entity.flags.transform) continue;
-        var model_id = entity.model_id;
+        var model_id = entity.model.id;
         model_id = if (model_id >= self.models.items.len) 0 else model_id;
         const model = self.models.items[model_id];
+        // var new_rot = entity.transform.rotation;
+        // new_rot.w = @sin(info.elapsed_time);
+        // entity.transform.rotation = new_rot;
         // std.log.debug("modelID: {d}", .{model_id});
         // std.log.debug("position: {any}", .{entity.transform.position});
 
         for (model.top_nodes.items) |top_node| {
-            try draw(self, cmd, current_frame, model, top_node, entity.transform.toMat4x4());
+            try draw(self, cmd, current_frame, model, top_node, entity.transform.toMat4x4().mul(model.offset.toMat4x4()));
         }
     }
 
@@ -477,7 +484,7 @@ pub fn draw(
             .model_matrix = node_matrix.d,
             .inverse_bind_matrices_addess = if (node.skin_id > -1) model.skins.items[@intCast(node.skin_id)].buffer.?.device_address else undefined,
         };
-        // if (node.skin_id > -1) std.log.debug("skin ID  {d}", .{node.skin_id});
+        // if (node.skin_id > -1) std.log.debug("address  {d}", .{model.skins.items[@intCast(node.skin_id)].buffer.?.device_address});
 
         c.vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
         c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(Shader.PushConstant), &push);
