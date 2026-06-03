@@ -27,8 +27,6 @@ top_nodes: std.ArrayList(*Node) = .empty,
 animations: std.ArrayList(Animation) = .empty,
 active_animation: usize = 0,
 skins: std.ArrayList(Skin) = .empty,
-/// Baked per-model correction applied to every entity that uses this model
-/// (e.g. rotating a mesh that was authored facing the wrong way).
 offset: nz.Transform3D(f32) = .{},
 
 pub fn init(

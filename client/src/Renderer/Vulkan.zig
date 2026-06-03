@@ -139,7 +139,10 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         asset_server,
         "objects/BenRun.glb",
         &self.render_resources,
-        .{ .rotation = nz.Quat(f32).angleAxis(std.math.pi, .{ 0, 1, 0 }) },
+        .{
+            .position = .{ 0, -1, 0 },
+            .rotation = nz.Quat(f32).angleAxis(std.math.pi, .{ 0, 1, 0 }),
+        },
     );
     try self.models.append(gpa, model);
 

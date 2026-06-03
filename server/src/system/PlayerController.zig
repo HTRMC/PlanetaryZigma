@@ -63,7 +63,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
                 },
             );
         }
-        if (player.controller.input.k and controller.attack_cool_down >= 1.0) {
+        if (player.controller.input.k and controller.attack_cool_down >= 0.1) {
             controller.attack_cool_down = 0;
             _ = try self.spawner.spawn(.{
                 .kind = .enemy,
