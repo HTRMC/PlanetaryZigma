@@ -21,16 +21,16 @@ pub const Entity = struct {
         transform: bool = false,
         camera: bool = false,
         model: bool = false,
+        screen_space: bool = false,
     };
     pub const Model = struct {
         id: u32 = 0,
-        offset: nz.Transform3D(f32) = .{},
     };
 
     id: u32 = 0,
     flags: Flags = .{},
-    model: Model = .{},
 
+    model: Model = .{},
     transform: nz.Transform3D(f32) = .{},
     camera: Camera = .{},
 

@@ -61,7 +61,7 @@ void main() {
   // gl_Position = scene_data.proj_view * vec4(x, y, z, 1.0);
 
   // vec3 uv = vec3(v.uv_x, v.uv_y, v.uv_x);
-  vec3 col = 0.5 + 0.5 * cos(gl_Position.y * scene_data.time + v.uv_x + vec3(0, 2, 4));
+  vec3 col = 0.5 + 0.5 * cos(scene_data.time + v.uv_x + vec3(0, 2, 4));
   // vec3 col = vec3(1, 0, 0);
 
   // float red = (y > 0) ? 1 : 0;
@@ -74,7 +74,8 @@ void main() {
   out_joints = v.joint_weights;
 
   // out_frag_color = v.joint_indices.x == -1 ? vec4(v.color) : vec4(col, 1);
-  out_frag_color = vec4(v.color);
+  // out_frag_color = vec4(col, 1);
+  out_frag_color = v.color;
   out_normal = (push_constant.model_matrix * vec4(v.normal, 1)).xyz;
   out_uv = vec2(v.uv_x, v.uv_y);
 }

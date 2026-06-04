@@ -47,6 +47,7 @@ layouts: DescriptorLayouts,
 scene_layout: descriptor.Layout,
 material_layout: descriptor.Layout,
 pipeline_layout: pipeline.Layout,
+ui_scene_buffer: Buffer,
 
 const DescriptorLayouts = struct {
     layouts: [2]descriptor.Layout,
@@ -166,6 +167,18 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         .pName = "main",
     }, "shaders/fragment.frag");
 
+    self.ui_scene_buffer = try .init(
+        self.device,
+        self.vma,
+        Swapchain.FrameData.GPUScene,
+        1,
+        c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | c.VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | c.VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT,
+        .{
+            .usage = Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU,
+            .flags = Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        },
+    );
+
     return self;
 }
 
@@ -176,6 +189,8 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
 
     for (self.models.items) |model| model.deinit(gpa);
     self.models.deinit(gpa);
+
+    self.ui_scene_buffer.deinit(self.vma);
 
     self.material_layout.deinit(self.device);
     self.scene_layout.deinit(self.device);
@@ -412,17 +427,29 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         .pStencilAttachment = null,
     };
 
-    const aspect: f32 = @as(f32, @floatFromInt(self.swapchain.draw_image.extent.width)) / @as(f32, @floatFromInt(self.swapchain.draw_image.extent.height));
-
     const camera = camera: {
         for (info.world.entities.values()) |*entity| {
             if (entity.flags.camera) break :camera &entity.camera;
         }
         return;
     };
+
+    const width: f32 = @floatFromInt(self.swapchain.draw_image.extent.width);
+    const height: f32 = @floatFromInt(self.swapchain.draw_image.extent.height);
+    const aspect: f32 = @as(f32, @floatFromInt(self.swapchain.draw_image.extent.width)) / @as(f32, @floatFromInt(self.swapchain.draw_image.extent.height));
+
     const view = getViewMatrix(&camera.transform);
     var proj = perspective(camera.fov_rad, aspect, 0.01, 1000);
     const proj_view = proj.mul(view);
+
+    const ortho = orthographic(
+        0,
+        @floatFromInt(self.swapchain.depth_image.extent.width),
+        0,
+        @floatFromInt(self.swapchain.draw_image.extent.height),
+        0.01,
+        1000,
+    );
 
     var scene_data: Swapchain.FrameData.GPUScene = .{
         .view_proj = proj_view.d,
@@ -431,12 +458,22 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     };
     current_frame.gpu_scene.copy(Swapchain.FrameData.GPUScene, (&scene_data)[0..1]);
 
+    scene_data.view_proj = ortho.d;
+    self.ui_scene_buffer.copy(Swapchain.FrameData.GPUScene, (&scene_data)[0..1]);
+
     ext.vkCmdBeginRendering(cmd, &render_info);
     for (info.world.entities.values()) |*entity| {
         if (!entity.flags.model or !entity.flags.transform) continue;
         var model_id = entity.model.id;
         model_id = if (model_id >= self.models.items.len) 0 else model_id;
         const model = self.models.items[model_id];
+        var transform = entity.transform;
+
+        if (entity.flags.screen_space) {
+            transform.scale = @splat(width / 2);
+            transform.position[0] = width / 2;
+            transform.position[1] = height / 2;
+        }
         // var new_rot = entity.transform.rotation;
         // new_rot.w = @sin(info.elapsed_time);
         // entity.transform.rotation = new_rot;
@@ -444,7 +481,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         // std.log.debug("position: {any}", .{entity.transform.position});
 
         for (model.top_nodes.items) |top_node| {
-            try draw(self, cmd, current_frame, model, top_node, entity.transform.toMat4x4().mul(model.offset.toMat4x4()));
+            try draw(self, cmd, entity, current_frame, model, top_node, transform.toMat4x4().mul(model.offset.toMat4x4()));
         }
     }
 
@@ -456,6 +493,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
 pub fn draw(
     self: *@This(),
     cmd: c.VkCommandBuffer,
+    entity: *system.Entity,
     current_frame: *const Swapchain.FrameData,
     model: *const GltfModel,
     node: *Node,
@@ -496,7 +534,7 @@ pub fn draw(
             const surface_bindings = [_]c.VkDescriptorBufferBindingInfoEXT{
                 .{
                     .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
-                    .address = current_frame.gpu_scene.device_address,
+                    .address = if (entity.flags.screen_space) self.ui_scene_buffer.device_address else current_frame.gpu_scene.device_address,
                     .usage = c.VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
                 },
                 .{
@@ -520,7 +558,7 @@ pub fn draw(
     }
 
     for (node.children.items) |child| {
-        try draw(self, cmd, current_frame, model, child, node_matrix);
+        try draw(self, cmd, entity, current_frame, model, child, node_matrix);
     }
 }
 
@@ -579,5 +617,14 @@ fn perspective(fovy_rad: f32, aspect: f32, near: f32, far: f32) nz.Mat4x4(f32) {
         0, -f, 0, 0, // flip Y for Vulkan
         0, 0, far / (near - far),          -1, // <- note near-far here
         0, 0, (far * near) / (near - far), 0,
+    });
+}
+
+fn orthographic(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) nz.Mat4x4(f32) {
+    return .new(.{
+        2.0 / (right - left),             0.0,                              0.0,                          0.0,
+        0.0,                              2.0 / (top - bottom),             0.0,                          0.0,
+        0.0,                              0.0,                              -2.0 / (far - near),          0.0,
+        -(right + left) / (right - left), -(top + bottom) / (top - bottom), -(far + near) / (far - near), 1.0,
     });
 }
