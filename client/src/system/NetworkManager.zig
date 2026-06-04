@@ -130,7 +130,9 @@ fn handleCommand(self: *@This(), system_context: *system.Context, info: *const I
                 .flags = .{ .transform = true, .model = true },
             });
             switch (spawn_entity.kind) {
-                .player => new_entity.model = .{ .id = 1 },
+                .player => {
+                    new_entity.model = .{ .id = 1 };
+                },
                 .planet => {
                     const size: u32 = @intCast(spawn_entity.data[0]);
                     const planet: shared.Planet(.renderable) = try .init(self.gpa, size);
