@@ -235,11 +235,18 @@ pub const FrameData = struct {
     render_fence: c.VkFence,
     command_buffer: c.VkCommandBuffer,
     gpu_scene: Buffer,
+    ui_scene: Buffer,
+    ui_index_buffer: Buffer,
+    ui_vertex_buffer: Buffer,
 
     pub const GPUScene = extern struct {
         view_proj: [16]f32,
         global_light_direction: [3]f32,
         time: f32,
+    };
+
+    pub const UIScene = extern struct {
+        view_proj: [16]f32,
     };
 
     pub fn init(vma: Vma, device: Device) !@This() {
@@ -275,6 +282,17 @@ pub const FrameData = struct {
                 device,
                 vma,
                 GPUScene,
+                1,
+                c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | c.VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | c.VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT,
+                .{
+                    .usage = Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU,
+                    .flags = Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
+                },
+            ),
+            .ui_scene = try .init(
+                device,
+                vma,
+                UIScene,
                 1,
                 c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | c.VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | c.VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT,
                 .{
