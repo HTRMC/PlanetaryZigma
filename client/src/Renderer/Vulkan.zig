@@ -43,11 +43,12 @@ models: std.ArrayList(*GltfModel) = .empty,
 //Temporary
 vertex_shader: *Shader,
 fragment_shader: *Shader,
+ui_vertex_shader: *Shader,
+ui_fragment_shader: *Shader,
 layouts: DescriptorLayouts,
 scene_layout: descriptor.Layout,
 material_layout: descriptor.Layout,
 pipeline_layout: pipeline.Layout,
-ui_scene_buffer: Buffer,
 
 const DescriptorLayouts = struct {
     layouts: [2]descriptor.Layout,
@@ -122,7 +123,7 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
 
     self.pipeline_layout = try .init(
         self.device,
-        Shader.PushConstant,
+        Shader.AnimationPushConstant,
         &self.layouts.layouts,
     );
 
@@ -147,17 +148,58 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
     );
     try self.models.append(gpa, model);
 
-    self.vertex_shader = try .init(gpa, self.device, asset_server, .{
-        .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
-        .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
-        .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
-        .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-        .pSetLayouts = &self.layouts.vk_handles[0],
-        .setLayoutCount = @intCast(self.layouts.vk_handles.len),
-        .pushConstantRangeCount = 1,
-        .pName = "main",
-    }, "shaders/vertex.vert");
-    self.fragment_shader = try .init(gpa, self.device, asset_server, .{
+    self.vertex_shader = try .init(
+        gpa,
+        self.device,
+        asset_server,
+        .{
+            .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
+            .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
+            .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+            .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
+            .pSetLayouts = &self.layouts.vk_handles[0],
+            .setLayoutCount = @intCast(self.layouts.vk_handles.len),
+            .pushConstantRangeCount = 1,
+            .pName = "main",
+        },
+        "shaders/vertex.vert",
+        Shader.AnimationPushConstant,
+    );
+    self.fragment_shader = try .init(
+        gpa,
+        self.device,
+        asset_server,
+        .{
+            .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
+            .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+            .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
+            .pSetLayouts = &self.layouts.vk_handles[0],
+            .setLayoutCount = @intCast(self.layouts.vk_handles.len),
+            .pushConstantRangeCount = 1,
+            .pName = "main",
+        },
+        "shaders/fragment.frag",
+        Shader.AnimationPushConstant,
+    );
+
+    self.ui_vertex_shader = try .init(
+        gpa,
+        self.device,
+        asset_server,
+        .{
+            .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
+            .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
+            .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+            .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
+            .pSetLayouts = &self.layouts.vk_handles[0],
+            .setLayoutCount = @intCast(self.layouts.vk_handles.len),
+            .pushConstantRangeCount = 1,
+            .pName = "main",
+        },
+        "shaders/ui.vert",
+        Shader.UiPushConstant,
+    );
+    self.ui_fragment_shader = try .init(gpa, self.device, asset_server, .{
         .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
         .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
         .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
@@ -165,19 +207,7 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         .setLayoutCount = @intCast(self.layouts.vk_handles.len),
         .pushConstantRangeCount = 1,
         .pName = "main",
-    }, "shaders/fragment.frag");
-
-    self.ui_scene_buffer = try .init(
-        self.device,
-        self.vma,
-        Swapchain.FrameData.GPUScene,
-        1,
-        c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | c.VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | c.VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT,
-        .{
-            .usage = Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU,
-            .flags = Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
-        },
-    );
+    }, "shaders/ui.frag", Shader.UiPushConstant);
 
     return self;
 }
@@ -189,8 +219,6 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
 
     for (self.models.items) |model| model.deinit(gpa);
     self.models.deinit(gpa);
-
-    self.ui_scene_buffer.deinit(self.vma);
 
     self.material_layout.deinit(self.device);
     self.scene_layout.deinit(self.device);
@@ -396,7 +424,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     const sample_mask: u32 = 0xFF;
     ext.vkCmdSetSampleMaskEXT(cmd, c.VK_SAMPLE_COUNT_1_BIT, &sample_mask);
 
-    const color_blend_enables: c.VkBool32 = c.VK_FALSE;
+    var color_blend_enables: c.VkBool32 = c.VK_FALSE;
     const color_blend_component_flags: c.VkColorComponentFlags = c.VK_COLOR_COMPONENT_R_BIT | c.VK_COLOR_COMPONENT_G_BIT | c.VK_COLOR_COMPONENT_B_BIT | c.VK_COLOR_COMPONENT_A_BIT;
     ext.vkCmdSetColorBlendEnableEXT(cmd, 0, 1, &color_blend_enables);
     ext.vkCmdSetColorWriteMaskEXT(cmd, 0, 1, &color_blend_component_flags);
@@ -436,20 +464,11 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
 
     const width: f32 = @floatFromInt(self.swapchain.draw_image.extent.width);
     const height: f32 = @floatFromInt(self.swapchain.draw_image.extent.height);
-    const aspect: f32 = @as(f32, @floatFromInt(self.swapchain.draw_image.extent.width)) / @as(f32, @floatFromInt(self.swapchain.draw_image.extent.height));
+    const aspect: f32 = width / height;
 
     const view = getViewMatrix(&camera.transform);
     var proj = perspective(camera.fov_rad, aspect, 0.01, 1000);
     const proj_view = proj.mul(view);
-
-    const ortho = orthographic(
-        0,
-        @floatFromInt(self.swapchain.depth_image.extent.width),
-        0,
-        @floatFromInt(self.swapchain.draw_image.extent.height),
-        0.01,
-        1000,
-    );
 
     var scene_data: Swapchain.FrameData.GPUScene = .{
         .view_proj = proj_view.d,
@@ -457,9 +476,6 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         .time = elapsed_time,
     };
     current_frame.gpu_scene.copy(Swapchain.FrameData.GPUScene, (&scene_data)[0..1]);
-
-    scene_data.view_proj = ortho.d;
-    self.ui_scene_buffer.copy(Swapchain.FrameData.GPUScene, (&scene_data)[0..1]);
 
     ext.vkCmdBeginRendering(cmd, &render_info);
     for (info.world.entities.values()) |*entity| {
@@ -469,11 +485,11 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         const model = self.models.items[model_id];
         var transform = entity.transform;
 
-        if (entity.flags.screen_space) {
-            transform.scale = @splat(width / 2);
-            transform.position[0] = width / 2;
-            transform.position[1] = height / 2;
-        }
+        // if (entity.flags.screen_space) {
+        //     transform.scale = @splat(width / 2);
+        //     transform.position[0] = width / 2;
+        //     transform.position[1] = height / 2;
+        // }
         // var new_rot = entity.transform.rotation;
         // new_rot.w = @sin(info.elapsed_time);
         // entity.transform.rotation = new_rot;
@@ -484,6 +500,38 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
             try draw(self, cmd, entity, current_frame, model, top_node, transform.toMat4x4().mul(model.offset.toMat4x4()));
         }
     }
+
+    const quad: [1]Swapchain.FrameData.UiVertex = .{.{
+        .position = .{ 0, 0 },
+        .color = .{ 1, 1, 1, 1 },
+        .uv = .{ 0, 0 },
+    }};
+    current_frame.ui_vertex_buffer.copy(Swapchain.FrameData.UiVertex, quad[0..1]);
+    var stages_ui = [_]c.VkShaderStageFlagBits{
+        c.VK_SHADER_STAGE_VERTEX_BIT,
+        c.VK_SHADER_STAGE_FRAGMENT_BIT,
+    };
+
+    const bounds_ui = [_]c.VkShaderEXT{
+        self.vertex_shader.handle,
+        self.fragment_shader.handle,
+    };
+
+    c.vkCmdBindShadersEXT(cmd, 2, &stages_ui[0], &bounds_ui[0]);
+    ext.vkCmdSetDepthTestEnableEXT(cmd, 0);
+    ext.vkCmdSetDepthWriteEnableEXT(cmd, 0);
+    ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
+    color_blend_enables = c.VK_TRUE;
+    ext.vkCmdSetColorBlendEnableEXT(cmd, 0, 1, &color_blend_enables);
+    const blend_eq: c.VkColorBlendEquationEXT = .{
+        .srcColorBlendFactor = c.VK_BLEND_FACTOR_SRC_ALPHA,
+        .dstColorBlendFactor = c.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+        .colorBlendOp = c.VK_BLEND_OP_ADD,
+        .srcAlphaBlendFactor = c.VK_BLEND_FACTOR_ONE,
+        .dstAlphaBlendFactor = c.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+        .alphaBlendOp = c.VK_BLEND_OP_ADD,
+    };
+    ext.vkCmdSetColorBlendEquationEXT(cmd, 0, 1, &blend_eq);
 
     ext.vkCmdEndRendering(cmd);
 
@@ -517,7 +565,7 @@ pub fn draw(
     if (node.mesh_id) |mesh_id| {
         const mesh = try self.render_resources.getMeshPtr(mesh_id);
 
-        var push: Shader.PushConstant = .{
+        var push: Shader.AnimationPushConstant = .{
             .vertex_buffer_address = mesh.vertex_buffer.device_address,
             .model_matrix = node_matrix.d,
             .inverse_bind_matrices_addess = if (node.skin_id > -1) model.skins.items[@intCast(node.skin_id)].buffer.?.device_address else undefined,
@@ -525,7 +573,7 @@ pub fn draw(
         // if (node.skin_id > -1) std.log.debug("address  {d}", .{model.skins.items[@intCast(node.skin_id)].buffer.?.device_address});
 
         c.vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
-        c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(Shader.PushConstant), &push);
+        c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(Shader.AnimationPushConstant), &push);
         for (mesh.surfaces.items) |surface| {
             // std.log.debug("MATERIAL NAME {s}", .{surface.material_name});
             // std.log.debug("MATERIAs {d}", .{self.render_resources.materials.entries.len});
@@ -534,7 +582,7 @@ pub fn draw(
             const surface_bindings = [_]c.VkDescriptorBufferBindingInfoEXT{
                 .{
                     .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
-                    .address = if (entity.flags.screen_space) self.ui_scene_buffer.device_address else current_frame.gpu_scene.device_address,
+                    .address = current_frame.gpu_scene.device_address,
                     .usage = c.VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
                 },
                 .{

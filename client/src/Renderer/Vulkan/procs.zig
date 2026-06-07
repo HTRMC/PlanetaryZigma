@@ -44,6 +44,7 @@ pub const device = struct {
         pub var vkCmdSetPrimitiveRestartEnableEXT: *const fn (c.VkCommandBuffer, c.VkBool32) callconv(.c) void = undefined;
         pub var vkCmdSetSampleMaskEXT: *const fn (c.VkCommandBuffer, c.VkSampleCountFlagBits, [*c]const u32) callconv(.c) void = undefined;
         pub var vkCmdSetColorBlendEnableEXT: *const fn (c.VkCommandBuffer, u32, u32, [*c]const c.VkBool32) callconv(.c) void = undefined;
+        pub var vkCmdSetColorBlendEquationEXT: *const fn (c.VkCommandBuffer, u32, u32, [*c]const c.VkColorBlendEquationEXT) callconv(.c) void = undefined;
         pub var vkCmdSetColorWriteMaskEXT: *const fn (c.VkCommandBuffer, u32, u32, [*c]const c.VkColorComponentFlags) callconv(.c) void = undefined;
         pub var vkCmdSetDepthBoundsTestEnable: *const fn (c.VkCommandBuffer, c.VkBool32) callconv(.c) void = undefined;
         pub var vkCmdSetDepthClampEnableEXT: *const fn (c.VkCommandBuffer, c.VkBool32) callconv(.c) void = undefined;
