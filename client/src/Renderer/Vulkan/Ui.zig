@@ -22,12 +22,19 @@ const Position2D = struct {
     top: f32,
 };
 
+const Rect = struct {
+    left: f32,
+    top: f32,
+    width: f32,
+    heigth: f32,
+};
+
 pub const Layout = struct {
-    const Position = union(enum) {
+    pub const Position = union(enum) {
         fixed: Position2D,
         center: void,
     };
-    const Size = union(enum) {
+    pub const Size = union(enum) {
         fixed: struct {
             width: f32,
             heigth: f32,
@@ -35,16 +42,20 @@ pub const Layout = struct {
         fit: void,
     };
 
-    children: std.ArrayList(*Layout) = .empty,
     position: Position,
     size: Size,
     color: nz.color.Rgba(f32) = .grey,
 };
 
+const Node = struct {
+    desc: Layout,
+    parent: ?u32,
+    rect: Rect,
+};
+
 index_buffer: Buffer,
 quads: std.ArrayList(Quad) = .empty,
-layouts: std.ArrayList(Layout) = .empty,
-root_layouts: std.ArrayList(*Layout) = .empty,
+layouts: std.ArrayList(Node) = .empty,
 width: f32,
 heigth: f32,
 
@@ -69,106 +80,94 @@ pub fn init(gpa: std.mem.Allocator, vma: Vma, device: Device, width: u32, heigth
         .index_buffer = ui_index_buffer,
         .quads = try .initCapacity(gpa, max_ui_quads),
         .layouts = try .initCapacity(gpa, max_ui_quads),
-        .root_layouts = try .initCapacity(gpa, max_ui_quads),
         .width = @floatFromInt(width),
         .heigth = @floatFromInt(heigth),
     };
 }
 
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma) void {
-    for (self.layouts.items) |*layout| {
-        layout.children.deinit(gpa);
-    }
     self.index_buffer.deinit(vma);
     self.quads.deinit(gpa);
-    self.root_layouts.deinit(gpa);
     self.layouts.deinit(gpa);
 }
 
-pub fn start(self: *@This(), gpa: std.mem.Allocator) void {
-    for (self.layouts.items) |*layout| {
-        layout.children.deinit(gpa);
-    }
+pub fn start(self: *@This()) void {
     self.layouts.clearRetainingCapacity();
     self.quads.clearRetainingCapacity();
-    self.root_layouts.clearRetainingCapacity();
 }
 
-pub fn addRootLayout(self: *@This(), layout: Layout) *Layout {
-    //top, left, right, bottom,
-    const positions: [2]f32 = switch (layout.position) {
-        .center => blk: {
-            const screen_half_width = self.width / 2;
-            const screen_half_height = self.heigth / 2;
-            break :blk .{
-                screen_half_height,
-                screen_half_width,
-            };
-        },
-        .fixed => |position| .{
-            position.top, position.left,
-        },
-    };
-
-    self.layouts.appendAssumeCapacity(layout);
-    var last_root = &self.layouts.items[self.layouts.items.len - 1];
-    last_root.position = .{ .fixed = .{ .left = positions[1], .top = positions[0] } };
-    self.root_layouts.appendAssumeCapacity(last_root);
-    return last_root;
-}
-
-pub fn addChildLayout(self: *@This(), gpa: std.mem.Allocator, parent: *Layout, child: Layout) !*Layout {
-    //top, left, right, bottom,
-    const positions: [4]f32 = switch (child.position) {
-        .center => blk: {
-            const layout_half_height = child.size.fixed.heigth / 2;
-            const layout_half_width = child.size.fixed.width / 2;
-            break :blk .{
-                parent.position.fixed.top - layout_half_height,
-                parent.position.fixed.left - layout_half_width,
-                parent.position.fixed.left + layout_half_width,
-                parent.position.fixed.top + layout_half_height,
-            };
-        },
-        .fixed => |position| .{
-            position.top + parent.position.fixed.top,
-            position.left + parent.position.fixed.left,
-            position.left + child.size.fixed.width + parent.position.fixed.left,
-            position.top + child.size.fixed.heigth + parent.position.fixed.top,
-        },
-    };
-    self.layouts.appendAssumeCapacity(child);
-    var new_layout = &self.layouts.items[self.layouts.items.len - 1];
-    new_layout.position = .{ .fixed = .{ .left = positions[1], .top = positions[0] } };
-    try parent.children.append(gpa, new_layout);
-    return new_layout;
+pub fn add(self: *@This(), parent: ?u32, desc: Layout) u32 {
+    const handle: u32 = @intCast(self.layouts.items.len);
+    self.layouts.appendAssumeCapacity(.{
+        .desc = desc,
+        .parent = parent,
+        .rect = .{ .left = 0, .top = 0, .width = 0, .heigth = 0 },
+    });
+    return handle;
 }
 
 pub fn end(self: *@This()) void {
-    for (self.root_layouts.items) |layout| {
-        self.appendQuad(layout);
-    }
-    std.mem.reverse(Quad, self.quads.items);
+    self.resolveSizes();
+    self.resolvePositions();
+    self.emitQuads();
 }
 
-fn appendQuad(self: *@This(), layout: *Layout) void {
-    for (layout.children.items) |child| {
-        self.appendQuad(child);
-    }
-    const position = layout.position.fixed;
-    const positions: [4]f32 = .{
-        position.top,
-        position.left,
-        position.left + layout.size.fixed.width,
-        position.top + layout.size.fixed.heigth,
-    };
+fn resolveSizes(self: *@This()) void {
+    var i: usize = self.layouts.items.len;
+    while (i > 0) {
+        i -= 1;
+        const node = &self.layouts.items[i];
+        switch (node.desc.size) {
+            .fixed => |size| {
+                node.rect.width = size.width;
+                node.rect.heigth = size.heigth;
+            },
+            .fit => {},
+        }
 
-    const colors: [4]f32 = layout.color.toVec();
-    //left_top, right_top, right_bottom, left_bottom
-    self.quads.appendAssumeCapacity(.{ .vertices = .{
-        .{ .position = .{ positions[1], positions[0] }, .color = colors, .uv = .{ 0, 0 } },
-        .{ .position = .{ positions[2], positions[0] }, .color = colors, .uv = .{ 1, 0 } },
-        .{ .position = .{ positions[2], positions[3] }, .color = colors, .uv = .{ 1, 1 } },
-        .{ .position = .{ positions[1], positions[3] }, .color = colors, .uv = .{ 0, 1 } },
-    } });
+        const parent_idx = node.parent orelse continue;
+        const parent = &self.layouts.items[parent_idx];
+        if (parent.desc.size == .fit) {
+            const off: Position2D = switch (node.desc.position) {
+                .fixed => |position| position,
+                .center => .{ .left = 0, .top = 0 },
+            };
+            parent.rect.width = @max(parent.rect.width, off.left + node.rect.width);
+            parent.rect.heigth = @max(parent.rect.heigth, off.top + node.rect.heigth);
+        }
+    }
+}
+
+fn resolvePositions(self: *@This()) void {
+    for (self.layouts.items) |*node| {
+        const origin: Rect = if (node.parent) |parent_id|
+            self.layouts.items[parent_id].rect
+        else
+            .{ .left = 0, .top = 0, .width = self.width, .heigth = self.heigth };
+
+        switch (node.desc.position) {
+            .fixed => |position| {
+                node.rect.left = origin.left + position.left;
+                node.rect.top = origin.top + position.top;
+            },
+            .center => {
+                node.rect.left = origin.left + (origin.width - node.rect.width) / 2;
+                node.rect.top = origin.top + (origin.heigth - node.rect.heigth) / 2;
+            },
+        }
+    }
+}
+
+fn emitQuads(self: *@This()) void {
+    for (self.layouts.items) |node| {
+        const r = node.rect;
+        const colors: [4]f32 = node.desc.color.toVec();
+        //left_top, right_top, right_bottom, left_bottom
+        self.quads.appendAssumeCapacity(.{ .vertices = .{
+            .{ .position = .{ r.left, r.top }, .color = colors, .uv = .{ 0, 0 } },
+            .{ .position = .{ r.left + r.width, r.top }, .color = colors, .uv = .{ 1, 0 } },
+            .{ .position = .{ r.left + r.width, r.top + r.heigth }, .color = colors, .uv = .{ 1, 1 } },
+            .{ .position = .{ r.left, r.top + r.heigth }, .color = colors, .uv = .{ 0, 1 } },
+        } });
+    }
 }

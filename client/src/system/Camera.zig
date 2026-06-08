@@ -20,7 +20,7 @@ input_map: shared.net.Command.Input = .{},
 
 transform: nz.Transform3D(f32) = .{},
 
-pub fn update(self: *@This(), gpa: std.mem.Allocator, info: *const Info, ui: *Ui) !void {
+pub fn update(self: *@This(), info: *const Info, ui: *Ui) void {
     _ = info;
 
     self.input_map.mouse_delta[0] = self.mouse_pos[0] - self.mouse_prev_pos[0];
@@ -28,20 +28,17 @@ pub fn update(self: *@This(), gpa: std.mem.Allocator, info: *const Info, ui: *Ui
     self.mouse_prev_pos[0] = self.mouse_pos[0];
     self.mouse_prev_pos[1] = self.mouse_pos[1];
 
-    ui.start(gpa);
-    // ui.addRootLayout(.{ .heigth = 100, .width = 100, .postion = .{ .fixed = .{ .left = 0, .top = 0 } } });
-    const root = ui.addRootLayout(
-        .{
-            .size = .{ .fixed = .{
-                .heigth = 100,
-                .width = 100,
-            } },
-            .position = .center,
-            .color = .new(1, 0, 0, 1),
-        },
-    );
-    _ = try ui.addChildLayout(gpa, root, .{
-        .position = .{ .fixed = .{ .left = 10, .top = 10 } },
+    ui.start();
+    const root = ui.add(null, .{
+        .size = .{ .fixed = .{
+            .heigth = 100,
+            .width = 100,
+        } },
+        .position = .center,
+        .color = .new(1, 0, 0, 1),
+    });
+    _ = ui.add(root, .{
+        .position = .center,
         .size = .{ .fixed = .{ .heigth = 10, .width = 10 } },
     });
     ui.end();
