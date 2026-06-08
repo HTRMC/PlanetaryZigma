@@ -6,7 +6,7 @@ const check = @import("utils.zig").check;
 
 buffer: c.VkBuffer,
 vma_allocation: Vma.Allocation,
-device_address: c.VkDeviceAddress,
+device: Device,
 info: Vma.AllocationInfo,
 len: u32,
 
@@ -30,23 +30,25 @@ pub fn init(device: Device, vma: Vma, comptime T: type, amount: usize, vk_buffer
         &info,
     ));
 
-    var device_adress_info: c.VkBufferDeviceAddressInfo = .{
-        .sType = c.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-        .buffer = new_buffer,
-    };
-    const gpu_address = c.vkGetBufferDeviceAddress(device.handle, &device_adress_info);
-
     return .{
         .buffer = new_buffer,
         .vma_allocation = allocation,
         .info = info,
-        .device_address = gpu_address,
+        .device = device,
         .len = @intCast(amount),
     };
 }
 
-pub fn deinit(self: @This(), vma: Vma) void {
+pub fn deinit(self: *@This(), vma: Vma) void {
     Vma.c.vmaDestroyBuffer(vma.handle, @ptrCast(self.buffer), self.vma_allocation);
+}
+
+pub fn getGPUAddress(self: *const @This()) c.VkDeviceAddress {
+    var device_adress_info: c.VkBufferDeviceAddressInfo = .{
+        .sType = c.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+        .buffer = self.buffer,
+    };
+    return c.vkGetBufferDeviceAddress(self.device.handle, &device_adress_info);
 }
 
 pub fn copy(self: *@This(), comptime T: type, data: []const T) void {

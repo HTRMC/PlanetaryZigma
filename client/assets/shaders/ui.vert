@@ -21,7 +21,7 @@ layout(location = 1) out vec2 out_uv;
 
 void main() {
   Vertex v = push_constant.vertex_buffer.vertices[gl_VertexIndex];
-  gl_Position = v.position;
+  gl_Position = vec4(v.position, 0.0, 1.0);
   out_frag_color = v.color;
   out_uv = v.uv;
 }

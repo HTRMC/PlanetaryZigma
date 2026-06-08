@@ -189,6 +189,7 @@ pub fn recreate(
 
     const surface_format = try surface.getFormat(gpa, physical_device);
     const swapchain = try create(physical_device, device, surface, surface_format, self.present_mode, actual_extent.width, actual_extent.height);
+
     self.swapchain = swapchain;
 
     self.extent = .{ .width = actual_extent.width, .height = actual_extent.height, .depth = 1 };

@@ -301,7 +301,6 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                         .joint_weights = blk: {
                             var joint_weights: [4]f32 = undefined;
                             inline for (0..4) |j| joint_weights[j] = weights[i][j];
-                            std.log.debug("val: {any}", .{joint_weights});
                             break :blk joint_weights;
                         },
                     };
@@ -350,12 +349,10 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                 scene_node.rotation = nz.quat.Hamiltonian(f32).fromMat4x4(local_matrix);
                 scene_node.translation = local_matrix.vecPosition();
                 scene_node.scale = local_matrix.vecScale();
-                std.log.debug("MATRIX - pos: {any}", .{scene_node.translation});
             } else {
                 scene_node.translation = if (gltf_node.translation) |translation| translation else @splat(0);
                 scene_node.rotation = if (gltf_node.rotation) |r| .{ .w = r[3], .x = r[0], .y = r[1], .z = r[2] } else nz.quat.Hamiltonian(f32).identity;
                 scene_node.scale = if (gltf_node.scale) |scale| scale else @splat(1);
-                std.log.debug("pos: {any}", .{scene_node.translation});
             }
             if (gltf_node.children) |children| {
                 for (children) |child_id| {

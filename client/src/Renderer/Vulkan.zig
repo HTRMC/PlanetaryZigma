@@ -191,8 +191,8 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
             .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
             .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
             .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-            .pSetLayouts = &self.layouts.vk_handles[0],
-            .setLayoutCount = @intCast(self.layouts.vk_handles.len),
+            .pSetLayouts = null,
+            .setLayoutCount = 0,
             .pushConstantRangeCount = 1,
             .pName = "main",
         },
@@ -203,8 +203,8 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
         .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
         .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-        .pSetLayouts = &self.layouts.vk_handles[0],
-        .setLayoutCount = @intCast(self.layouts.vk_handles.len),
+        .pSetLayouts = null,
+        .setLayoutCount = 0,
         .pushConstantRangeCount = 1,
         .pName = "main",
     }, "shaders/ui.frag", Shader.UiPushConstant);
@@ -225,6 +225,8 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     self.pipeline_layout.deinit(self.device);
     self.vertex_shader.deinit(gpa);
     self.fragment_shader.deinit(gpa);
+    self.ui_fragment_shader.deinit(gpa);
+    self.ui_vertex_shader.deinit(gpa);
     self.swapchain.deinit(self.vma, self.device);
     self.vma.deinit();
     self.device.deinit();
@@ -501,25 +503,26 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         }
     }
 
-    const quad: [1]Swapchain.FrameData.UiVertex = .{.{
-        .position = .{ 0, 0 },
-        .color = .{ 1, 1, 1, 1 },
-        .uv = .{ 0, 0 },
-    }};
-    current_frame.ui_vertex_buffer.copy(Swapchain.FrameData.UiVertex, quad[0..1]);
+    const quad: [4]Swapchain.FrameData.UiVertex = .{
+        .{ .position = .{ -0.5, -0.5 }, .color = .{ 1, 1, 1, 1 }, .uv = .{ 0, 0 } },
+        .{ .position = .{ 0.5, -0.5 }, .color = .{ 1, 1, 1, 1 }, .uv = .{ 1, 0 } },
+        .{ .position = .{ 0.5, 0.5 }, .color = .{ 1, 1, 1, 1 }, .uv = .{ 1, 1 } },
+        .{ .position = .{ -0.5, 0.5 }, .color = .{ 1, 1, 1, 1 }, .uv = .{ 0, 1 } },
+    };
+    current_frame.ui_vertex_buffer.copy(Swapchain.FrameData.UiVertex, quad[0..]);
     var stages_ui = [_]c.VkShaderStageFlagBits{
         c.VK_SHADER_STAGE_VERTEX_BIT,
         c.VK_SHADER_STAGE_FRAGMENT_BIT,
     };
 
     const bounds_ui = [_]c.VkShaderEXT{
-        self.vertex_shader.handle,
-        self.fragment_shader.handle,
+        self.ui_vertex_shader.handle,
+        self.ui_fragment_shader.handle,
     };
 
-    c.vkCmdBindShadersEXT(cmd, 2, &stages_ui[0], &bounds_ui[0]);
-    ext.vkCmdSetDepthTestEnableEXT(cmd, 0);
-    ext.vkCmdSetDepthWriteEnableEXT(cmd, 0);
+    ext.vkCmdBindShadersEXT(cmd, 2, &stages_ui[0], &bounds_ui[0]);
+    ext.vkCmdSetDepthTestEnableEXT(cmd, c.VK_FALSE);
+    ext.vkCmdSetDepthWriteEnableEXT(cmd, c.VK_FALSE);
     ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
     color_blend_enables = c.VK_TRUE;
     ext.vkCmdSetColorBlendEnableEXT(cmd, 0, 1, &color_blend_enables);
@@ -533,6 +536,10 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     };
     ext.vkCmdSetColorBlendEquationEXT(cmd, 0, 1, &blend_eq);
 
+    var push: Shader.UiPushConstant = .{ .vertex_buffer_address = current_frame.ui_vertex_buffer.getGPUAddress() };
+    c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(Shader.UiPushConstant), &push);
+    c.vkCmdBindIndexBuffer(cmd, self.swapchain.ui_index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
+    c.vkCmdDrawIndexed(cmd, 6, 1, 0, 0, 0);
     ext.vkCmdEndRendering(cmd);
 
     draw_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_READ_BIT);
@@ -566,9 +573,9 @@ pub fn draw(
         const mesh = try self.render_resources.getMeshPtr(mesh_id);
 
         var push: Shader.AnimationPushConstant = .{
-            .vertex_buffer_address = mesh.vertex_buffer.device_address,
+            .vertex_buffer_address = mesh.vertex_buffer.getGPUAddress(),
             .model_matrix = node_matrix.d,
-            .inverse_bind_matrices_addess = if (node.skin_id > -1) model.skins.items[@intCast(node.skin_id)].buffer.?.device_address else undefined,
+            .inverse_bind_matrices_addess = if (node.skin_id > -1) model.skins.items[@intCast(node.skin_id)].buffer.?.getGPUAddress() else undefined,
         };
         // if (node.skin_id > -1) std.log.debug("address  {d}", .{model.skins.items[@intCast(node.skin_id)].buffer.?.device_address});
 
@@ -582,12 +589,12 @@ pub fn draw(
             const surface_bindings = [_]c.VkDescriptorBufferBindingInfoEXT{
                 .{
                     .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
-                    .address = current_frame.gpu_scene.device_address,
+                    .address = current_frame.gpu_scene.getGPUAddress(),
                     .usage = c.VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
                 },
                 .{
                     .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
-                    .address = material.buffer.device_address,
+                    .address = material.buffer.getGPUAddress(),
                     .usage = c.VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
                         c.VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT,
                 },

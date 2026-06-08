@@ -10,7 +10,7 @@ handle: c.VkShaderEXT = null,
 device: Device,
 shader_create_info: c.VkShaderCreateInfoEXT,
 shader_name: []const u8,
-push_constant_type: type,
+push_constant_size: u32,
 
 pub const AnimationPushConstant = extern struct {
     model_matrix: [16]f32,
@@ -35,7 +35,7 @@ pub fn init(
         .shader_create_info = shader_create_info,
         .shader_name = shader_name,
         .handle = null,
-        .push_constant_type = push_constant_type,
+        .push_constant_size = @sizeOf(push_constant_type),
     };
     try asset_server.loadAsset(@This(), self, shader_name, loadShader);
     return self;
@@ -60,7 +60,7 @@ fn loadShader(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: s
     const ranges: c.VkPushConstantRange = .{
         .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT | c.VK_SHADER_STAGE_FRAGMENT_BIT,
         .offset = 0,
-        .size = @sizeOf(self.push_constant_type),
+        .size = self.push_constant_size,
     };
     const shader_kind: c_uint = switch (self.shader_create_info.stage) {
         c.VK_SHADER_STAGE_VERTEX_BIT => shaderc.shaderc_glsl_vertex_shader,
