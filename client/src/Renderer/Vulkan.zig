@@ -14,6 +14,7 @@ const Material = @import("Vulkan/Material.zig");
 const GltfModel = @import("Vulkan/GltfModel.zig");
 const Vma = @import("Vulkan/Vma.zig");
 const Swapchain = @import("Vulkan/Swapchain.zig");
+const FrameData = @import("Vulkan/FrameData.zig");
 const Surface = @import("Vulkan/Surface.zig");
 const Image = @import("Vulkan/Image.zig");
 const Buffer = @import("Vulkan/Buffer.zig");
@@ -21,6 +22,7 @@ const descriptor = @import("Vulkan/desrciptor.zig");
 const RenderResources = @import("Vulkan/RenderResources.zig");
 const pipeline = @import("Vulkan/pipeline.zig");
 const Shader = @import("Vulkan/Shader.zig");
+const Ui = @import("Vulkan/Ui.zig");
 const procs = @import("Vulkan/procs.zig");
 const ext = procs.device.ProcTable;
 
@@ -29,6 +31,7 @@ const check = @import("Vulkan/utils.zig").check;
 pub const Info = system.Info;
 pub const c = @import("vulkan");
 pub const Vertex = Mesh.Vertex;
+const max_frames_inflight: usize = 3;
 
 instance: Instance,
 debug_messenger: DebugMessenger,
@@ -39,6 +42,9 @@ vma: Vma,
 swapchain: Swapchain,
 render_resources: RenderResources,
 models: std.ArrayList(*GltfModel) = .empty,
+current_frame_inflight: u32 = 0,
+frames: [max_frames_inflight]FrameData,
+ui: Ui,
 
 //Temporary
 vertex_shader: *Shader,
@@ -96,11 +102,16 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
 
     self.vma = try .init(self.instance, self.physical_device, self.device);
     self.swapchain = try .init(gpa, self.vma, self.physical_device, self.device, self.surface, options.swapchain.width, options.swapchain.heigth);
+    for (&self.frames) |*frame| {
+        frame.* = try .init(self.vma, self.device);
+        // std.debug.print("PTR: {*}\n", .{&frame.gpu_scene.buffer});
+    }
+    self.ui = try .init(gpa, self.vma, self.device);
 
     self.scene_layout = try .init(self.device, &.{
         .{
             .binding = 0,
-            .descriptorCount = @sizeOf(Swapchain.FrameData.GPUScene),
+            .descriptorCount = @sizeOf(FrameData.GPUScene),
             .descriptorType = c.VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK,
             .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT | c.VK_SHADER_STAGE_FRAGMENT_BIT,
         },
@@ -227,6 +238,8 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     self.fragment_shader.deinit(gpa);
     self.ui_fragment_shader.deinit(gpa);
     self.ui_vertex_shader.deinit(gpa);
+    self.ui.deinit(gpa, self.vma);
+    for (&self.frames) |*frame| frame.deinit(self.vma, self.device);
     self.swapchain.deinit(self.vma, self.device);
     self.vma.deinit();
     self.device.deinit();
@@ -239,7 +252,7 @@ pub fn update(self: *@This(), info: *const Info) !void {
     // const time = data.delta_time;
     // const elapsed_time = data.elapsed_time;
     var image_index: u32 = undefined;
-    var current_frame = &self.swapchain.frames[self.swapchain.current_frame_inflight % self.swapchain.frames.len];
+    var current_frame = &self.frames[self.current_frame_inflight % self.frames.len];
     try check(c.vkWaitForFences(self.device.handle, 1, &current_frame.render_fence, 1, 1000000000));
     // std.debug.print("------------ {d} \n", .{image_index});
     const aquire_result = c.vkAcquireNextImageKHR(
@@ -322,10 +335,10 @@ pub fn update(self: *@This(), info: *const Info) !void {
         return;
         // self.swapchain.recreate(self.physical_device, self.device, self.surface, )
     }
-    self.swapchain.current_frame_inflight += 1;
+    self.current_frame_inflight += 1;
 }
 
-pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.FrameData, info: *const Info) !void {
+pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *FrameData, info: *const Info) !void {
     const elapsed_time = info.elapsed_time;
     var draw_image_barrier: Image.Barrier = .init(cmd, self.swapchain.draw_image.vk_image, c.VK_IMAGE_ASPECT_COLOR_BIT);
 
@@ -472,12 +485,12 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     var proj = perspective(camera.fov_rad, aspect, 0.01, 1000);
     const proj_view = proj.mul(view);
 
-    var scene_data: Swapchain.FrameData.GPUScene = .{
+    var scene_data: FrameData.GPUScene = .{
         .view_proj = proj_view.d,
         .global_light_direction = .{ @cos(info.elapsed_time), @sin(info.elapsed_time), 0 },
         .time = elapsed_time,
     };
-    current_frame.gpu_scene.copy(Swapchain.FrameData.GPUScene, (&scene_data)[0..1]);
+    current_frame.gpu_scene.copy(FrameData.GPUScene, (&scene_data)[0..1]);
 
     ext.vkCmdBeginRendering(cmd, &render_info);
     for (info.world.entities.values()) |*entity| {
@@ -503,13 +516,15 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         }
     }
 
-    const quad: [4]Swapchain.FrameData.UiVertex = .{
-        .{ .position = .{ -0.5, -0.5 }, .color = .{ 1, 1, 1, 1 }, .uv = .{ 0, 0 } },
-        .{ .position = .{ 0.5, -0.5 }, .color = .{ 1, 1, 1, 1 }, .uv = .{ 1, 0 } },
-        .{ .position = .{ 0.5, 0.5 }, .color = .{ 1, 1, 1, 1 }, .uv = .{ 1, 1 } },
-        .{ .position = .{ -0.5, 0.5 }, .color = .{ 1, 1, 1, 1 }, .uv = .{ 0, 1 } },
+    const quad: [1]Ui.Quad = .{
+        .{ .vertices = .{
+            .{ .position = .{ -0.5, -0.5 }, .color = .{ 1, 1, 1, 1 }, .uv = .{ 0, 0 } },
+            .{ .position = .{ 0.5, -0.5 }, .color = .{ 1, 1, 1, 1 }, .uv = .{ 1, 0 } },
+            .{ .position = .{ 0.5, 0.5 }, .color = .{ 1, 1, 1, 1 }, .uv = .{ 1, 1 } },
+            .{ .position = .{ -0.5, 0.5 }, .color = .{ 1, 1, 1, 1 }, .uv = .{ 0, 1 } },
+        } },
     };
-    current_frame.ui_vertex_buffer.copy(Swapchain.FrameData.UiVertex, quad[0..]);
+    current_frame.ui_vertex_buffer.copy(Ui.Quad, quad[0..]);
     var stages_ui = [_]c.VkShaderStageFlagBits{
         c.VK_SHADER_STAGE_VERTEX_BIT,
         c.VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -538,7 +553,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
 
     var push: Shader.UiPushConstant = .{ .vertex_buffer_address = current_frame.ui_vertex_buffer.getGPUAddress() };
     c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(Shader.UiPushConstant), &push);
-    c.vkCmdBindIndexBuffer(cmd, self.swapchain.ui_index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
+    c.vkCmdBindIndexBuffer(cmd, self.ui.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
     c.vkCmdDrawIndexed(cmd, 6, 1, 0, 0, 0);
     ext.vkCmdEndRendering(cmd);
 
@@ -549,7 +564,7 @@ pub fn draw(
     self: *@This(),
     cmd: c.VkCommandBuffer,
     entity: *system.Entity,
-    current_frame: *const Swapchain.FrameData,
+    current_frame: *const FrameData,
     model: *const GltfModel,
     node: *Node,
     top_matrix: nz.Mat4x4(f32),
