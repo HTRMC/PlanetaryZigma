@@ -19,6 +19,7 @@ pub const AnimationPushConstant = extern struct {
 };
 pub const UiPushConstant = extern struct {
     vertex_buffer_address: c.VkDeviceAddress,
+    screnn_size: [2]f32,
 };
 
 pub fn init(

@@ -128,7 +128,7 @@ pub const Context = struct {
             //     });
             //     std.log.debug("MyserverID: {d}, ", .{info.world.my_server_id});
             // }
-            entity.camera.update(info);
+            entity.camera.update(info, &self.renderer.inner.ui);
             // entity.transform.scale = @splat(1);
             // entity.model_id = 0;
             try self.renderer.update(info);

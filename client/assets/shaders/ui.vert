@@ -14,6 +14,7 @@ layout(buffer_reference, std430) readonly buffer VertexBuffer {
 
 layout(push_constant, std430) uniform pc {
   VertexBuffer vertex_buffer;
+  vec2 screen_size;
 } push_constant;
 
 layout(location = 0) out vec4 out_frag_color;
@@ -21,7 +22,8 @@ layout(location = 1) out vec2 out_uv;
 
 void main() {
   Vertex v = push_constant.vertex_buffer.vertices[gl_VertexIndex];
-  gl_Position = vec4(v.position, 0.0, 1.0);
+  vec2 ndc = v.position / push_constant.screen_size * 2 - 1;
+  gl_Position = vec4(ndc, 0.0, 1.0);
   out_frag_color = v.color;
   out_uv = v.uv;
 }

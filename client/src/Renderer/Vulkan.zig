@@ -516,15 +516,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *FrameData,
         }
     }
 
-    const quad: [1]Ui.Quad = .{
-        .{ .vertices = .{
-            .{ .position = .{ -0.5, -0.5 }, .color = .{ 1, 1, 1, 1 }, .uv = .{ 0, 0 } },
-            .{ .position = .{ 0.5, -0.5 }, .color = .{ 1, 1, 1, 1 }, .uv = .{ 1, 0 } },
-            .{ .position = .{ 0.5, 0.5 }, .color = .{ 1, 1, 1, 1 }, .uv = .{ 1, 1 } },
-            .{ .position = .{ -0.5, 0.5 }, .color = .{ 1, 1, 1, 1 }, .uv = .{ 0, 1 } },
-        } },
-    };
-    current_frame.ui_vertex_buffer.copy(Ui.Quad, quad[0..]);
+    current_frame.ui_vertex_buffer.copy(Ui.Quad, self.ui.quads.items);
     var stages_ui = [_]c.VkShaderStageFlagBits{
         c.VK_SHADER_STAGE_VERTEX_BIT,
         c.VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -551,10 +543,13 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *FrameData,
     };
     ext.vkCmdSetColorBlendEquationEXT(cmd, 0, 1, &blend_eq);
 
-    var push: Shader.UiPushConstant = .{ .vertex_buffer_address = current_frame.ui_vertex_buffer.getGPUAddress() };
+    var push: Shader.UiPushConstant = .{
+        .vertex_buffer_address = current_frame.ui_vertex_buffer.getGPUAddress(),
+        .screnn_size = .{ width, height },
+    };
     c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(Shader.UiPushConstant), &push);
     c.vkCmdBindIndexBuffer(cmd, self.ui.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
-    c.vkCmdDrawIndexed(cmd, 6, 1, 0, 0, 0);
+    c.vkCmdDrawIndexed(cmd, @as(u32, @intCast(self.ui.quads.items.len * 6)), 1, 0, 0, 0);
     ext.vkCmdEndRendering(cmd);
 
     draw_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_READ_BIT);

@@ -18,7 +18,7 @@ pub const Quad = struct {
 };
 
 index_buffer: Buffer,
-ui_quads: std.ArrayList(Quad) = .empty,
+quads: std.ArrayList(Quad) = .empty,
 
 pub fn init(gpa: std.mem.Allocator, vma: Vma, device: Device) !@This() {
     const ui_index_buffer: Buffer = try .init(
@@ -39,11 +39,11 @@ pub fn init(gpa: std.mem.Allocator, vma: Vma, device: Device) !@This() {
     }
     return .{
         .index_buffer = ui_index_buffer,
-        .ui_quads = try .initCapacity(gpa, max_ui_quads),
+        .quads = try .initCapacity(gpa, max_ui_quads),
     };
 }
 
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma) void {
     self.index_buffer.deinit(vma);
-    self.ui_quads.deinit(gpa);
+    self.quads.deinit(gpa);
 }
