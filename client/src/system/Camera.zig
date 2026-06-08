@@ -20,7 +20,7 @@ input_map: shared.net.Command.Input = .{},
 
 transform: nz.Transform3D(f32) = .{},
 
-pub fn update(self: *@This(), info: *const Info, ui: *Ui) void {
+pub fn update(self: *@This(), gpa: std.mem.Allocator, info: *const Info, ui: *Ui) !void {
     _ = info;
 
     self.input_map.mouse_delta[0] = self.mouse_pos[0] - self.mouse_prev_pos[0];
@@ -28,19 +28,23 @@ pub fn update(self: *@This(), info: *const Info, ui: *Ui) void {
     self.mouse_prev_pos[0] = self.mouse_pos[0];
     self.mouse_prev_pos[1] = self.mouse_pos[1];
 
-    ui.quads.clearRetainingCapacity();
-    ui.quads.appendAssumeCapacity(.{ .vertices = .{
-        .{ .position = .{ 0, 0 }, .color = .{ 1, 0, 0, 1 }, .uv = .{ 0, 0 } },
-        .{ .position = .{ 100, 0 }, .color = .{ 0, 1, 0, 1 }, .uv = .{ 1, 0 } },
-        .{ .position = .{ 100, 100 }, .color = .{ 0, 0, 1, 1 }, .uv = .{ 1, 1 } },
-        .{ .position = .{ 0, 100 }, .color = .{ 0, 0, 0, 0 }, .uv = .{ 0, 1 } },
-    } });
-    ui.quads.appendAssumeCapacity(.{ .vertices = .{
-        .{ .position = .{ 100, 100 }, .color = .{ 1, 0, 0, 1 }, .uv = .{ 0, 0 } },
-        .{ .position = .{ 200, 100 }, .color = .{ 0, 1, 0, 1 }, .uv = .{ 1, 0 } },
-        .{ .position = .{ 200, 200 }, .color = .{ 0, 0, 1, 1 }, .uv = .{ 1, 1 } },
-        .{ .position = .{ 0, 200 }, .color = .{ 0, 0, 0, 0 }, .uv = .{ 0, 1 } },
-    } });
+    ui.start(gpa);
+    // ui.addRootLayout(.{ .heigth = 100, .width = 100, .postion = .{ .fixed = .{ .left = 0, .top = 0 } } });
+    const root = ui.addRootLayout(
+        .{
+            .size = .{ .fixed = .{
+                .heigth = 100,
+                .width = 100,
+            } },
+            .position = .center,
+            .color = .new(1, 0, 0, 1),
+        },
+    );
+    _ = try ui.addChildLayout(gpa, root, .{
+        .position = .{ .fixed = .{ .left = 10, .top = 10 } },
+        .size = .{ .fixed = .{ .heigth = 10, .width = 10 } },
+    });
+    ui.end();
 }
 
 pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.Event) !void {

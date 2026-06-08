@@ -106,7 +106,7 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         frame.* = try .init(self.vma, self.device);
         // std.debug.print("PTR: {*}\n", .{&frame.gpu_scene.buffer});
     }
-    self.ui = try .init(gpa, self.vma, self.device);
+    self.ui = try .init(gpa, self.vma, self.device, self.swapchain.extent.width, self.swapchain.extent.height);
 
     self.scene_layout = try .init(self.device, &.{
         .{
@@ -637,6 +637,8 @@ pub fn resize(self: *@This(), gpa: std.mem.Allocator, width: u32, height: u32) !
         width,
         height,
     );
+    self.ui.heigth = @floatFromInt(self.swapchain.extent.height);
+    self.ui.width = @floatFromInt(self.swapchain.extent.width);
 }
 
 pub fn createModelWithMesh(self: *@This(), gpa: std.mem.Allocator, name: []const u8, verices: []const Mesh.Vertex, indices: []const u32) !usize {
