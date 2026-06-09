@@ -28,19 +28,40 @@ pub fn update(self: *@This(), info: *const Info, ui: *Ui) void {
     self.mouse_prev_pos[0] = self.mouse_pos[0];
     self.mouse_prev_pos[1] = self.mouse_pos[1];
 
-    ui.start();
-    const root = ui.add(null, .{
-        .size = .{
+    const pos: [2]f32 = .{ @floatCast(self.mouse_pos[0]), @floatCast(self.mouse_pos[1]) };
+    ui.start(.{
+        .position = .{ .left = pos[0], .top = pos[1] },
+        .left_click = self.input_map.mouse_button_left,
+        .right_click = self.input_map.mouse_button_right,
+    });
+    const root = ui.add(null, null, .{
+        .size = if (ui.isHot("button")) .{
+            .heigth = 200,
+            .width = 200,
+        } else .{
             .heigth = 100,
             .width = 100,
         },
         .position = .center,
         .color = .new(1, 0, 0, 1),
     });
-    _ = ui.add(root, .{
+    _ = ui.add(root, null, .{
+        .position = .center,
+        .size = .{ .heigth = 30, .width = 10 },
+    });
+    _ = ui.add(root, "button", .{
         .position = .center,
         .size = .{ .heigth = 10, .width = 10 },
+        .color = if (ui.isHot("button")) .new(0, 1, 0, 1) else .new(0, 0, 1, 1),
     });
+
+    // if (ui.hot_item) |id| {
+    //     if (id == child) {
+    //         ui.nodes.items[child].layout.color = .new(0, 0, 1, 1);
+    //     } else if (id == root) {
+    //         ui.nodes.items[root].layout.color = .new(0, 0, 1, 1);
+    //     }
+    // }
     ui.end();
 }
 

@@ -22,6 +22,12 @@ const Position2D = struct {
     top: f32,
 };
 
+const MouseState = struct {
+    position: Position2D = .{ .left = 0, .top = 0 },
+    left_click: bool = false,
+    right_click: bool = false,
+};
+
 const Size2D = struct {
     width: f32,
     heigth: f32,
@@ -46,16 +52,26 @@ pub const Layout = struct {
 };
 
 const Node = struct {
+    id: u32,
     layout: Layout,
+    name: ?[]const u8,
     parent_id: ?u32,
     rect: Rect,
 };
 
 index_buffer: Buffer,
 quads: std.ArrayList(Quad) = .empty,
-layouts: std.ArrayList(Node) = .empty,
+nodes: std.ArrayList(Node) = .empty,
+names: std.StringArrayHashMapUnmanaged(u32) = .empty,
+mouse_state: MouseState = .{},
 screen_width: f32,
 screen_heigth: f32,
+hot_item: ?[]const u8 = null,
+active_item: ?[]const u8 = null,
+fire_item: ?[]const u8 = null,
+prev_down: bool = false,
+pressed: bool = false,
+released: bool = false,
 
 pub fn init(gpa: std.mem.Allocator, vma: Vma, device: Device, width: u32, heigth: u32) !@This() {
     const ui_index_buffer: Buffer = try .init(
@@ -74,10 +90,13 @@ pub fn init(gpa: std.mem.Allocator, vma: Vma, device: Device, width: u32, heigth
         const base: u32 = @as(u32, @intCast(i)) * 4;
         data[i * 6 ..][0..6].* = .{ base, base + 1, base + 2, base + 2, base + 3, base };
     }
+    var names: std.StringArrayHashMapUnmanaged(u32) = .empty;
+    try names.ensureTotalCapacity(gpa, max_ui_quads);
     return .{
         .index_buffer = ui_index_buffer,
         .quads = try .initCapacity(gpa, max_ui_quads),
-        .layouts = try .initCapacity(gpa, max_ui_quads),
+        .nodes = try .initCapacity(gpa, max_ui_quads),
+        .names = names,
         .screen_width = @floatFromInt(width),
         .screen_heigth = @floatFromInt(heigth),
     };
@@ -86,21 +105,28 @@ pub fn init(gpa: std.mem.Allocator, vma: Vma, device: Device, width: u32, heigth
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma) void {
     self.index_buffer.deinit(vma);
     self.quads.deinit(gpa);
-    self.layouts.deinit(gpa);
+    self.nodes.deinit(gpa);
+    self.names.deinit(gpa);
 }
 
-pub fn start(self: *@This()) void {
-    self.layouts.clearRetainingCapacity();
+pub fn start(self: *@This(), mouse_state: MouseState) void {
+    self.hotUpdate();
+    self.nodes.clearRetainingCapacity();
     self.quads.clearRetainingCapacity();
+    self.names.clearRetainingCapacity();
+    self.mouse_state = mouse_state;
 }
 
-pub fn add(self: *@This(), parent_id: ?u32, layout: Layout) u32 {
-    const handle: u32 = @intCast(self.layouts.items.len);
-    self.layouts.appendAssumeCapacity(.{
+pub fn add(self: *@This(), parent_id: ?u32, name: ?[]const u8, layout: Layout) u32 {
+    const handle: u32 = @intCast(self.nodes.items.len);
+    self.nodes.appendAssumeCapacity(.{
+        .id = @intCast(self.nodes.items.len),
+        .name = name,
         .layout = layout,
         .parent_id = parent_id,
         .rect = .{ .left = 0, .top = 0, .width = 0, .heigth = 0 },
     });
+    if (name) |add_name| self.names.putAssumeCapacity(add_name, handle);
     return handle;
 }
 
@@ -110,12 +136,12 @@ pub fn end(self: *@This()) void {
 }
 
 fn resolveLayout(self: *@This()) void {
-    for (self.layouts.items) |*node| {
+    for (self.nodes.items) |*node| {
         node.rect.width = node.layout.size.width;
         node.rect.heigth = node.layout.size.heigth;
 
         const origin: Rect = if (node.parent_id) |parent_id|
-            self.layouts.items[parent_id].rect
+            self.nodes.items[parent_id].rect
         else
             .{ .left = 0, .top = 0, .width = self.screen_width, .heigth = self.screen_heigth };
 
@@ -133,7 +159,7 @@ fn resolveLayout(self: *@This()) void {
 }
 
 fn pushQuads(self: *@This()) void {
-    for (self.layouts.items) |node| {
+    for (self.nodes.items) |node| {
         const rect = node.rect;
         const colors: [4]f32 = node.layout.color.toVec();
         //left_top, right_top, right_bottom, left_bottom
@@ -144,4 +170,41 @@ fn pushQuads(self: *@This()) void {
             .{ .position = .{ rect.left, rect.top + rect.heigth }, .color = colors, .uv = .{ 0, 1 } },
         } });
     }
+}
+
+// pub fn clicked(self: *@This(), id: u32) ?*Layout {
+//     if (id >= self.nodes.items.len) return null;
+//     const node = self.nodes.items[id];
+// }
+
+pub fn isHot(self: *@This(), name: []const u8) bool {
+    return eqlName(name, self.hot_item);
+}
+
+fn hotUpdate(self: *@This()) void {
+    self.hot_item = null;
+    var i = self.nodes.items.len;
+    while (i > 0) {
+        i -= 1;
+        const node = self.nodes.items[i];
+        const name = node.name orelse continue;
+        if (!(self.mouse_state.position.left < node.rect.left or
+            self.mouse_state.position.top < node.rect.top or
+            self.mouse_state.position.left >= node.rect.left + node.rect.width or
+            self.mouse_state.position.top >= node.rect.top + node.rect.heigth))
+        {
+            self.hot_item = name;
+            break;
+        }
+    }
+}
+
+// fn activeUpdate(self: *@This()) void {
+//
+// }
+
+fn eqlName(a: ?[]const u8, b: ?[]const u8) bool {
+    if (a == null or b == null)
+        return false;
+    return std.mem.eql(u8, a.?, b.?);
 }
