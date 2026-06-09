@@ -637,8 +637,8 @@ pub fn resize(self: *@This(), gpa: std.mem.Allocator, width: u32, height: u32) !
         width,
         height,
     );
-    self.ui.heigth = @floatFromInt(self.swapchain.extent.height);
-    self.ui.width = @floatFromInt(self.swapchain.extent.width);
+    self.ui.screen_heigth = @floatFromInt(self.swapchain.extent.height);
+    self.ui.screen_width = @floatFromInt(self.swapchain.extent.width);
 }
 
 pub fn createModelWithMesh(self: *@This(), gpa: std.mem.Allocator, name: []const u8, verices: []const Mesh.Vertex, indices: []const u32) !usize {

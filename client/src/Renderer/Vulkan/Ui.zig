@@ -22,6 +22,11 @@ const Position2D = struct {
     top: f32,
 };
 
+const Size2D = struct {
+    width: f32,
+    heigth: f32,
+};
+
 const Rect = struct {
     left: f32,
     top: f32,
@@ -34,30 +39,23 @@ pub const Layout = struct {
         fixed: Position2D,
         center: void,
     };
-    pub const Size = union(enum) {
-        fixed: struct {
-            width: f32,
-            heigth: f32,
-        },
-        fit: void,
-    };
 
     position: Position,
-    size: Size,
+    size: Size2D,
     color: nz.color.Rgba(f32) = .grey,
 };
 
 const Node = struct {
-    desc: Layout,
-    parent: ?u32,
+    layout: Layout,
+    parent_id: ?u32,
     rect: Rect,
 };
 
 index_buffer: Buffer,
 quads: std.ArrayList(Quad) = .empty,
 layouts: std.ArrayList(Node) = .empty,
-width: f32,
-heigth: f32,
+screen_width: f32,
+screen_heigth: f32,
 
 pub fn init(gpa: std.mem.Allocator, vma: Vma, device: Device, width: u32, heigth: u32) !@This() {
     const ui_index_buffer: Buffer = try .init(
@@ -80,8 +78,8 @@ pub fn init(gpa: std.mem.Allocator, vma: Vma, device: Device, width: u32, heigth
         .index_buffer = ui_index_buffer,
         .quads = try .initCapacity(gpa, max_ui_quads),
         .layouts = try .initCapacity(gpa, max_ui_quads),
-        .width = @floatFromInt(width),
-        .heigth = @floatFromInt(heigth),
+        .screen_width = @floatFromInt(width),
+        .screen_heigth = @floatFromInt(heigth),
     };
 }
 
@@ -96,56 +94,32 @@ pub fn start(self: *@This()) void {
     self.quads.clearRetainingCapacity();
 }
 
-pub fn add(self: *@This(), parent: ?u32, desc: Layout) u32 {
+pub fn add(self: *@This(), parent_id: ?u32, layout: Layout) u32 {
     const handle: u32 = @intCast(self.layouts.items.len);
     self.layouts.appendAssumeCapacity(.{
-        .desc = desc,
-        .parent = parent,
+        .layout = layout,
+        .parent_id = parent_id,
         .rect = .{ .left = 0, .top = 0, .width = 0, .heigth = 0 },
     });
     return handle;
 }
 
 pub fn end(self: *@This()) void {
-    self.resolveSizes();
-    self.resolvePositions();
-    self.emitQuads();
+    self.resolveLayout();
+    self.pushQuads();
 }
 
-fn resolveSizes(self: *@This()) void {
-    var i: usize = self.layouts.items.len;
-    while (i > 0) {
-        i -= 1;
-        const node = &self.layouts.items[i];
-        switch (node.desc.size) {
-            .fixed => |size| {
-                node.rect.width = size.width;
-                node.rect.heigth = size.heigth;
-            },
-            .fit => {},
-        }
-
-        const parent_idx = node.parent orelse continue;
-        const parent = &self.layouts.items[parent_idx];
-        if (parent.desc.size == .fit) {
-            const off: Position2D = switch (node.desc.position) {
-                .fixed => |position| position,
-                .center => .{ .left = 0, .top = 0 },
-            };
-            parent.rect.width = @max(parent.rect.width, off.left + node.rect.width);
-            parent.rect.heigth = @max(parent.rect.heigth, off.top + node.rect.heigth);
-        }
-    }
-}
-
-fn resolvePositions(self: *@This()) void {
+fn resolveLayout(self: *@This()) void {
     for (self.layouts.items) |*node| {
-        const origin: Rect = if (node.parent) |parent_id|
+        node.rect.width = node.layout.size.width;
+        node.rect.heigth = node.layout.size.heigth;
+
+        const origin: Rect = if (node.parent_id) |parent_id|
             self.layouts.items[parent_id].rect
         else
-            .{ .left = 0, .top = 0, .width = self.width, .heigth = self.heigth };
+            .{ .left = 0, .top = 0, .width = self.screen_width, .heigth = self.screen_heigth };
 
-        switch (node.desc.position) {
+        switch (node.layout.position) {
             .fixed => |position| {
                 node.rect.left = origin.left + position.left;
                 node.rect.top = origin.top + position.top;
@@ -158,16 +132,16 @@ fn resolvePositions(self: *@This()) void {
     }
 }
 
-fn emitQuads(self: *@This()) void {
+fn pushQuads(self: *@This()) void {
     for (self.layouts.items) |node| {
-        const r = node.rect;
-        const colors: [4]f32 = node.desc.color.toVec();
+        const rect = node.rect;
+        const colors: [4]f32 = node.layout.color.toVec();
         //left_top, right_top, right_bottom, left_bottom
         self.quads.appendAssumeCapacity(.{ .vertices = .{
-            .{ .position = .{ r.left, r.top }, .color = colors, .uv = .{ 0, 0 } },
-            .{ .position = .{ r.left + r.width, r.top }, .color = colors, .uv = .{ 1, 0 } },
-            .{ .position = .{ r.left + r.width, r.top + r.heigth }, .color = colors, .uv = .{ 1, 1 } },
-            .{ .position = .{ r.left, r.top + r.heigth }, .color = colors, .uv = .{ 0, 1 } },
+            .{ .position = .{ rect.left, rect.top }, .color = colors, .uv = .{ 0, 0 } },
+            .{ .position = .{ rect.left + rect.width, rect.top }, .color = colors, .uv = .{ 1, 0 } },
+            .{ .position = .{ rect.left + rect.width, rect.top + rect.heigth }, .color = colors, .uv = .{ 1, 1 } },
+            .{ .position = .{ rect.left, rect.top + rect.heigth }, .color = colors, .uv = .{ 0, 1 } },
         } });
     }
 }

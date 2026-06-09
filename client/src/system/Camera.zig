@@ -30,16 +30,16 @@ pub fn update(self: *@This(), info: *const Info, ui: *Ui) void {
 
     ui.start();
     const root = ui.add(null, .{
-        .size = .{ .fixed = .{
+        .size = .{
             .heigth = 100,
             .width = 100,
-        } },
+        },
         .position = .center,
         .color = .new(1, 0, 0, 1),
     });
     _ = ui.add(root, .{
         .position = .center,
-        .size = .{ .fixed = .{ .heigth = 10, .width = 10 } },
+        .size = .{ .heigth = 10, .width = 10 },
     });
     ui.end();
 }
