@@ -35,37 +35,44 @@ pub fn update(self: *@This(), info: *const Info, ui: *Ui) void {
         .right_click = self.input_map.mouse_button_right,
     });
     const root = ui.add(null, null, .{
-        .size = if (ui.isHot("button")) .{
-            .heigth = 200,
-            .width = 200,
-        } else .{
-            .heigth = 100,
-            .width = 100,
-        },
+        .size = .{ .fixed = .{
+            .heigth = 500,
+            .width = 400,
+        } },
         .position = .center,
-        .color = .new(1, 0, 0, 1),
+        .color = .new(0.5, 0.5, 0.5, 0.8),
+        .axis_align = .verical,
     });
     _ = ui.add(root, null, .{
-        .position = .center,
-        .size = .{ .heigth = 30, .width = 10 },
+        .position = .{ .fixed = .{ .left = 20, .top = 10 } },
+        .size = .{ .percent = .{ .heigth = 0.20, .width = 0.9 } },
     });
-    _ = ui.add(root, "button", .{
-        .position = .center,
-        .size = .{ .heigth = 10, .width = 10 },
-        .color = if (ui.isHot("button")) .new(0, 1, 0, 1) else .new(0, 0, 1, 1),
+    _ = ui.add(root, null, .{
+        .position = .{ .fixed = .{ .left = 20, .top = 20 } },
+        .size = .{ .percent = .{ .heigth = 0.20, .width = 0.9 } },
+        .color = .new(1, 0, 0, 1),
     });
-
-    if (ui.isActive("button")) {
-        _ = ui.add(null, null, .{
-            .position = .{
-                .fixed = .{
-                    .left = 10,
-                    .top = 10,
-                },
-            },
-            .size = .{ .heigth = 100, .width = 100 },
-        });
-    }
+    // _ = ui.add(root, null, .{
+    //     .position = .center,
+    //     .size = .{ .percent = .{ .heigth = 0.20, .width = 0.9 } },
+    // });
+    // _ = ui.add(root, "button", .{
+    //     .position = .center,
+    //     .size = .{ .heigth = 10, .width = 10 },
+    //     .color = if (ui.isHot("button")) .new(0, 1, 0, 1) else .new(0, 0, 1, 1),
+    // });
+    //
+    // if (ui.isActive("button")) {
+    //     _ = ui.add(null, null, .{
+    //         .position = .{
+    //             .fixed = .{
+    //                 .left = 10,
+    //                 .top = 10,
+    //             },
+    //         },
+    //         .size = .{ .heigth = 100, .width = 100 },
+    //     });
+    // }
     ui.end();
 }
 

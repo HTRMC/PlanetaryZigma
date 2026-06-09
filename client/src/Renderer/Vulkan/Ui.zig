@@ -41,14 +41,20 @@ const Rect = struct {
 };
 
 pub const Layout = struct {
+    pub const AxisAlign = enum(u8) { horizontal, verical };
     pub const Position = union(enum) {
         fixed: Position2D,
         center: void,
     };
+    pub const Size = union(enum) {
+        fixed: Size2D,
+        percent: Size2D,
+    };
 
     position: Position,
-    size: Size2D,
+    size: Size,
     color: nz.color.Rgba(f32) = .grey,
+    axis_align: AxisAlign = .horizontal,
 };
 
 const Node = struct {
@@ -57,6 +63,7 @@ const Node = struct {
     name: ?[]const u8,
     parent_id: ?u32,
     rect: Rect,
+    offset: f32,
 };
 
 index_buffer: Buffer,
@@ -127,6 +134,7 @@ pub fn add(self: *@This(), parent_id: ?u32, name: ?[]const u8, layout: Layout) u
         .layout = layout,
         .parent_id = parent_id,
         .rect = .{ .left = 0, .top = 0, .width = 0, .heigth = 0 },
+        .offset = 0,
     });
     if (name) |add_name| self.names.putAssumeCapacity(add_name, handle);
     return handle;
@@ -137,25 +145,51 @@ pub fn end(self: *@This()) void {
     self.pushQuads();
 }
 
+//TODO: add FIT,
+//add percent position,
+//add indivual component properties (width: fixed, heigth: center).
 fn resolveLayout(self: *@This()) void {
     for (self.nodes.items) |*node| {
-        node.rect.width = node.layout.size.width;
-        node.rect.heigth = node.layout.size.heigth;
+        const parent_node = if (node.parent_id) |parent_id| &self.nodes.items[parent_id] else null;
+        const origin: Rect = if (parent_node) |parent| parent.rect else .{
+            .left = 0,
+            .top = 0,
+            .width = self.screen_width,
+            .heigth = self.screen_heigth,
+        };
 
-        const origin: Rect = if (node.parent_id) |parent_id|
-            self.nodes.items[parent_id].rect
-        else
-            .{ .left = 0, .top = 0, .width = self.screen_width, .heigth = self.screen_heigth };
+        switch (node.layout.size) {
+            .fixed => |size| {
+                node.rect.width = size.width;
+                node.rect.heigth = size.heigth;
+            },
+            .percent => |percent| {
+                node.rect.width = percent.width * origin.width;
+                node.rect.heigth = percent.heigth * origin.heigth;
+            },
+        }
 
+        var offset_top: f32 = 0;
+        var offset_left: f32 = 0;
+        if (parent_node) |parent| {
+            if (parent.layout.axis_align == .horizontal) offset_left = parent.offset else offset_top = parent.offset;
+        }
         switch (node.layout.position) {
             .fixed => |position| {
-                node.rect.left = origin.left + position.left;
-                node.rect.top = origin.top + position.top;
+                node.rect.left = origin.left + position.left + offset_left;
+                node.rect.top = origin.top + position.top + offset_top;
             },
             .center => {
-                node.rect.left = origin.left + (origin.width - node.rect.width) / 2;
-                node.rect.top = origin.top + (origin.heigth - node.rect.heigth) / 2;
+                node.rect.left = origin.left + (origin.width - node.rect.width - offset_left) / 2;
+                node.rect.top = origin.top + (origin.heigth - node.rect.heigth - offset_top) / 2;
             },
+        }
+
+        if (parent_node) |parent| {
+            parent.offset += switch (parent.layout.axis_align) {
+                .horizontal => node.rect.width,
+                .verical => node.rect.heigth,
+            };
         }
     }
 }
