@@ -42,7 +42,7 @@ pub fn init(
 }
 
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma) void {
-    if (self.buffer) |buffer| buffer.deinit(vma);
+    if (self.buffer) |*buffer| buffer.deinit(vma);
     gpa.free(self.name);
     if (self.inverse_bind_matrices) |*matrices| matrices.deinit(gpa);
     self.joints.deinit(gpa);

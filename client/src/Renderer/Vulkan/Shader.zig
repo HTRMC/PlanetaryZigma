@@ -10,27 +10,40 @@ handle: c.VkShaderEXT = null,
 device: Device,
 shader_create_info: c.VkShaderCreateInfoEXT,
 shader_name: []const u8,
+push_constant_size: u32,
 
-pub const PushConstant = extern struct {
+pub const AnimationPushConstant = extern struct {
     model_matrix: [16]f32,
     vertex_buffer_address: c.VkDeviceAddress,
     inverse_bind_matrices_addess: c.VkDeviceAddress,
 };
+pub const UiPushConstant = extern struct {
+    vertex_buffer_address: c.VkDeviceAddress,
+    screnn_size: [2]f32,
+};
 
-pub fn init(gpa: std.mem.Allocator, device: Device, asset_server: *AssetServer, sahder_create_info: c.VkShaderCreateInfoEXT, shader_name: []const u8) !*@This() {
+pub fn init(
+    gpa: std.mem.Allocator,
+    device: Device,
+    asset_server: *AssetServer,
+    shader_create_info: c.VkShaderCreateInfoEXT,
+    shader_name: []const u8,
+    push_constant_type: type,
+) !*@This() {
     const self = try gpa.create(@This());
     self.* = .{
         .device = device,
-        .shader_create_info = sahder_create_info,
+        .shader_create_info = shader_create_info,
         .shader_name = shader_name,
         .handle = null,
+        .push_constant_size = @sizeOf(push_constant_type),
     };
     try asset_server.loadAsset(@This(), self, shader_name, loadShader);
     return self;
 }
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     ext.vkDestroyShaderEXT(self.device.handle, self.handle, null);
-    self.* = undefined;
+    // self.* = undefined;
     gpa.destroy(self);
 }
 
@@ -48,7 +61,7 @@ fn loadShader(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: s
     const ranges: c.VkPushConstantRange = .{
         .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT | c.VK_SHADER_STAGE_FRAGMENT_BIT,
         .offset = 0,
-        .size = @sizeOf(PushConstant),
+        .size = self.push_constant_size,
     };
     const shader_kind: c_uint = switch (self.shader_create_info.stage) {
         c.VK_SHADER_STAGE_VERTEX_BIT => shaderc.shaderc_glsl_vertex_shader,
@@ -57,17 +70,17 @@ fn loadShader(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: s
     };
 
     //TODO: Trim the name out of the path instead.
-    const shader_name: []const u8 = switch (self.shader_create_info.stage) {
-        c.VK_SHADER_STAGE_VERTEX_BIT => "vertex.vert",
-        c.VK_SHADER_STAGE_FRAGMENT_BIT => "fragment.frag",
-        else => unreachable,
-    };
+    // const shader_name: []const u8 = switch (self.shader_create_info.stage) {
+    //     c.VK_SHADER_STAGE_VERTEX_BIT => "vertex.vert",
+    //     c.VK_SHADER_STAGE_FRAGMENT_BIT => "fragment.frag",
+    //     else => unreachable,
+    // };
     const result = shaderc.shaderc_compile_into_spv(
         compiler,
         content.ptr,
         content.len,
         shader_kind,
-        shader_name.ptr,
+        self.shader_name.ptr,
         "main",
         null,
     );
