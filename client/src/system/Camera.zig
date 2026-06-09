@@ -55,13 +55,17 @@ pub fn update(self: *@This(), info: *const Info, ui: *Ui) void {
         .color = if (ui.isHot("button")) .new(0, 1, 0, 1) else .new(0, 0, 1, 1),
     });
 
-    // if (ui.hot_item) |id| {
-    //     if (id == child) {
-    //         ui.nodes.items[child].layout.color = .new(0, 0, 1, 1);
-    //     } else if (id == root) {
-    //         ui.nodes.items[root].layout.color = .new(0, 0, 1, 1);
-    //     }
-    // }
+    if (ui.isActive("button")) {
+        _ = ui.add(null, null, .{
+            .position = .{
+                .fixed = .{
+                    .left = 10,
+                    .top = 10,
+                },
+            },
+            .size = .{ .heigth = 100, .width = 100 },
+        });
+    }
     ui.end();
 }
 

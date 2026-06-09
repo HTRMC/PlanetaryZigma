@@ -69,7 +69,7 @@ screen_heigth: f32,
 hot_item: ?[]const u8 = null,
 active_item: ?[]const u8 = null,
 fire_item: ?[]const u8 = null,
-prev_down: bool = false,
+left_click_prev: bool = false,
 pressed: bool = false,
 released: bool = false,
 
@@ -111,6 +111,8 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma) void {
 
 pub fn start(self: *@This(), mouse_state: MouseState) void {
     self.hotUpdate();
+    // self.activeUpdate();
+    self.left_click_prev = mouse_state.left_click;
     self.nodes.clearRetainingCapacity();
     self.quads.clearRetainingCapacity();
     self.names.clearRetainingCapacity();
@@ -181,6 +183,10 @@ pub fn isHot(self: *@This(), name: []const u8) bool {
     return eqlName(name, self.hot_item);
 }
 
+pub fn isActive(self: *@This(), name: []const u8) bool {
+    return (eqlName(name, self.hot_item) and self.mouse_state.left_click);
+}
+
 fn hotUpdate(self: *@This()) void {
     self.hot_item = null;
     var i = self.nodes.items.len;
@@ -200,7 +206,8 @@ fn hotUpdate(self: *@This()) void {
 }
 
 // fn activeUpdate(self: *@This()) void {
-//
+//     if (self.hot_item)
+//     if (self.left_click_prev) return;
 // }
 
 fn eqlName(a: ?[]const u8, b: ?[]const u8) bool {
