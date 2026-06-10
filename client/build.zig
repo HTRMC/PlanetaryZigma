@@ -13,12 +13,19 @@ pub fn build(b: *std.Build) void {
     const zgltf = b.dependency("zgltf", .{ .target = target, .optimize = optimize }).module("zgltf");
 
     const stb_dep = b.dependency("stb", .{});
-    const stb = b.addTranslateC(.{
+    const stb_image = b.addTranslateC(.{
         .root_source_file = stb_dep.path("stb_image.h"),
         .target = target,
         .optimize = optimize,
     });
-    stb.addIncludePath(b.dependency("stb", .{}).path("."));
+    stb_image.addIncludePath(b.dependency("stb", .{}).path("."));
+
+    const stb_truetype = b.addTranslateC(.{
+        .root_source_file = stb_dep.path("stb_truetype.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    stb_truetype.addIncludePath(b.dependency("stb", .{}).path("."));
 
     const system = b.addLibrary(.{
         .name = "system_client",
@@ -30,7 +37,8 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "shared", .module = shared },
                 .{ .name = "yes", .module = yes },
                 .{ .name = "zgltf", .module = zgltf },
-                .{ .name = "stb", .module = stb.createModule() },
+                .{ .name = "stb_image", .module = stb_image.createModule() },
+                .{ .name = "stb_truetype", .module = stb_truetype.createModule() },
             },
             .link_libc = true,
         }),
@@ -43,6 +51,8 @@ pub fn build(b: *std.Build) void {
         .file = b.addWriteFiles().add("stbi_impl.c",
             \\#define STB_IMAGE_IMPLEMENTATION
             \\#include "stb_image.h"
+            \\#define STB_TRUETYPE_IMPLEMENTATION
+            \\#include "stb_truetype.h"
         ),
     });
     system.root_module.addIncludePath(stb_dep.path("."));

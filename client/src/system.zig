@@ -120,17 +120,7 @@ pub const Context = struct {
     pub fn update(self: *@This(), info: *const Info) !void {
         for (info.world.entities.values()) |*entity| {
             if (!entity.flags.camera or !entity.flags.transform) continue;
-
-            // if (entity.camera.input_map.forward) {
-            //     std.log.debug("my_id: {d}, client_id: {d}", .{
-            //         entity.id,
-            //         info.world.enitity_mapping.get(info.world.my_server_id).?,
-            //     });
-            //     std.log.debug("MyserverID: {d}, ", .{info.world.my_server_id});
-            // }
             entity.camera.update(info, &self.renderer.inner.ui);
-            // entity.transform.scale = @splat(1);
-            // entity.model_id = 0;
             try self.renderer.update(info);
             try self.animation.update(info, &self.renderer.inner.models);
             break;
