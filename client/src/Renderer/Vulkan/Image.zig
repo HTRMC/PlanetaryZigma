@@ -87,8 +87,9 @@ pub fn deinit(self: *@This(), vulkan_mem_alloc: Vma, device: Device) void {
     Vma.c.vmaDestroyImage(vulkan_mem_alloc.handle, @ptrCast(self.vk_image), self.vma_allocation);
 }
 
-pub fn uploadDataToImage(self: *@This(), vma: Vma, device: Device, data: anytype) !void {
-    const data_size: u32 = self.extent.depth * self.extent.width * self.extent.height * 4;
+pub fn uploadDataToImage(self: *@This(), vma: Vma, device: Device, data: anytype, bytes_per_pixel: u32) !void {
+    const data_size: u32 = self.extent.depth * self.extent.width * self.extent.height * bytes_per_pixel;
+
     var upload_buffer: Buffer = try .init(
         device,
         vma,

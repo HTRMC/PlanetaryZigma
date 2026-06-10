@@ -55,6 +55,7 @@ pub const Layout = struct {
     size: Size,
     color: nz.color.Rgba(f32) = .grey,
     axis_align: AxisAlign = .horizontal,
+    gap: f32 = 0,
     name: ?[]const u8 = null,
     children: []const Layout = &.{},
 };
@@ -152,9 +153,6 @@ pub fn end(self: *@This()) void {
     self.pushQuads();
 }
 
-//TODO: add FIT,
-//add percent position,
-//add indivual component properties (width: fixed, heigth: center).
 fn resolveLayout(self: *@This()) void {
     for (self.nodes.items) |*node| {
         const parent_node = if (node.parent_id) |parent_id| &self.nodes.items[parent_id] else null;
@@ -193,7 +191,7 @@ fn resolveLayout(self: *@This()) void {
         }
 
         if (parent_node) |parent| {
-            parent.offset += switch (parent.layout.axis_align) {
+            parent.offset += parent.layout.gap + switch (parent.layout.axis_align) {
                 .horizontal => node.rect.width,
                 .verical => node.rect.heigth,
             };

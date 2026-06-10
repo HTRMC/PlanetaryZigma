@@ -2,7 +2,7 @@ const std = @import("std");
 const c = @import("vulkan");
 const nz = @import("shared").numz;
 const zgltf = @import("zgltf");
-const stb = @import("stb");
+const stb_image = @import("stb_image");
 const Vma = @import("Vma.zig");
 const AssetServer = @import("shared").AssetServer;
 const Device = @import("device.zig").Logical;
@@ -124,21 +124,21 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
         std.log.info("image count was {d}", .{images.len});
         for (images) |image| {
             if (image.uri == null and image.bufferView == null) return error.FailedToLoadGLTFImage;
-            var pixels: [*c]stb.stbi_uc = null;
+            var pixels: [*c]stb_image.stbi_uc = null;
             var width: i32, var height: i32, var nr_channel: i32 = .{ 0, 0, 0 };
             if (image.uri) |uri| {
                 try if (std.mem.eql(u8, "data:", uri[0..5])) error.DataNotsupported;
                 const c_uri = try gpa.dupeSentinel(u8, uri, 0);
                 defer gpa.free(c_uri);
-                pixels = stb.stbi_load(c_uri, &width, &height, &nr_channel, 4);
+                pixels = stb_image.stbi_load(c_uri, &width, &height, &nr_channel, 4);
             } else if (image.bufferView) |buffer_view_index| {
                 const buffer_view = gltf_loaded.bufferViews.?[buffer_view_index];
                 const bytes_offset = buffer_view.byteOffset;
                 const byte_len = buffer_view.byteLength;
                 const bytes = bin[bytes_offset .. bytes_offset + byte_len];
-                pixels = stb.stbi_load_from_memory(bytes.ptr, @intCast(bytes.len), &width, &height, &nr_channel, 4);
+                pixels = stb_image.stbi_load_from_memory(bytes.ptr, @intCast(bytes.len), &width, &height, &nr_channel, 4);
             }
-            defer stb.stbi_image_free(pixels);
+            defer stb_image.stbi_image_free(pixels);
             try if (pixels == null) error.LoadingStbi;
             var new_image: Image = try .init(
                 self.vma,
@@ -149,7 +149,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                 c.VK_IMAGE_ASPECT_COLOR_BIT,
                 true,
             );
-            try new_image.uploadDataToImage(self.vma, self.device, pixels);
+            try new_image.uploadDataToImage(self.vma, self.device, pixels, 4);
             try self.render_resources.images.append(gpa, new_image);
         }
     } else {

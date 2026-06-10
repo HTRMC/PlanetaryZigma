@@ -45,7 +45,6 @@ pub fn deinit(self: *@This(), io: std.Io) void {
 }
 
 pub fn load(self: *@This(), io: std.Io) !void {
-    std.log.debug("NEW", .{});
     var source_buf: [std.fs.max_path_bytes]u8 = undefined;
     const source_path = try std.fmt.bufPrint(&source_buf, "{s}{s}", .{ self.dir_path, self.source_name });
 

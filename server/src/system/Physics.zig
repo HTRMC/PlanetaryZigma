@@ -306,7 +306,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         const up_len = nz.vec.length(entity.transform.position);
         if (up_len < 0.0001) continue;
         const up = nz.vec.scale(entity.transform.position, 1.0 / up_len);
-        body_interface.addForce(body_id, nz.vec.scale(-up, 100000));
+        body_interface.addForce(body_id, nz.vec.scale(-up, 1000000));
     }
 
     self.physics_system.update(info.delta_time, .{}) catch unreachable;

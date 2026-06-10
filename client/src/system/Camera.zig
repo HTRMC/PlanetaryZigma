@@ -40,21 +40,39 @@ pub fn update(self: *@This(), info: *const Info, ui: *Ui) void {
             .heigth = 500,
             .width = 400,
         } },
+        .gap = 10,
         .position = .center,
         .color = .new(0.5, 0.5, 0.5, 0.8),
         .axis_align = .verical,
-        .children = &.{.{
-            .position = .{ .fixed = .{ .left = 20, .top = 10 } },
-            .size = .{ .percent = .{ .heigth = 0.20, .width = 0.9 } },
-        }},
+        .children = &.{
+            .{
+                .position = .{ .fixed = .{ .left = 0, .top = 0 } },
+                .size = .{ .percent = .{ .heigth = 0.20, .width = 1 } },
+                .color = .new(1, 0, 0, 1),
+                .axis_align = .horizontal,
+                .gap = 20,
+                .children = &.{ .{
+                    .position = .{ .fixed = .{ .left = 0, .top = 0 } },
+                    .size = .{ .percent = .{ .heigth = 1, .width = 0.4 } },
+                    .color = .new(1, 1, 0, 1),
+                }, .{
+                    .name = "button",
+                    .position = .{ .fixed = .{ .left = 0, .top = 0 } },
+                    .size = .{ .percent = .{ .heigth = 1, .width = if (ui.isHot("button")) 1 else 0.4 } },
+                    .color = if (ui.isHot("button")) .new(1, 1, 1, 1) else .new(1, 1, 0, 1),
+                } },
+            },
+            .{
+                .position = .{ .fixed = .{ .left = 0, .top = 0 } },
+                .size = .{ .percent = .{ .heigth = 0.20, .width = 1 } },
+                .color = .new(1, 1, 0, 1),
+            },
+        },
     });
+    if (ui.isActive("button")) {
+        std.log.debug("Pressed button", .{});
+    }
 
-    ui.add("panel", .{
-        .name = "test",
-        .position = .{ .fixed = .{ .left = 20, .top = 10 } },
-        .size = .{ .percent = .{ .heigth = 0.50, .width = 0.9 } },
-        .color = if (ui.isHot("test")) .new(1, 1, 0, 1) else .new(1, 0, 0, 1),
-    });
     ui.end();
 }
 
