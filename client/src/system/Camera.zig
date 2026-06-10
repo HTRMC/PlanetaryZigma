@@ -53,7 +53,7 @@ pub fn update(self: *@This(), info: *const Info, ui: *Ui) void {
         .name = "test",
         .position = .{ .fixed = .{ .left = 20, .top = 10 } },
         .size = .{ .percent = .{ .heigth = 0.50, .width = 0.9 } },
-        .color = if (ui.isHot("test")) .new(1, 0, 0, 1) else .new(1, 1, 1, 1),
+        .color = if (ui.isHot("test")) .new(1, 1, 0, 1) else .new(1, 0, 0, 1),
     });
     ui.end();
 }

@@ -54,7 +54,7 @@ pub fn main(init: std.process.Init) !void {
     var world: World = try .init(gpa);
     defer world.deinit();
 
-    var watcher: shared.Watcher = try .init("system_client_", io);
+    var watcher: shared.Watcher = try .init("system_client", io);
     defer watcher.deinit(io);
     try watcher.load(io);
 

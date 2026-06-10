@@ -12,8 +12,6 @@ pub fn build(b: *std.Build) void {
         },
     });
     const optimize = b.standardOptimizeOption(.{});
-    const io = b.graph.io;
-    std.Io.Dir.cwd().deleteTree(io, "zig-out/lib/") catch unreachable;
     const zphysics = b.dependency("zphysics", .{
         .use_double_precision = false,
         .enable_cross_platform_determinism = true,
@@ -24,9 +22,8 @@ pub fn build(b: *std.Build) void {
     const steam_dep = b.dependency("zig_steamworks", .{ .target = target, .optimize = optimize });
     const steam_module = steam_dep.module("steamworks");
 
-    const time = std.Io.Timestamp.now(io, .real);
     const system = b.addLibrary(.{
-        .name = b.fmt("system_server_{d}", .{time}),
+        .name = "system_server",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/system.zig"),
             .target = target,
