@@ -4,9 +4,6 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const io = b.graph.io;
-    std.Io.Dir.cwd().deleteTree(io, "zig-out/lib/") catch unreachable;
-
     const shared = b.dependency("shared", .{ .target = target, .optimize = optimize }).module("shared");
     const yes = b.dependency("yes", .{ .target = target, .optimize = optimize, .x_backend = .xlib }).module("yes");
 
@@ -23,9 +20,8 @@ pub fn build(b: *std.Build) void {
     });
     stb.addIncludePath(b.dependency("stb", .{}).path("."));
 
-    const time = std.Io.Timestamp.now(io, .real);
     const system = b.addLibrary(.{
-        .name = b.fmt("system_client_{d}", .{time}),
+        .name = "system_client",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/system.zig"),
             .target = target,

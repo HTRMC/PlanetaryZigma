@@ -1,14 +1,14 @@
 const std = @import("std");
-const builtin = @import("builtin");
 
 dynlib: ?std.DynLib = null,
 old_dynlib: ?std.DynLib = null,
 dir_path: []const u8,
+source_name: []const u8,
 mtime: std.Io.Timestamp,
-lib_name: []const u8,
+copy_id: u64,
 
 pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
-    const lib_name = "lib" ++ library_name;
+    const source_name = "lib" ++ library_name ++ ".so";
     const search_paths: []const [:0]const u8 = &.{
         "../lib/",
         "zig-out/lib/",
@@ -26,14 +26,15 @@ pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
         var it = dir.iterate();
         while (try it.next(io)) |entry| {
             if (entry.kind != .file) continue;
-            if (std.mem.startsWith(u8, entry.name, lib_name)) break :path path;
+            if (std.mem.eql(u8, entry.name, source_name)) break :path path;
         }
     } else return error.NoLibraryPathFound;
 
     return .{
         .dir_path = found_path,
+        .source_name = source_name,
         .mtime = .zero,
-        .lib_name = lib_name,
+        .copy_id = 0,
     };
 }
 
@@ -44,49 +45,51 @@ pub fn deinit(self: *@This(), io: std.Io) void {
 }
 
 pub fn load(self: *@This(), io: std.Io) !void {
-    const dir = try std.Io.Dir.cwd().openDir(io, self.dir_path, .{ .iterate = true });
-    defer dir.close(io);
+    std.log.debug("NEW", .{});
+    var source_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const source_path = try std.fmt.bufPrint(&source_buf, "{s}{s}", .{ self.dir_path, self.source_name });
 
-    var it = dir.iterate();
-    std.log.debug("LIBNAME: {s}", .{self.lib_name});
-    const file_name = while (try it.next(io)) |entry| {
-        std.log.debug("FILE_NAME: {s}", .{entry.name});
-        if (entry.kind != .file) continue;
-        if (!std.mem.startsWith(u8, entry.name, self.lib_name)) continue;
-        break entry.name;
-    } else return error.FileNotFound;
-    var full_path_buffer: [std.fs.max_path_bytes]u8 = undefined;
-    const full_path = try std.fmt.bufPrint(&full_path_buffer, "{s}{s}", .{ self.dir_path, file_name });
-    std.log.debug("Full path: {s}", .{full_path});
-    self.dynlib = std.DynLib.open(full_path) catch |err| {
-        std.log.debug("Retry {}/{}: failed to open library: {}", .{ 1, 2, err });
+    const stat = try std.Io.Dir.cwd().statFile(io, source_path, .{});
+
+    self.copy_id += 1;
+    var copy_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const copy_path = try std.fmt.bufPrint(&copy_buf, "/tmp/{s}.{d}", .{ self.source_name, self.copy_id });
+
+    try std.Io.Dir.cwd().copyFile(source_path, .cwd(), copy_path, io, .{});
+
+    var dynlib = std.DynLib.open(copy_path) catch |err| {
+        std.Io.Dir.cwd().deleteFile(io, copy_path) catch {};
         return err;
     };
 
-    _ = self.dynlib.?.lookup(*const fn () void, "systemContextInit") orelse {
-        std.log.debug("Retry {}/{}: library opened but symbols not available yet", .{ 1, 2 });
-        self.dynlib.?.close();
+    if (dynlib.lookup(*const fn () void, "systemContextInit") == null) {
+        dynlib.close();
+        std.Io.Dir.cwd().deleteFile(io, copy_path) catch {};
         return error.TestSymbolLookup;
-    };
-    self.mtime = .now(io, .real);
+    }
+
+    std.Io.Dir.cwd().deleteFile(io, copy_path) catch {};
+
+    self.dynlib = dynlib;
+    self.mtime = stat.mtime;
 }
 
 pub fn reload(self: *@This(), io: std.Io) !bool {
-    const dir = std.Io.Dir.cwd().openDir(io, self.dir_path, .{ .iterate = true }) catch return false;
-    defer dir.close(io);
-    const dir_stat = try dir.stat(io);
-    if (dir_stat.mtime.nanoseconds <= self.mtime.nanoseconds) return false;
+    var source_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const source_path = std.fmt.bufPrint(&source_buf, "{s}{s}", .{ self.dir_path, self.source_name }) catch return false;
+
+    const stat = std.Io.Dir.cwd().statFile(io, source_path, .{}) catch return false;
+    if (stat.mtime.nanoseconds <= self.mtime.nanoseconds) return false;
 
     self.old_dynlib = self.dynlib;
+    self.dynlib = null;
     self.load(io) catch {
         self.dynlib = self.old_dynlib;
+        self.old_dynlib = null;
         return false;
     };
 
-    self.mtime = dir_stat.mtime;
-    self.mtime.nanoseconds += std.time.ns_per_s * 2;
-
-    std.log.debug("Reloaded dynamic lib:\n, PATH {s}\n", .{self.lib_name});
+    std.log.debug("Reloaded dynamic lib: {s}", .{self.source_name});
     return true;
 }
 

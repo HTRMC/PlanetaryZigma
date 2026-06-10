@@ -1,7 +1,5 @@
 {
   "$schema": "https://raw.githubusercontent.com/zigtools/zls/refs/heads/master/schema.json",
-  "zig_exe_path": "/home/lucas/.cache/zig/p/N-V-__8AAFFSVRWqblwBIcA-Yqv-u7sbjsJoww8K0mWaHbmJ/zig",
-  "zig_lib_path": "/home/lucas/.cache/zig/p/N-V-__8AAFFSVRWqblwBIcA-Yqv-u7sbjsJoww8K0mWaHbmJ/lib",
   "build_options": {
     "build_file": "client/build.zig"
   }
