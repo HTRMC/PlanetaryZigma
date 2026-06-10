@@ -34,7 +34,8 @@ pub fn update(self: *@This(), info: *const Info, ui: *Ui) void {
         .left_click = self.input_map.mouse_button_left,
         .right_click = self.input_map.mouse_button_right,
     });
-    const root = ui.add(null, null, .{
+    ui.add(null, .{
+        .name = "panel",
         .size = .{ .fixed = .{
             .heigth = 500,
             .width = 400,
@@ -42,37 +43,18 @@ pub fn update(self: *@This(), info: *const Info, ui: *Ui) void {
         .position = .center,
         .color = .new(0.5, 0.5, 0.5, 0.8),
         .axis_align = .verical,
+        .children = &.{.{
+            .position = .{ .fixed = .{ .left = 20, .top = 10 } },
+            .size = .{ .percent = .{ .heigth = 0.20, .width = 0.9 } },
+        }},
     });
-    _ = ui.add(root, null, .{
+
+    ui.add("panel", .{
+        .name = "test",
         .position = .{ .fixed = .{ .left = 20, .top = 10 } },
-        .size = .{ .percent = .{ .heigth = 0.20, .width = 0.9 } },
+        .size = .{ .percent = .{ .heigth = 0.50, .width = 0.9 } },
+        .color = if (ui.isHot("test")) .new(1, 0, 0, 1) else .new(1, 1, 1, 1),
     });
-    _ = ui.add(root, null, .{
-        .position = .{ .fixed = .{ .left = 20, .top = 20 } },
-        .size = .{ .percent = .{ .heigth = 0.20, .width = 0.9 } },
-        .color = .new(1, 0, 0, 1),
-    });
-    // _ = ui.add(root, null, .{
-    //     .position = .center,
-    //     .size = .{ .percent = .{ .heigth = 0.20, .width = 0.9 } },
-    // });
-    // _ = ui.add(root, "button", .{
-    //     .position = .center,
-    //     .size = .{ .heigth = 10, .width = 10 },
-    //     .color = if (ui.isHot("button")) .new(0, 1, 0, 1) else .new(0, 0, 1, 1),
-    // });
-    //
-    // if (ui.isActive("button")) {
-    //     _ = ui.add(null, null, .{
-    //         .position = .{
-    //             .fixed = .{
-    //                 .left = 10,
-    //                 .top = 10,
-    //             },
-    //         },
-    //         .size = .{ .heigth = 100, .width = 100 },
-    //     });
-    // }
     ui.end();
 }
 

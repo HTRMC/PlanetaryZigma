@@ -55,6 +55,8 @@ pub const Layout = struct {
     size: Size,
     color: nz.color.Rgba(f32) = .grey,
     axis_align: AxisAlign = .horizontal,
+    name: ?[]const u8 = null,
+    children: []const Layout = &.{},
 };
 
 const Node = struct {
@@ -126,18 +128,23 @@ pub fn start(self: *@This(), mouse_state: MouseState) void {
     self.mouse_state = mouse_state;
 }
 
-pub fn add(self: *@This(), parent_id: ?u32, name: ?[]const u8, layout: Layout) u32 {
+pub fn add(self: *@This(), parent: ?[]const u8, layout: Layout) void {
+    const parent_id: ?u32 = if (parent) |name| (self.names.get(name) orelse return) else null;
+    self.addNode(parent_id, layout);
+}
+
+fn addNode(self: *@This(), parent_id: ?u32, layout: Layout) void {
     const handle: u32 = @intCast(self.nodes.items.len);
     self.nodes.appendAssumeCapacity(.{
-        .id = @intCast(self.nodes.items.len),
-        .name = name,
+        .id = handle,
+        .name = layout.name,
         .layout = layout,
         .parent_id = parent_id,
         .rect = .{ .left = 0, .top = 0, .width = 0, .heigth = 0 },
         .offset = 0,
     });
-    if (name) |add_name| self.names.putAssumeCapacity(add_name, handle);
-    return handle;
+    if (layout.name) |add_name| self.names.putAssumeCapacity(add_name, handle);
+    for (layout.children) |child| self.addNode(handle, child);
 }
 
 pub fn end(self: *@This()) void {
