@@ -109,15 +109,36 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    shaderc.addIncludePath(shaderc_dep.path("libshaderc/include"));
     system.root_module.addImport("shaderc", shaderc.createModule());
 
     system.root_module.addImport("vulkan", vulkan);
-    exe.root_module.linkSystemLibrary("vulkan", .{});
-    exe.root_module.linkSystemLibrary("shaderc", .{});
+
+    if (target.result.os.tag == .windows) {
+        if (b.graph.environ_map.get("VULKAN_SDK")) |sdk| {
+            const lib_dir = b.pathJoin(&.{ sdk, "Lib" });
+            system.root_module.addLibraryPath(.{ .cwd_relative = lib_dir });
+            exe.root_module.addLibraryPath(.{ .cwd_relative = lib_dir });
+        } else {
+            std.log.warn("VULKAN_SDK not set; vulkan-1/shaderc_shared may not be found at link time", .{});
+        }
+        system.root_module.linkSystemLibrary("vulkan-1", .{});
+        system.root_module.linkSystemLibrary("shaderc_shared", .{});
+        exe.root_module.linkSystemLibrary("vulkan-1", .{});
+        exe.root_module.linkSystemLibrary("shaderc_shared", .{});
+    } else {
+        exe.root_module.linkSystemLibrary("vulkan", .{});
+        exe.root_module.linkSystemLibrary("shaderc", .{});
+    }
     exe.root_module.link_libcpp = true;
 
     b.installArtifact(system);
     b.installArtifact(exe);
+
+    if (target.result.os.tag == .windows) {
+        const install_steam_dll = b.addInstallBinFile(steam_dep.path("steamworks/redistributable_bin/win64/steam_api64.dll"), "steam_api64.dll");
+        b.getInstallStep().dependOn(&install_steam_dll.step);
+    }
 
     const run_step = b.step("run", "Run the client");
     const run_cmd = b.addRunArtifact(exe);
