@@ -34,6 +34,23 @@ pub fn update(self: *@This(), info: *const Info, ui: *Ui) void {
         .left_click = self.input_map.mouse_button_left,
         .right_click = self.input_map.mouse_button_right,
     });
+
+    ui.add(null, .{ .position = .{
+        .fixed = .{
+            .left = 0,
+            .top = 40,
+        },
+    }, .size = .{
+        .fixed = .{
+            .heigth = 40,
+            .width = 100,
+        },
+    }, .color = if (ui.isHot("refresh")) .new(1, 1, 1, 1) else .grey, .name = "refresh", .text = "Refresh" });
+
+    if (ui.isActive("refresh")) {
+        std.log.debug("Pressed button", .{});
+    }
+
     ui.add(null, .{
         .name = "panel",
         .size = .{ .fixed = .{
@@ -57,6 +74,7 @@ pub fn update(self: *@This(), info: *const Info, ui: *Ui) void {
                     .color = .new(1, 1, 0, 1),
                 }, .{
                     .name = "button",
+                    .text = "hello",
                     .position = .{ .fixed = .{ .left = 0, .top = 0 } },
                     .size = .{ .percent = .{ .heigth = 1, .width = if (ui.isHot("button")) 1 else 0.4 } },
                     .color = if (ui.isHot("button")) .new(1, 1, 1, 1) else .new(1, 1, 0, 1),

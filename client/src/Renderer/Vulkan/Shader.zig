@@ -89,7 +89,7 @@ fn loadShader(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: s
     std.debug.print("result code {d}\n", .{status});
     if (status != shaderc.shaderc_compilation_status_success) {
         std.debug.print("err message {s}\n", .{shaderc.shaderc_result_get_error_message(result)});
-        return;
+        return error.LoadShader;
     }
     const data = shaderc.shaderc_result_get_bytes(result);
     const len = shaderc.shaderc_result_get_length(result);

@@ -109,7 +109,7 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         frame.* = try .init(self.vma, self.device);
         // std.debug.print("PTR: {*}\n", .{&frame.gpu_scene.buffer});
     }
-    self.ui = try .init(gpa, self.vma, self.device, self.swapchain.extent.width, self.swapchain.extent.height);
+
     self.scene_layout = try .init(self.device, &.{
         .{
             .binding = 0,
@@ -141,6 +141,14 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         "fonts/Roboto-Regular.ttf",
         asset_server,
         &self.render_resources,
+    );
+    self.ui = try .init(
+        gpa,
+        self.vma,
+        self.device,
+        self.swapchain.extent.width,
+        self.swapchain.extent.height,
+        self.font,
     );
 
     self.pipeline_layout = try .init(
