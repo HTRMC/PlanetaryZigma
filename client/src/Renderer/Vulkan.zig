@@ -259,6 +259,7 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     self.material_layout.deinit(self.device);
     self.scene_layout.deinit(self.device);
     self.pipeline_layout.deinit(self.device);
+    self.ui_pipeline_layout.deinit(self.device);
     self.vertex_shader.deinit(gpa);
     self.fragment_shader.deinit(gpa);
     self.ui_fragment_shader.deinit(gpa);

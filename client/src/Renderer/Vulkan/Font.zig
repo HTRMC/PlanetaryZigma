@@ -103,4 +103,5 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma, device: Device) 
     self.material.deinit(gpa, vma);
     c.vkDestroySampler(device.handle, self.sampler, null);
     gpa.free(self.name);
+    gpa.destroy(self);
 }

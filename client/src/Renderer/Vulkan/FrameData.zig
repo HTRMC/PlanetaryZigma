@@ -12,7 +12,6 @@ render_fence: c.VkFence,
 command_buffer: c.VkCommandBuffer,
 gpu_scene: Buffer,
 ui_vertex_buffer: Buffer,
-text_vertex_buffer: Buffer,
 
 pub const GPUScene = extern struct {
     view_proj: [16]f32,
@@ -71,17 +70,6 @@ pub fn init(vma: Vma, device: Device) !@This() {
                 .flags = Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
             },
         ),
-        .text_vertex_buffer = try .init(
-            device,
-            vma,
-            Ui.Vertex,
-            Ui.max_ui_quads * 4,
-            c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | c.VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT,
-            .{
-                .usage = Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU,
-                .flags = Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
-            },
-        ),
     };
 }
 
@@ -89,7 +77,6 @@ pub fn deinit(self: *@This(), vma: Vma, device: Device) void {
     c.vkDestroySemaphore(device.handle, self.swapchain_semaphore, null);
     c.vkDestroyFence(device.handle, self.render_fence, null);
     c.vkFreeCommandBuffers(device.handle, device.command_pool.handle, 1, &self.command_buffer);
-    self.text_vertex_buffer.deinit(vma);
     self.gpu_scene.deinit(vma);
     self.ui_vertex_buffer.deinit(vma);
 }

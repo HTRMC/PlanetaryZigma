@@ -34,7 +34,7 @@ pub fn update(self: *@This(), info: *const Info, ui: *Ui) void {
         .left_click = self.input_map.mouse_button_left,
         .right_click = self.input_map.mouse_button_right,
     });
-
+    // if (true) return;
     ui.add(null, .{ .position = .{
         .fixed = .{
             .left = 0,
