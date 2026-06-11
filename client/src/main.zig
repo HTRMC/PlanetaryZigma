@@ -31,6 +31,7 @@ pub fn main(init: std.process.Init) !void {
     defer steam_client.deinit();
     steam_client.connectToServer(server_steamid);
     steam_client.handle_packets_future = try io.concurrent(shared.SteamNet.Client.handlePackets, .{&steam_client});
+    defer steam_client.handle_packets_future.cancel(io) catch {};
 
     var cross_platform: yes.Platform.Cross = try .init(gpa, io, init.minimal);
     defer cross_platform.deinit();
@@ -109,15 +110,15 @@ pub fn main(init: std.process.Init) !void {
     }
 
     try steam_client.sendPackets();
-    steam_client.handle_packets_future.cancel(io) catch |err| {
-        switch (err) {
-            error.Canceled => std.log.err("err: {s}", .{@errorName(err)}),
-            else => {
-                std.log.err("err: {s}", .{@errorName(err)});
-                return err;
-            },
-        }
-    };
+    // steam_client.handle_packets_future.cancel(io) catch |err| {
+    //     switch (err) {
+    //         error.Canceled => std.log.err("err: {s}", .{@errorName(err)}),
+    //         else => {
+    //             std.log.err("err: {s}", .{@errorName(err)});
+    //             return err;
+    //         },
+    //     }
+    // };
 }
 
 pub fn getDeltaTime(io: std.Io) f32 {

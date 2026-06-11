@@ -4,7 +4,7 @@ const Image = @import("Image.zig");
 const Material = @import("Material.zig");
 const Vma = @import("Vma.zig");
 const Device = @import("device.zig").Logical;
-const stb_truetype = @import("stb_truetype");
+const stbTruetype = @import("stb_truetype");
 const AssetServer = @import("shared").AssetServer;
 const RenderResources = @import("RenderResources.zig");
 const check = @import("utils.zig").check;
@@ -12,11 +12,13 @@ const check = @import("utils.zig").check;
 material: Material,
 image: Image,
 sampler: c.VkSampler,
+
 device: Device,
 vma: Vma,
 render_resources: *RenderResources,
-chars: [96]stb_truetype.stbtt_packedchar,
+chars: [96]stbTruetype.stbtt_packedchar,
 name: []const u8,
+size: f32,
 
 pub fn init(
     gpa: std.mem.Allocator,
@@ -36,6 +38,7 @@ pub fn init(
         .sampler = undefined,
         .chars = undefined,
         .material = undefined,
+        .size = 32,
     };
     try asset_server.loadAsset(@This(), self, path, loadFont);
     return self;
@@ -52,16 +55,15 @@ fn loadFont(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: std
 
     const atlas_w: c_int = 512;
     const atlas_h: c_int = 512;
-    const pixel_height: c_int = 32;
 
     const coverage = try gpa.alloc(u8, @intCast(atlas_w * atlas_h));
     defer gpa.free(coverage);
 
-    var pack: stb_truetype.stbtt_pack_context = undefined;
-    _ = stb_truetype.stbtt_PackBegin(&pack, coverage.ptr, atlas_w, atlas_h, 0, 1, null);
-    stb_truetype.stbtt_PackSetOversampling(&pack, 2, 2);
-    _ = stb_truetype.stbtt_PackFontRange(&pack, content.ptr, 0, pixel_height, 32, 96, &self.chars);
-    stb_truetype.stbtt_PackEnd(&pack);
+    var pack: stbTruetype.stbtt_pack_context = undefined;
+    _ = stbTruetype.stbtt_PackBegin(&pack, coverage.ptr, atlas_w, atlas_h, 0, 1, null);
+    stbTruetype.stbtt_PackSetOversampling(&pack, 2, 2);
+    _ = stbTruetype.stbtt_PackFontRange(&pack, content.ptr, 0, self.size, 32, 96, &self.chars);
+    stbTruetype.stbtt_PackEnd(&pack);
 
     self.image = try .init(
         self.vma,
@@ -98,5 +100,8 @@ fn loadFont(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: std
 
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma, device: Device) void {
     self.image.deinit(vma, device);
+    self.material.deinit(gpa, vma);
+    c.vkDestroySampler(device.handle, self.sampler, null);
     gpa.free(self.name);
+    gpa.destroy(self);
 }
