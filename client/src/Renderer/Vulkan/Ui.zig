@@ -4,6 +4,8 @@ const nz = @import("shared").numz;
 const Buffer = @import("Buffer.zig");
 const Vma = @import("Vma.zig");
 const Device = @import("device.zig").Logical;
+const Font = @import("Font.zig");
+const stbTruetype = @import("stb_truetype");
 
 pub const max_ui_quads: usize = 1024;
 
@@ -56,6 +58,7 @@ pub const Layout = struct {
     color: nz.color.Rgba(f32) = .grey,
     axis_align: AxisAlign = .horizontal,
     gap: f32 = 0,
+    text: ?[]const u8 = null,
     name: ?[]const u8 = null,
     children: []const Layout = &.{},
 };
@@ -76,6 +79,7 @@ names: std.StringArrayHashMapUnmanaged(u32) = .empty,
 mouse_state: MouseState = .{},
 screen_width: f32,
 screen_heigth: f32,
+default_font: *Font,
 hot_item: ?[]const u8 = null,
 active_item: ?[]const u8 = null,
 fire_item: ?[]const u8 = null,
@@ -83,7 +87,14 @@ left_click_prev: bool = false,
 pressed: bool = false,
 released: bool = false,
 
-pub fn init(gpa: std.mem.Allocator, vma: Vma, device: Device, width: u32, heigth: u32) !@This() {
+pub fn init(
+    gpa: std.mem.Allocator,
+    vma: Vma,
+    device: Device,
+    screen_width: u32,
+    screen_heigth: u32,
+    default_font: *Font,
+) !@This() {
     const ui_index_buffer: Buffer = try .init(
         device,
         vma,
@@ -107,8 +118,9 @@ pub fn init(gpa: std.mem.Allocator, vma: Vma, device: Device, width: u32, heigth
         .quads = try .initCapacity(gpa, max_ui_quads),
         .nodes = try .initCapacity(gpa, max_ui_quads),
         .names = names,
-        .screen_width = @floatFromInt(width),
-        .screen_heigth = @floatFromInt(heigth),
+        .screen_width = @floatFromInt(screen_width),
+        .screen_heigth = @floatFromInt(screen_heigth),
+        .default_font = default_font,
     };
 }
 
@@ -205,11 +217,36 @@ fn pushQuads(self: *@This()) void {
         const colors: [4]f32 = node.layout.color.toVec();
         //left_top, right_top, right_bottom, left_bottom
         self.quads.appendAssumeCapacity(.{ .vertices = .{
-            .{ .position = .{ rect.left, rect.top }, .color = colors, .uv = .{ 0, 0 } },
-            .{ .position = .{ rect.left + rect.width, rect.top }, .color = colors, .uv = .{ 1, 0 } },
-            .{ .position = .{ rect.left + rect.width, rect.top + rect.heigth }, .color = colors, .uv = .{ 1, 1 } },
-            .{ .position = .{ rect.left, rect.top + rect.heigth }, .color = colors, .uv = .{ 0, 1 } },
+            .{ .position = .{ rect.left, rect.top }, .color = colors, .uv = .{ -1, -1 } },
+            .{ .position = .{ rect.left + rect.width, rect.top }, .color = colors, .uv = .{ -1, -1 } },
+            .{ .position = .{ rect.left + rect.width, rect.top + rect.heigth }, .color = colors, .uv = .{ -1, -1 } },
+            .{ .position = .{ rect.left, rect.top + rect.heigth }, .color = colors, .uv = .{ -1, -1 } },
         } });
+        if (node.layout.text) |text| {
+            const color: nz.color.Rgba(f32) = .new(1, 0, 0, 1);
+            const colo = color.toVec();
+            const font = self.default_font;
+            var pen: struct {
+                x: f32,
+                y: f32,
+            } = .{
+                .x = node.rect.left,
+                .y = node.rect.top + font.size,
+            };
+            for (text) |char| {
+                var index: c_int = char - 32;
+                if (index > 96 or index < 0) index = 96;
+                var quad: stbTruetype.stbtt_aligned_quad = undefined;
+                stbTruetype.stbtt_packedchar.GetPackedQuad(&font.chars, 512, 512, index, &pen.x, &pen.y, &quad, 0);
+
+                self.quads.appendAssumeCapacity(.{ .vertices = .{
+                    .{ .position = .{ quad.x0, quad.y0 }, .color = colo, .uv = .{ quad.s0, quad.t0 } },
+                    .{ .position = .{ quad.x1, quad.y0 }, .color = colo, .uv = .{ quad.s1, quad.t0 } },
+                    .{ .position = .{ quad.x1, quad.y1 }, .color = colo, .uv = .{ quad.s1, quad.t1 } },
+                    .{ .position = .{ quad.x0, quad.y1 }, .color = colo, .uv = .{ quad.s0, quad.t1 } },
+                } });
+            }
+        }
     }
 }
 

@@ -34,6 +34,7 @@ pub fn init(gpa: std.mem.Allocator, io: std.Io) !@This() {
     gs.SetMapName("default");
     gs.SetPasswordProtected(false);
     gs.LogOnAnonymous();
+    gs.SetProduct("3167780");
     gs.SetAdvertiseServerActive(true);
 
     steam.SteamAPI_ManualDispatch_Init();
