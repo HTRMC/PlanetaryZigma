@@ -168,7 +168,7 @@ pub const ffi = struct {
         systemContextUpdate: *const fn (*Context, data: *const Info, event: ?*const yes.Window.Event) callconv(.c) void,
         systemContextReload: *const fn (*Context, pre_reload: bool) callconv(.c) void,
 
-        pub fn load(dynlib: *std.DynLib) !@This() {
+        pub fn load(dynlib: *shared.DynLib) !@This() {
             var self: @This() = undefined;
             inline for (@typeInfo(@This()).@"struct".fields) |field| {
                 std.log.debug("Looking up symbol: {s}", .{field.name});

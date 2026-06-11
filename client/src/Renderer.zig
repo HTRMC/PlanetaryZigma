@@ -44,6 +44,7 @@ pub fn resize(self: *@This(), gpa: std.mem.Allocator, window: *yes.Window) !void
 pub fn initVulkan(gpa: std.mem.Allocator, asset_server: *AssetServer, platform: yes.Platform, window: *yes.Window) !@This() {
     const extensions: []const [*:0]const u8 = switch (builtin.os.tag) {
         .windows => &.{
+            Vulkan.c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
             "VK_KHR_surface",
             "VK_KHR_win32_surface",
         },

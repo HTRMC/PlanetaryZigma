@@ -1,18 +1,24 @@
 const std = @import("std");
+const builtin = @import("builtin");
+const DynLib = @import("DynLib.zig").DynLib;
 
-dynlib: ?std.DynLib = null,
-old_dynlib: ?std.DynLib = null,
+const is_windows = builtin.os.tag == .windows;
+
+dynlib: ?DynLib = null,
+old_dynlib: ?DynLib = null,
 dir_path: []const u8,
 source_name: []const u8,
 mtime: std.Io.Timestamp,
 copy_id: u64,
 
 pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
-    const source_name = "lib" ++ library_name ++ ".so";
+    const source_name = if (is_windows) library_name ++ ".dll" else "lib" ++ library_name ++ ".so";
     const search_paths: []const [:0]const u8 = &.{
         "../lib/",
         "zig-out/lib/",
         "client/zig-out/lib/",
+        "zig-out/bin/",
+        "client/zig-out/bin/",
         "./",
     };
     const found_path: []const u8 = path: for (search_paths) |path| {
@@ -52,11 +58,14 @@ pub fn load(self: *@This(), io: std.Io) !void {
 
     self.copy_id += 1;
     var copy_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const copy_path = try std.fmt.bufPrint(&copy_buf, "/tmp/{s}.{d}", .{ self.source_name, self.copy_id });
+    const copy_path = if (is_windows)
+        try std.fmt.bufPrint(&copy_buf, "{s}{s}.{d}", .{ self.dir_path, self.source_name, self.copy_id })
+    else
+        try std.fmt.bufPrint(&copy_buf, "/tmp/{s}.{d}", .{ self.source_name, self.copy_id });
 
     try std.Io.Dir.cwd().copyFile(source_path, .cwd(), copy_path, io, .{});
 
-    var dynlib = std.DynLib.open(copy_path) catch |err| {
+    var dynlib = DynLib.open(copy_path) catch |err| {
         std.Io.Dir.cwd().deleteFile(io, copy_path) catch {};
         return err;
     };
