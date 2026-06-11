@@ -6,6 +6,7 @@ pub const PlanetKind = @import("planet.zig").PlanetKind;
 pub const Planet = @import("planet.zig").Planet;
 
 pub const Watcher = @import("watcher.zig");
+pub const DynLib = @import("DynLib.zig").DynLib;
 pub const AssetServer = @import("AssetServer.zig");
 pub const SteamNet = @import("SteamNet.zig");
 

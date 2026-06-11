@@ -1,34 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const DynLib = @import("DynLib.zig").DynLib;
 
 const is_windows = builtin.os.tag == .windows;
-
-const DynLib = if (is_windows) WindowsDynLib else std.DynLib;
-
-const WindowsDynLib = struct {
-    handle: std.os.windows.HMODULE,
-
-    extern "kernel32" fn LoadLibraryW(path: [*:0]const u16) callconv(.winapi) ?std.os.windows.HMODULE;
-    extern "kernel32" fn GetProcAddress(module: std.os.windows.HMODULE, name: [*:0]const u8) callconv(.winapi) ?*anyopaque;
-    extern "kernel32" fn FreeLibrary(module: std.os.windows.HMODULE) callconv(.winapi) std.os.windows.BOOL;
-
-    pub fn open(path: []const u8) !WindowsDynLib {
-        var buf: [std.fs.max_path_bytes]u16 = undefined;
-        const len = try std.unicode.utf8ToUtf16Le(buf[0 .. buf.len - 1], path);
-        buf[len] = 0;
-        const handle = LoadLibraryW(buf[0..len :0].ptr) orelse return error.FileNotFound;
-        return .{ .handle = handle };
-    }
-
-    pub fn close(self: *WindowsDynLib) void {
-        _ = FreeLibrary(self.handle);
-        self.* = undefined;
-    }
-
-    pub fn lookup(self: *WindowsDynLib, comptime T: type, name: [:0]const u8) ?T {
-        return @ptrCast(GetProcAddress(self.handle, name.ptr) orelse return null);
-    }
-};
 
 dynlib: ?DynLib = null,
 old_dynlib: ?DynLib = null,
