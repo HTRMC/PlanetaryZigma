@@ -1,12 +1,9 @@
 # PlanetaryZigma
 Making a 3D game inspired by risk of rain 2 but on planets!
-using Zig, Vulkan, Jolt.
-the planets will be Procedualy generated using marching cubes. 
+using Zig, Vulkan, Jolt, Steamworks SDK.
+the planets will be Procedualy generated. 
 
-Check Legcay Branch for old version.
-The new version is being made with the help of Harlad, Ernesto, Giλded, etakarinaee, and Lorenzo.
-![](PlanetWithBuilding.png)
-
+The new version is being made with the help of Harlad, Ernesto, Giλded, etakarinaee, Lorenzo, and dunnewortel.
 
 
 ## Push Rules
