@@ -1,6 +1,68 @@
 const std = @import("std");
 const steam = @import("steamworks");
 const Packets = @import("../SteamNet.zig").Packets;
+const ServerListResponse = steam.ISteamMatchmakingServerListResponse;
+
+pub const ServerInfo = extern struct {
+    steam_id: u64,
+    name: [64]u8,
+};
+pub const ServerList = extern struct {
+    const RefreshState = enum(u8) {
+        request,
+        refresing,
+        done,
+    };
+    servers: [8]ServerInfo = undefined,
+    count: usize = 0,
+    refresh_state: RefreshState = .done,
+};
+
+const Browser = extern struct {
+    const VTable = extern struct {
+        responded: *const fn (*Browser, steam.HServerListRequest, i32) callconv(.c) void,
+        failed: *const fn (*Browser, steam.HServerListRequest, i32) callconv(.c) void,
+        complete: *const fn (*Browser, steam.HServerListRequest, steam.EMatchMakingServerResponse) callconv(.c) void,
+    };
+    //NOTE: vtable_ptr only exist cuz of CPP BS.
+    vtable: *const VTable = &.{
+        .responded = &responded,
+        .failed = &failed,
+        .complete = &complete,
+    },
+    list: ServerList = .{},
+
+    fn responded(_: *Browser, request: steam.HServerListRequest, i: i32) callconv(.c) void {
+        const item = steam.SteamMatchmakingServers().GetServerDetails(request, i);
+        std.log.info("Server[{d}] steamID={d} name=\"{s}\"", .{
+            i, item.*.m_steamID, std.mem.sliceTo(item.*.m_szServerName[0..], 0),
+        });
+    }
+    fn failed(_: *Browser, _: steam.HServerListRequest, i: i32) callconv(.c) void {
+        std.log.info("Server[{d}] Failed to respond", .{
+            i,
+        });
+    }
+    fn complete(self: *Browser, request: steam.HServerListRequest, response: steam.EMatchMakingServerResponse) callconv(.c) void {
+        std.log.info("server list refresh compele: {s}", .{@tagName(response)});
+        const servers = steam.SteamMatchmakingServers();
+        const server_count = servers.GetServerCount(request);
+        std.log.info("refresh complete: {s} ({d} servers)", .{ @tagName(response), server_count });
+        self.list.count = @max(@min(server_count, self.list.servers.len), 0);
+        for (0..self.list.count) |i| {
+            const item = servers.GetServerDetails(request, @intCast(i));
+            self.list.servers[i].steam_id = item.*.m_steamID;
+            @memcpy(self.list.servers[i].name[0..], item.*.m_szServerName[0..]);
+            std.log.info("Server[{d}] steamID={d} hadResponse={} name=\"{s}\"", .{
+                i,
+                item.*.m_steamID,
+                item.*.m_bHadSuccessfulResponse,
+                std.mem.sliceTo(item.*.m_szServerName[0..], 0),
+            });
+        }
+        self.list.refresh_state = .done;
+    }
+};
 
 handle_packets_future: std.Io.Future(@typeInfo(@TypeOf(handlePackets)).@"fn".return_type.?),
 packet_mutex: std.Io.Mutex = .init,
@@ -11,75 +73,12 @@ server_conn: steam.HSteamNetConnection = 0,
 own_lobby: u64 = 0,
 packets: Packets,
 pipe: steam.HSteamPipe,
-
-const ServerListResponse = steam.ISteamMatchmakingServerListResponse;
-
-var browse_done: bool = false;
-
-const browser_vtable = struct {
-    fn responded(_: *ServerListResponse, request: steam.HServerListRequest, i: i32) callconv(.c) void {
-        const item = steam.SteamMatchmakingServers().GetServerDetails(request, i);
-        std.log.info("Server[{d}] steamID={d} name=\"{s}\"", .{
-            i, item.*.m_steamID, std.mem.sliceTo(item.*.m_szServerName[0..], 0),
-        });
-    }
-    fn failed(_: *ServerListResponse, _: steam.HServerListRequest, i: i32) callconv(.c) void {
-        std.log.info("Server[{d}] Failed to respond", .{
-            i,
-        });
-    }
-    fn complete(_: *ServerListResponse, request: steam.HServerListRequest, response: steam.EMatchMakingServerResponse) callconv(.c) void {
-        std.log.info("server list refresh compele: {s}", .{@tagName(response)});
-        const servers = steam.SteamMatchmakingServers();
-        const server_count = servers.GetServerCount(request);
-        std.log.info("refresh complete: {s} ({d} servers)", .{ @tagName(response), server_count });
-        var i: i32 = 0;
-        while (i < server_count) : (i += 1) {
-            const item = servers.GetServerDetails(request, i);
-            std.log.info("Server[{d}] steamID={d} hadResponse={} name=\"{s}\"", .{
-                i,
-                item.*.m_steamID,
-                item.*.m_bHadSuccessfulResponse,
-                std.mem.sliceTo(item.*.m_szServerName[0..], 0),
-            });
-        }
-
-        browse_done = true;
-    }
-
-    const VTable = extern struct {
-        responded: *const fn (*ServerListResponse, steam.HServerListRequest, i32) callconv(.c) void,
-        failed: *const fn (*ServerListResponse, steam.HServerListRequest, i32) callconv(.c) void,
-        complete: *const fn (*ServerListResponse, steam.HServerListRequest, steam.EMatchMakingServerResponse) callconv(.c) void,
-    };
-
-    const instance: VTable = .{
-        .responded = &responded,
-        .failed = &failed,
-        .complete = &complete,
-    };
-};
-
-fn testServerList(pipe: steam.HSteamPipe, io: std.Io) !void {
-    var response: steam.ISteamMatchmakingServerListResponse = .{ .ptr = @ptrCast(@constCast(&browser_vtable.instance)) };
-    const servers = steam.SteamMatchmakingServers();
-    const app_id = steam.SteamUtils().GetAppID();
-    std.log.info("requsting internet server list for app {d}...", .{app_id});
-
-    const request = servers.RequestInternetServerList(app_id, null, 0, &response);
-    while (!browse_done) {
-        steam.SteamAPI_ManualDispatch_RunFrame(pipe);
-        try io.sleep(.fromMilliseconds(200), .real);
-    }
-    servers.ReleaseRequest(request);
-}
+browser: Browser,
 
 pub fn init(gpa: std.mem.Allocator, io: std.Io) !@This() {
     if (!steam.SteamAPI_Init()) return error.InitSteamworks;
     steam.SteamAPI_ManualDispatch_Init();
     const steam_pipe = steam.SteamAPI_GetHSteamPipe();
-
-    // try testServerList(steam_pipe, io);
 
     return .{
         .pipe = steam_pipe,
@@ -87,6 +86,7 @@ pub fn init(gpa: std.mem.Allocator, io: std.Io) !@This() {
         .gpa = gpa,
         .handle_packets_future = undefined,
         .io = io,
+        .browser = .{},
     };
 }
 
@@ -102,6 +102,10 @@ pub fn handlePackets(self: *@This()) !void {
         try self.steamPump();
         try self.recievePackets();
         try self.sendPackets();
+        if (self.browser.list.refresh_state == .request) {
+            self.browser.list.refresh_state = .refresing;
+            try self.startRefresh();
+        }
         self.packet_mutex.unlock(self.io);
         try self.io.sleep(.{ .nanoseconds = 1_000_000 }, .real);
     }
@@ -184,4 +188,16 @@ pub fn connectToServer(self: *@This(), steam_id: u64) void {
     std.log.info("ConnectP2P({d}) -> {d}", .{ steam_id, conn });
 }
 
-// pub fn startRefresh(self: *@This())
+pub fn startRefresh(self: *@This()) !void {
+    var response: steam.ISteamMatchmakingServerListResponse = .{ .ptr = @ptrCast(@constCast(&self.browser)) };
+    const servers = steam.SteamMatchmakingServers();
+    const app_id = steam.SteamUtils().GetAppID();
+    std.log.info("requsting internet server list for app {d}...", .{app_id});
+
+    const request = servers.RequestInternetServerList(app_id, null, 0, &response);
+    while (self.browser.list.refresh_state != .done) {
+        steam.SteamAPI_ManualDispatch_RunFrame(self.pipe);
+        try self.io.sleep(.fromMilliseconds(200), .real);
+    }
+    servers.ReleaseRequest(request);
+}

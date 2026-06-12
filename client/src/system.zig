@@ -120,7 +120,7 @@ pub const Context = struct {
     pub fn update(self: *@This(), info: *const Info) !void {
         for (info.world.entities.values()) |*entity| {
             if (!entity.flags.camera or !entity.flags.transform) continue;
-            entity.camera.update(info, &self.renderer.inner.ui);
+            entity.camera.update(info, &self.network_manager, &self.renderer.inner.ui);
             try self.renderer.update(info);
             try self.animation.update(info, &self.renderer.inner.models);
             break;

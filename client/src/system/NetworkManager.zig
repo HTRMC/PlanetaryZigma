@@ -16,6 +16,8 @@ server_conn: shared.SteamNet.Conn = 0,
 /// Whether we've sent the "connect" handshake on the current server_conn.
 sent_connect: bool = false,
 
+refresh_server_list: bool = false,
+
 pub fn init(
     self: *@This(),
     gpa: std.mem.Allocator,
@@ -61,6 +63,11 @@ pub fn sendCommand(self: *@This(), command: shared.net.Command, flags: shared.St
 
 pub fn update(self: *@This(), system_context: *system.Context, info: *const Info) !void {
     try self.steam_client.packet_mutex.lock(self.io);
+
+    // 0. server list update.
+    if (self.refresh_server_list == true and self.steam_client.browser.list.refresh_state == .done) {
+        self.steam_client.browser.list.refresh_state = .request;
+    }
 
     // 1. Drain lifecycle events.
     for (self.steam_client.packets.events.items) |ev| switch (ev) {

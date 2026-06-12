@@ -5,6 +5,7 @@ const shared = @import("shared");
 const Info = system.Info;
 const yes = @import("yes");
 const Ui = @import("../Renderer/Vulkan/Ui.zig");
+const NetworkManager = @import("NetworkManager.zig");
 
 fov_rad: f32 = 1.5,
 aspect: f32 = 0,
@@ -20,7 +21,7 @@ input_map: shared.net.Command.Input = .{},
 
 transform: nz.Transform3D(f32) = .{},
 
-pub fn update(self: *@This(), info: *const Info, ui: *Ui) void {
+pub fn update(self: *@This(), info: *const Info, network_manager: *NetworkManager, ui: *Ui) void {
     _ = info;
 
     self.input_map.mouse_delta[0] = self.mouse_pos[0] - self.mouse_prev_pos[0];
@@ -28,9 +29,9 @@ pub fn update(self: *@This(), info: *const Info, ui: *Ui) void {
     self.mouse_prev_pos[0] = self.mouse_pos[0];
     self.mouse_prev_pos[1] = self.mouse_pos[1];
 
-    const pos: [2]f32 = .{ @floatCast(self.mouse_pos[0]), @floatCast(self.mouse_pos[1]) };
+    const position: [2]f32 = .{ @floatCast(self.mouse_pos[0]), @floatCast(self.mouse_pos[1]) };
     ui.start(.{
-        .position = .{ .left = pos[0], .top = pos[1] },
+        .position = .{ .left = position[0], .top = position[1] },
         .left_click = self.input_map.mouse_button_left,
         .right_click = self.input_map.mouse_button_right,
     });
@@ -47,7 +48,8 @@ pub fn update(self: *@This(), info: *const Info, ui: *Ui) void {
         },
     }, .color = if (ui.isHot("refresh")) .new(1, 1, 1, 1) else .grey, .name = "refresh", .text = "Refresh" });
 
-    if (ui.isActive("refresh")) {
+    if (ui.isActive("refresh") and network_manager.refresh_server_list == false) {
+        network_manager.refresh_server_list = true;
         std.log.debug("Pressed button", .{});
     }
 
