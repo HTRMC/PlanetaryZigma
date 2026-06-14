@@ -34,7 +34,8 @@ pub fn init(
 }
 
 pub fn deinit(self: *@This()) void {
-    if (self.server_conn != 0) self.sendDisconnect() catch {};
+    _ = self;
+    // if (self.server_conn != 0) self.sendDisconnect() catch {};
 }
 
 fn sendDisconnect(self: *@This()) !void {
@@ -65,8 +66,11 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
     try self.steam_client.packet_mutex.lock(self.io);
 
     // 0. server list update.
-    if (self.refresh_server_list == true and self.steam_client.browser.list.refresh_state == .done) {
+    if (self.refresh_server_list == true and self.steam_client.browser.list.refresh_state == .idle) {
         self.steam_client.browser.list.refresh_state = .request;
+    } else if (self.steam_client.browser.list.refresh_state == .done) {
+        self.refresh_server_list = false;
+        self.steam_client.browser.list.refresh_state = .idle;
     }
 
     // 1. Drain lifecycle events.

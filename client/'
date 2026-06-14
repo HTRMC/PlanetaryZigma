@@ -92,24 +92,13 @@ pub fn init(gpa: std.mem.Allocator, io: std.Io) !@This() {
     };
 }
 
-pub fn deinit(self: *@This()) !void {
+pub fn deinit(self: *@This()) void {
     // try self.packet_mutex.lock(self.io);
     self.handle_packets_future.cancel(self.io) catch {};
-    std.log.debug("YOOOO2", .{});
-    const servers = steam.SteamMatchmakingServers();
-    std.log.debug("YOOOO3", .{});
+    self.io.sleep(.fromSeconds(1), .real);
     if (self.browser.request != 0) {
-        std.log.debug("YOOOO4", .{});
-        var spins: u32 = 0;
-        while (servers.IsRefreshing(self.browser.request) or spins < 100) : (spins += 1) {
-            try self.steamPump();
-            try self.recievePackets();
-            try self.sendPackets();
-            std.log.debug("spin {d}", .{spins});
-            try self.io.sleep(.fromMilliseconds(2), .real);
-        }
+        const servers = steam.SteamMatchmakingServers();
         servers.CancelQuery(self.browser.request);
-        std.log.debug("YOOOO5", .{});
         servers.ReleaseRequest(self.browser.request);
         self.browser.request = 0;
     }
@@ -121,7 +110,6 @@ pub fn deinit(self: *@This()) !void {
 pub fn handlePackets(self: *@This()) !void {
     while (true) {
         try self.packet_mutex.lock(self.io);
-        try self.io.checkCancel();
         try self.steamPump();
         try self.recievePackets();
         try self.sendPackets();
@@ -131,7 +119,6 @@ pub fn handlePackets(self: *@This()) !void {
             const app_id = steam.SteamUtils().GetAppID();
             std.log.info("requsting internet server list for app {d}...", .{app_id});
             self.browser.request = servers.RequestInternetServerList(app_id, null, 0, @ptrCast(&self.browser));
-            std.log.debug("handle: {s}", .{std.mem.sliceTo(self.browser.request, 0)});
         }
         self.packet_mutex.unlock(self.io);
         try self.io.sleep(.{ .nanoseconds = 1_000_000 }, .real);
@@ -140,13 +127,11 @@ pub fn handlePackets(self: *@This()) !void {
 
 fn steamPump(self: *@This()) !void {
     steam.SteamAPI_ManualDispatch_RunFrame(self.pipe);
-    // const servers = steam.SteamMatchmakingServers();
-    // if (servers.IsRefreshing(self.browser.request) == false) {
-    //     // servers.CancelQuery(self.browser.request);
-    //
-    //     servers.ReleaseRequest(self.browser.request);
-    //     self.browser.request = 0;
-    // }
+    if (self.browser.list.refresh_state == .done and self.browser.request != 0) {
+        const servers = steam.SteamMatchmakingServers();
+        servers.ReleaseRequest(self.browser.request);
+        self.browser.request = 0;
+    }
 
     var msg: steam.CallbackMsg_t = undefined;
     while (steam.SteamAPI_ManualDispatch_GetNextCallback(self.pipe, &msg)) {
