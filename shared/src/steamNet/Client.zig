@@ -216,7 +216,6 @@ pub fn connectToServer(self: *@This(), steam_id: u64) !void {
     }
     self.server_conn = conn;
     std.log.info("ConnectP2P({d}) -> {d}", .{ steam_id, conn });
-    self.handle_packets_future = try self.io.concurrent(handlePackets, .{self});
 }
 
 pub fn closeConnection(self: *@This()) void {

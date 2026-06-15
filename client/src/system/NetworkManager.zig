@@ -94,18 +94,12 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
         try self.sendConnect();
         self.sent_connect = true;
     }
-
     // 3. Send our input.
     if (self.server_conn != 0) {
-        for (info.world.entities.values()) |*entity| {
-            if (!entity.flags.camera or !entity.flags.transform) continue;
-            try self.sendCommand(.{ .input = entity.camera.input_map }, .reliable);
-            // std.log.debug("input_map: {any}", .{entity.camera.input_map});
-            entity.camera.input_map.mouse_wheel = 0;
-            break;
-        }
+        try self.sendCommand(.{ .input = info.world.camera.input_map }, .reliable);
+        // std.log.debug("input_map: {any}", .{entity.camera.input_map});
+        info.world.camera.input_map.mouse_wheel = 0;
     }
-
     // std.log.debug("cmd size {d}", .{self.steam_client.packets.incoming.items.len});
     // 4. Drain inbound commands.
     for (self.steam_client.packets.incoming.items) |*msg| {
@@ -124,11 +118,11 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
 fn handleCommand(self: *@This(), system_context: *system.Context, info: *const Info, command: shared.net.Command) !void {
     switch (command) {
         .acknowledge => |acknowledge| {
+            info.world.camera = .{ .transform = .{ .position = .{ 0, 0, 0 } } };
             const new_player = try self.spawner.spawn(.{
-                .camera = .{ .transform = .{ .position = .{ 0, 0, 0 } } },
                 .transform = .{ .position = .{ 0, 0, 0 } },
                 .model = .{ .id = 1 },
-                .flags = .{ .camera = true, .transform = true, .model = true },
+                .flags = .{ .transform = true, .model = true },
             });
             try info.world.enitity_mapping.put(self.gpa, acknowledge.id, new_player.id);
             info.world.my_server_id = acknowledge.id;
@@ -190,10 +184,10 @@ fn handleCommand(self: *@This(), system_context: *system.Context, info: *const I
             entity.transform.rotation = .fromVec(@floatCast(update_transform_command.rotation));
         },
         .update_camera_rotation => |rotation_command| {
-            const id = info.world.enitity_mapping.get(rotation_command.id) orelse return;
-            const entity = info.world.getPtr(id) orelse return;
-            entity.camera.transform.rotation = .fromVec(rotation_command.rotation);
-            entity.camera.transform.position = rotation_command.position;
+            // const id = info.world.enitity_mapping.get(rotation_command.id) orelse return;
+            // const entity = info.world.getPtr(id) orelse return;
+            info.world.camera.transform.rotation = .fromVec(rotation_command.rotation);
+            info.world.camera.transform.position = rotation_command.position;
         },
         else => std.log.err("Unhandled command {s}", .{@tagName(command)}),
     }
