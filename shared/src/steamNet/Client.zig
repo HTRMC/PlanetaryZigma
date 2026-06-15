@@ -79,7 +79,10 @@ pipe: steam.HSteamPipe,
 browser: Browser,
 
 pub fn init(gpa: std.mem.Allocator, io: std.Io) !@This() {
-    if (!steam.SteamAPI_Init()) return error.InitSteamworks;
+    if (!steam.SteamAPI_Init()) {
+        std.log.err("SteamAPI_Init failed. Check: Steam is running, you are logged in, and steam_appid.txt exists in the working directory with a valid app id.", .{});
+        return error.InitSteamworks;
+    }
     steam.SteamAPI_ManualDispatch_Init();
     const steam_pipe = steam.SteamAPI_GetHSteamPipe();
 
