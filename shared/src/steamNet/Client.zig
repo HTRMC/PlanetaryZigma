@@ -34,15 +34,15 @@ const Browser = extern struct {
     list: ServerList = .{},
     request: steam.HServerListRequest = 0,
 
-    fn responded(_: *Browser, request: steam.HServerListRequest, i: i32) callconv(.c) void {
-        const item = steam.SteamMatchmakingServers().GetServerDetails(request, i);
+    fn responded(_: *Browser, request: steam.HServerListRequest, server_index: i32) callconv(.c) void {
+        const server = steam.SteamMatchmakingServers().GetServerDetails(request, server_index);
         std.log.info("Server[{d}] steamID={d} name=\"{s}\"", .{
-            i, item.*.m_steamID, std.mem.sliceTo(item.*.m_szServerName[0..], 0),
+            server_index, server.*.m_steamID, std.mem.sliceTo(server.*.m_szServerName[0..], 0),
         });
     }
-    fn failed(_: *Browser, _: steam.HServerListRequest, i: i32) callconv(.c) void {
+    fn failed(_: *Browser, _: steam.HServerListRequest, server_index: i32) callconv(.c) void {
         std.log.info("Server[{d}] Failed to respond", .{
-            i,
+            server_index,
         });
     }
     fn complete(self: *Browser, request: steam.HServerListRequest, response: steam.EMatchMakingServerResponse) callconv(.c) void {
@@ -51,15 +51,15 @@ const Browser = extern struct {
         const server_count = servers.GetServerCount(request);
         std.log.info("refresh complete: {s} ({d} servers)", .{ @tagName(response), server_count });
         self.list.count = @max(@min(server_count, self.list.servers.len), 0);
-        for (0..self.list.count) |i| {
-            const item = servers.GetServerDetails(request, @intCast(i));
-            self.list.servers[i].steam_id = item.*.m_steamID;
-            @memcpy(self.list.servers[i].name[0..], item.*.m_szServerName[0..]);
+        for (0..self.list.count) |server_index| {
+            const server = servers.GetServerDetails(request, @intCast(server_index));
+            self.list.servers[server_index].steam_id = server.*.m_steamID;
+            @memcpy(self.list.servers[server_index].name[0..], server.*.m_szServerName[0..]);
             std.log.info("Server[{d}] steamID={d} hadResponse={} name=\"{s}\"", .{
-                i,
-                item.*.m_steamID,
-                item.*.m_bHadSuccessfulResponse,
-                std.mem.sliceTo(item.*.m_szServerName[0..], 0),
+                server_index,
+                server.*.m_steamID,
+                server.*.m_bHadSuccessfulResponse,
+                std.mem.sliceTo(server.*.m_szServerName[0..], 0),
             });
         }
         self.list.refresh_state = .done;
@@ -92,36 +92,32 @@ pub fn init(gpa: std.mem.Allocator, io: std.Io) !@This() {
     };
 }
 
-pub fn deinit(self: *@This()) !void {
-    // try self.packet_mutex.lock(self.io);
+pub fn deinit(self: *@This()) void {
     self.handle_packets_future.cancel(self.io) catch {};
-    std.log.debug("YOOOO2", .{});
+
     const servers = steam.SteamMatchmakingServers();
-    std.log.debug("YOOOO3", .{});
     if (self.browser.request != 0) {
-        std.log.debug("YOOOO4", .{});
-        var spins: u32 = 0;
-        while (servers.IsRefreshing(self.browser.request) or spins < 100) : (spins += 1) {
-            try self.steamPump();
-            try self.recievePackets();
-            try self.sendPackets();
-            std.log.debug("spin {d}", .{spins});
-            try self.io.sleep(.fromMilliseconds(2), .real);
-        }
         servers.CancelQuery(self.browser.request);
-        std.log.debug("YOOOO5", .{});
         servers.ReleaseRequest(self.browser.request);
         self.browser.request = 0;
     }
+    self.closeConnection();
+
+    //NOTE: drain or SteamAPI_Shutdown segfaults when a conn + server-list query both existed.
+    var drained: u32 = 0;
+    while (drained < 400) : (drained += 2) {
+        self.steamPump() catch {};
+        self.io.sleep(.fromMilliseconds(2), .real) catch {};
+    }
+
     steam.SteamAPI_Shutdown();
-    // self.packet_mutex.unlock(self.io);
     self.packets.deinit(self.gpa);
 }
 
 pub fn handlePackets(self: *@This()) !void {
     while (true) {
-        try self.packet_mutex.lock(self.io);
         try self.io.checkCancel();
+        try self.packet_mutex.lock(self.io);
         try self.steamPump();
         try self.recievePackets();
         try self.sendPackets();
@@ -131,7 +127,6 @@ pub fn handlePackets(self: *@This()) !void {
             const app_id = steam.SteamUtils().GetAppID();
             std.log.info("requsting internet server list for app {d}...", .{app_id});
             self.browser.request = servers.RequestInternetServerList(app_id, null, 0, @ptrCast(&self.browser));
-            std.log.debug("handle: {s}", .{std.mem.sliceTo(self.browser.request, 0)});
         }
         self.packet_mutex.unlock(self.io);
         try self.io.sleep(.{ .nanoseconds = 1_000_000 }, .real);
@@ -140,32 +135,30 @@ pub fn handlePackets(self: *@This()) !void {
 
 fn steamPump(self: *@This()) !void {
     steam.SteamAPI_ManualDispatch_RunFrame(self.pipe);
-    // const servers = steam.SteamMatchmakingServers();
-    // if (servers.IsRefreshing(self.browser.request) == false) {
-    //     // servers.CancelQuery(self.browser.request);
-    //
-    //     servers.ReleaseRequest(self.browser.request);
-    //     self.browser.request = 0;
-    // }
+    if (self.browser.list.refresh_state == .done and self.browser.request != 0) {
+        const servers = steam.SteamMatchmakingServers();
+        servers.ReleaseRequest(self.browser.request);
+        self.browser.request = 0;
+    }
 
-    var msg: steam.CallbackMsg_t = undefined;
-    while (steam.SteamAPI_ManualDispatch_GetNextCallback(self.pipe, &msg)) {
+    var callback: steam.CallbackMsg_t = undefined;
+    while (steam.SteamAPI_ManualDispatch_GetNextCallback(self.pipe, &callback)) {
         defer steam.SteamAPI_ManualDispatch_FreeLastCallback(self.pipe);
-        const data = msg.data() orelse continue;
-        switch (data) {
-            .SteamNetConnectionStatusChangedCallback => |ev| {
-                std.log.info("client net state: {s} (conn={d})", .{ @tagName(ev.m_info.m_eState), ev.m_hConn });
-                switch (ev.m_info.m_eState) {
+        const callback_data = callback.data() orelse continue;
+        switch (callback_data) {
+            .SteamNetConnectionStatusChangedCallback => |status_changed| {
+                std.log.info("client net state: {s} (conn={d})", .{ @tagName(status_changed.m_info.m_eState), status_changed.m_hConn });
+                switch (status_changed.m_info.m_eState) {
                     .k_ESteamNetworkingConnectionState_Connected => {
-                        self.server_conn = ev.m_hConn;
-                        try self.packets.pushEvent(self.gpa, .{ .connected = ev.m_hConn });
+                        self.server_conn = status_changed.m_hConn;
+                        try self.packets.pushEvent(self.gpa, .{ .connected = status_changed.m_hConn });
                     },
                     .k_ESteamNetworkingConnectionState_ClosedByPeer,
                     .k_ESteamNetworkingConnectionState_ProblemDetectedLocally,
                     => {
-                        _ = steam.SteamNetworkingSockets_SteamAPI().CloseConnection(ev.m_hConn, 0, "client-close", false);
-                        if (self.server_conn == ev.m_hConn) self.server_conn = 0;
-                        try self.packets.pushEvent(self.gpa, .{ .disconnected = ev.m_hConn });
+                        _ = steam.SteamNetworkingSockets_SteamAPI().CloseConnection(status_changed.m_hConn, 0, "client-close", false);
+                        if (self.server_conn == status_changed.m_hConn) self.server_conn = 0;
+                        try self.packets.pushEvent(self.gpa, .{ .disconnected = status_changed.m_hConn });
                     },
                     else => {},
                 }
@@ -177,7 +170,7 @@ fn steamPump(self: *@This()) !void {
 }
 
 pub fn recievePackets(self: *@This()) !void {
-    const sock = steam.SteamNetworkingSockets_SteamAPI();
+    const sockets = steam.SteamNetworkingSockets_SteamAPI();
 
     // var status: steam.SteamNetConnectionRealTimeStatus_t = std.mem.zeroes(steam.SteamNetConnectionRealTimeStatus_t);
     // const r = sock.GetConnectionRealTimeStatus(self.server_conn, &status, &.{});
@@ -185,17 +178,17 @@ pub fn recievePackets(self: *@This()) !void {
     //     std.log.info("ping={d}ms", .{status.m_nPing});
     // }
 
-    var msgs: [16][*c]steam.SteamNetworkingMessage_t = undefined;
+    var messages: [16][*c]steam.SteamNetworkingMessage_t = undefined;
     while (true) {
-        const n = sock.ReceiveMessagesOnConnection(self.server_conn, &msgs[0], @intCast(msgs.len));
-        if (n <= 0) break;
-        const count: usize = @intCast(n);
-        for (msgs[0..count]) |raw| {
-            if (raw == null) continue;
-            const m: *steam.SteamNetworkingMessage_t = raw;
-            defer m.Release();
-            if (m.m_pData == null or m.m_cbSize <= 0) continue;
-            const bytes = m.m_pData[0..@intCast(m.m_cbSize)];
+        const received = sockets.ReceiveMessagesOnConnection(self.server_conn, &messages[0], @intCast(messages.len));
+        if (received <= 0) break;
+        const received_count: usize = @intCast(received);
+        for (messages[0..received_count]) |raw_message| {
+            if (raw_message == null) continue;
+            const message: *steam.SteamNetworkingMessage_t = raw_message;
+            defer message.Release();
+            if (message.m_pData == null or message.m_cbSize <= 0) continue;
+            const bytes = message.m_pData[0..@intCast(message.m_cbSize)];
             try self.packets.pushIncoming(self.gpa, self.server_conn, bytes);
         }
     }
@@ -203,10 +196,10 @@ pub fn recievePackets(self: *@This()) !void {
 
 pub fn sendPackets(self: *@This()) !void {
     if (self.packets.outgoing.items.len == 0) return;
-    const sock = steam.SteamNetworkingSockets_SteamAPI();
-    for (self.packets.outgoing.items) |*msg| {
-        var msg_num: i64 = 0;
-        _ = sock.SendMessageToConnection(msg.conn, msg.bytes[0..msg.len], @intFromEnum(msg.flags), &msg_num);
+    const sockets = steam.SteamNetworkingSockets_SteamAPI();
+    for (self.packets.outgoing.items) |*message| {
+        var message_number: i64 = 0;
+        _ = sockets.SendMessageToConnection(message.conn, message.bytes[0..message.len], @intFromEnum(message.flags), &message_number);
     }
     self.packets.outgoing.clearRetainingCapacity();
 }
@@ -223,4 +216,10 @@ pub fn connectToServer(self: *@This(), steam_id: u64) !void {
     self.server_conn = conn;
     std.log.info("ConnectP2P({d}) -> {d}", .{ steam_id, conn });
     self.handle_packets_future = try self.io.concurrent(handlePackets, .{self});
+}
+
+pub fn closeConnection(self: *@This()) void {
+    if (self.server_conn == 0) return;
+    _ = steam.SteamNetworkingSockets_SteamAPI().CloseConnection(self.server_conn, 0, "client-shutdown", false);
+    self.server_conn = 0;
 }

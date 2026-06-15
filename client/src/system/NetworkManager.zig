@@ -35,16 +35,6 @@ pub fn init(
 
 pub fn deinit(self: *@This()) void {
     _ = self;
-    // if (self.server_conn != 0) self.sendDisconnect() catch {};
-}
-
-fn sendDisconnect(self: *@This()) !void {
-    var buf: [1024]u8 = undefined;
-    var w: std.Io.Writer = .fixed(&buf);
-    const cmd: shared.net.Command = .disconnect;
-    try cmd.write(&w);
-
-    try self.steam_client.packets.pushOutgoing(self.gpa, self.server_conn, w.buffered(), .reliable);
 }
 
 fn sendConnect(self: *@This()) !void {

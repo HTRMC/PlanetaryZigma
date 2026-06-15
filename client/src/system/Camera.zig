@@ -16,6 +16,7 @@ sensitivity: f32 = 1,
 was_rotating: bool = false,
 mouse_pos: [2]f64 = .{ 0, 0 },
 mouse_prev_pos: [2]f64 = .{ 0, 0 },
+was_running: bool = false,
 
 input_map: shared.net.Command.Input = .{},
 
@@ -48,8 +49,9 @@ pub fn update(self: *@This(), info: *const Info, network_manager: *NetworkManage
         },
     }, .color = if (ui.isHot("refresh")) .new(1, 1, 1, 1) else .grey, .name = "refresh", .text = "Refresh" });
 
-    if (ui.isActive("refresh") and network_manager.refresh_server_list == false) {
+    if (self.was_running == false or ui.isActive("refresh") and network_manager.refresh_server_list == false) {
         network_manager.refresh_server_list = true;
+        self.was_running = true;
         std.log.debug("Pressed button", .{});
     }
 

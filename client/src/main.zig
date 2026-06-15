@@ -29,7 +29,7 @@ pub fn main(init: std.process.Init) !void {
 
     var steam_client: shared.SteamNet.Client = try .init(gpa, io);
     try steam_client.connectToServer(server_steamid);
-    defer steam_client.deinit() catch {};
+    defer steam_client.deinit();
 
     var cross_platform: yes.Platform.Cross = try .init(gpa, io, init.minimal);
     defer cross_platform.deinit();
