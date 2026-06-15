@@ -85,7 +85,7 @@ pub const Context = struct {
     network_manager: NetworkManager,
     spawner: Spawner,
     animation: Animation,
-    planet: shared.Planet(.renderable) = undefined,
+    planet: ?shared.Planet(.renderable),
 
     pub const Data = struct {
         gpa: std.mem.Allocator,
@@ -108,19 +108,20 @@ pub const Context = struct {
         try self.spawner.init(data.gpa, data.world);
         try self.network_manager.init(data.gpa, data.io, data.steam_client, &self.spawner);
         self.animation.init(data.gpa);
+        self.planet = null;
     }
 
     pub fn deinit(self: *@This()) void {
         self.renderer.deinit(self.gpa);
         self.network_manager.deinit();
-        self.planet.deinit(self.gpa);
+        if (self.planet) |*p| p.deinit(self.gpa);
         self.spawner.deinit();
     }
 
     pub fn update(self: *@This(), info: *const Info) !void {
         for (info.world.entities.values()) |*entity| {
             if (!entity.flags.camera or !entity.flags.transform) continue;
-            entity.camera.update(info, &self.renderer.inner.ui);
+            entity.camera.update(info, &self.network_manager, &self.renderer.inner.ui);
             try self.renderer.update(info);
             try self.animation.update(info, &self.renderer.inner.models);
             break;
@@ -145,14 +146,16 @@ pub const Context = struct {
         } else {
             std.log.debug("post-hotreload", .{});
             self.renderer = try .init(self.gpa, self.asset_server, self.platform, self.window);
-            const vulkan_mesh_handle = try self.renderer.inner.createModelWithMesh(
-                self.gpa,
-                "planet",
-                self.planet.vertices,
-                self.planet.indices,
-            );
-            //TODO: take care of handle matching
-            _ = vulkan_mesh_handle;
+            if (self.planet) |p| {
+                const vulkan_mesh_handle = try self.renderer.inner.createModelWithMesh(
+                    self.gpa,
+                    "planet",
+                    p.vertices,
+                    p.indices,
+                );
+                //TODO: take care of handle matching
+                _ = vulkan_mesh_handle;
+            }
         }
     }
 };

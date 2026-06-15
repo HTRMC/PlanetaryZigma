@@ -16,6 +16,8 @@ server_conn: shared.SteamNet.Conn = 0,
 /// Whether we've sent the "connect" handshake on the current server_conn.
 sent_connect: bool = false,
 
+refresh_server_list: bool = false,
+
 pub fn init(
     self: *@This(),
     gpa: std.mem.Allocator,
@@ -32,16 +34,7 @@ pub fn init(
 }
 
 pub fn deinit(self: *@This()) void {
-    if (self.server_conn != 0) self.sendDisconnect() catch {};
-}
-
-fn sendDisconnect(self: *@This()) !void {
-    var buf: [1024]u8 = undefined;
-    var w: std.Io.Writer = .fixed(&buf);
-    const cmd: shared.net.Command = .disconnect;
-    try cmd.write(&w);
-
-    try self.steam_client.packets.pushOutgoing(self.gpa, self.server_conn, w.buffered(), .reliable);
+    _ = self;
 }
 
 fn sendConnect(self: *@This()) !void {
@@ -61,6 +54,14 @@ pub fn sendCommand(self: *@This(), command: shared.net.Command, flags: shared.St
 
 pub fn update(self: *@This(), system_context: *system.Context, info: *const Info) !void {
     try self.steam_client.packet_mutex.lock(self.io);
+
+    // 0. server list update.
+    if (self.refresh_server_list == true and self.steam_client.browser.list.refresh_state == .idle) {
+        self.steam_client.browser.list.refresh_state = .request;
+    } else if (self.steam_client.browser.list.refresh_state == .done) {
+        self.refresh_server_list = false;
+        self.steam_client.browser.list.refresh_state = .idle;
+    }
 
     // 1. Drain lifecycle events.
     for (self.steam_client.packets.events.items) |ev| switch (ev) {
