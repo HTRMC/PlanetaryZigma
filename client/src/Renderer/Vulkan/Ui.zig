@@ -234,7 +234,7 @@ fn pushQuads(self: *@This()) void {
                 .y = node.rect.top + font.size,
             };
             for (text) |char| {
-                var index: c_int = char - 32;
+                var index: c_int = @as(c_int, char) - 32;
                 if (index > 96 or index < 0) index = 96;
                 var quad: stbTruetype.stbtt_aligned_quad = undefined;
                 stbTruetype.stbtt_packedchar.GetPackedQuad(&font.chars, 512, 512, index, &pen.x, &pen.y, &quad, 0);

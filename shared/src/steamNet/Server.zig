@@ -19,7 +19,7 @@ pub fn init(gpa: std.mem.Allocator, io: std.Io) !@This() {
     if (!steam.Server.SteamInternal_GameServer_Init(
         0,
         27016,
-        27015,
+        27017,
         steam.STEAMGAMESERVER_QUERY_PORT_SHARED,
         steam.EServerMode.eServerModeAuthentication,
         "1.0.0.0",

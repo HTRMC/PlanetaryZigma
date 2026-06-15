@@ -1,22 +1,27 @@
 const std = @import("std");
 const shared = @import("shared");
+const Client = shared.SteamNet.Client;
 const system = @import("../system.zig");
 const World = system.World;
 const Spawner = @import("Spawner.zig");
 const Info = system.Info;
 const nz = shared.numz;
+const ServerList = struct {
+    servers: [8]Client.ServerInfo = undefined,
+    count: usize = 0,
+    refresh: bool = false,
+};
 
 gpa: std.mem.Allocator,
 io: std.Io,
-steam_client: *shared.SteamNet.Client,
+steam_client: *Client,
 spawner: *Spawner,
 /// Active connection to the server (0 = not yet connected). Filled in from
 /// SteamNet.events on the first .connected event.
 server_conn: shared.SteamNet.Conn = 0,
 /// Whether we've sent the "connect" handshake on the current server_conn.
 sent_connect: bool = false,
-
-refresh_server_list: bool = false,
+server_list: ServerList = .{},
 
 pub fn init(
     self: *@This(),
@@ -56,11 +61,17 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
     try self.steam_client.packet_mutex.lock(self.io);
 
     // 0. server list update.
-    if (self.refresh_server_list == true and self.steam_client.browser.list.refresh_state == .idle) {
+    if (self.server_list.refresh == true and self.steam_client.browser.list.refresh_state == .idle) {
         self.steam_client.browser.list.refresh_state = .request;
     } else if (self.steam_client.browser.list.refresh_state == .done) {
-        self.refresh_server_list = false;
+        self.server_list.refresh = false;
         self.steam_client.browser.list.refresh_state = .idle;
+        for (0..self.steam_client.browser.list.count) |i| {
+            @memcpy(self.server_list.servers[i].name[0..], self.steam_client.browser.list.servers[i].name[0..]);
+            self.server_list.servers[i].steam_id = self.steam_client.browser.list.servers[i].steam_id;
+            _ = try std.fmt.bufPrint(&self.server_list.servers[i].id_str, "{d}", .{self.server_list.servers[i].steam_id});
+        }
+        self.server_list.count = self.steam_client.browser.list.count;
     }
 
     // 1. Drain lifecycle events.
@@ -83,18 +94,12 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
         try self.sendConnect();
         self.sent_connect = true;
     }
-
     // 3. Send our input.
     if (self.server_conn != 0) {
-        for (info.world.entities.values()) |*entity| {
-            if (!entity.flags.camera or !entity.flags.transform) continue;
-            try self.sendCommand(.{ .input = entity.camera.input_map }, .reliable);
-            // std.log.debug("input_map: {any}", .{entity.camera.input_map});
-            entity.camera.input_map.mouse_wheel = 0;
-            break;
-        }
+        try self.sendCommand(.{ .input = info.world.camera.input_map }, .reliable);
+        // std.log.debug("input_map: {any}", .{entity.camera.input_map});
+        info.world.camera.input_map.mouse_wheel = 0;
     }
-
     // std.log.debug("cmd size {d}", .{self.steam_client.packets.incoming.items.len});
     // 4. Drain inbound commands.
     for (self.steam_client.packets.incoming.items) |*msg| {
@@ -113,11 +118,11 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
 fn handleCommand(self: *@This(), system_context: *system.Context, info: *const Info, command: shared.net.Command) !void {
     switch (command) {
         .acknowledge => |acknowledge| {
+            info.world.camera = .{ .transform = .{ .position = .{ 0, 0, 0 } } };
             const new_player = try self.spawner.spawn(.{
-                .camera = .{ .transform = .{ .position = .{ 0, 0, 0 } } },
                 .transform = .{ .position = .{ 0, 0, 0 } },
                 .model = .{ .id = 1 },
-                .flags = .{ .camera = true, .transform = true, .model = true },
+                .flags = .{ .transform = true, .model = true },
             });
             try info.world.enitity_mapping.put(self.gpa, acknowledge.id, new_player.id);
             info.world.my_server_id = acknowledge.id;
@@ -179,10 +184,10 @@ fn handleCommand(self: *@This(), system_context: *system.Context, info: *const I
             entity.transform.rotation = .fromVec(@floatCast(update_transform_command.rotation));
         },
         .update_camera_rotation => |rotation_command| {
-            const id = info.world.enitity_mapping.get(rotation_command.id) orelse return;
-            const entity = info.world.getPtr(id) orelse return;
-            entity.camera.transform.rotation = .fromVec(rotation_command.rotation);
-            entity.camera.transform.position = rotation_command.position;
+            // const id = info.world.enitity_mapping.get(rotation_command.id) orelse return;
+            // const entity = info.world.getPtr(id) orelse return;
+            info.world.camera.transform.rotation = .fromVec(rotation_command.rotation);
+            info.world.camera.transform.position = rotation_command.position;
         },
         else => std.log.err("Unhandled command {s}", .{@tagName(command)}),
     }

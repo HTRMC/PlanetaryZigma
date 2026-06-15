@@ -19,7 +19,6 @@ pub const Info = struct {
 pub const Entity = struct {
     pub const Flags = packed struct {
         transform: bool = false,
-        camera: bool = false,
         model: bool = false,
         screen_space: bool = false,
     };
@@ -32,7 +31,6 @@ pub const Entity = struct {
 
     model: Model = .{},
     transform: nz.Transform3D(f32) = .{},
-    camera: Camera = .{},
 
     pub fn deinit(self: *Entity, gpa: std.mem.Allocator) void {
         _ = self;
@@ -47,6 +45,7 @@ pub const World = struct {
     next_id: u32 = 1,
     enitity_mapping: std.AutoHashMapUnmanaged(u32, u32) = .empty,
     my_server_id: u32 = 0,
+    camera: Camera = .{},
 
     pub fn init(gpa: std.mem.Allocator) !@This() {
         return .{ .gpa = gpa };
@@ -119,13 +118,9 @@ pub const Context = struct {
     }
 
     pub fn update(self: *@This(), info: *const Info) !void {
-        for (info.world.entities.values()) |*entity| {
-            if (!entity.flags.camera or !entity.flags.transform) continue;
-            entity.camera.update(info, &self.network_manager, &self.renderer.inner.ui);
-            try self.renderer.update(info);
-            try self.animation.update(info, &self.renderer.inner.models);
-            break;
-        }
+        try info.world.camera.update(info, &self.network_manager, &self.renderer.inner.ui);
+        try self.renderer.update(info);
+        try self.animation.update(info, &self.renderer.inner.models);
         try self.asset_server.update();
         try self.network_manager.update(self, info);
         try self.spawner.update(info);
@@ -133,11 +128,7 @@ pub const Context = struct {
 
     pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.Event) !void {
         _ = self;
-        for (info.world.entities.values()) |*entity| {
-            if (!entity.flags.camera) continue;
-            try entity.camera.eventUpdate(info, event);
-            break;
-        }
+        try info.world.camera.eventUpdate(info, event);
     }
     fn reload(self: *@This(), pre_reload: bool) !void {
         if (pre_reload) {

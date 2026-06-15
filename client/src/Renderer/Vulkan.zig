@@ -497,13 +497,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *FrameData,
         .pStencilAttachment = null,
     };
 
-    const camera = camera: {
-        for (info.world.entities.values()) |*entity| {
-            if (entity.flags.camera) break :camera &entity.camera;
-        }
-        return;
-    };
-
+    const camera = info.world.camera;
     const width: f32 = @floatFromInt(self.swapchain.draw_image.extent.width);
     const height: f32 = @floatFromInt(self.swapchain.draw_image.extent.height);
     const aspect: f32 = width / height;
