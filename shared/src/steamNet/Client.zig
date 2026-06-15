@@ -6,6 +6,7 @@ const ServerListResponse = steam.ISteamMatchmakingServerListResponse;
 pub const ServerInfo = extern struct {
     steam_id: u64,
     name: [64]u8,
+    id_str: [64]u8,
 };
 pub const ServerList = extern struct {
     const RefreshState = enum(u8) {
@@ -105,7 +106,7 @@ pub fn deinit(self: *@This()) void {
 
     //NOTE: drain or SteamAPI_Shutdown segfaults when a conn + server-list query both existed.
     var drained: u32 = 0;
-    while (drained < 400) : (drained += 2) {
+    while (drained < 200) : (drained += 1) {
         self.steamPump() catch {};
         self.io.sleep(.fromMilliseconds(2), .real) catch {};
     }

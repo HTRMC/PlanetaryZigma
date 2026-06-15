@@ -1,22 +1,27 @@
 const std = @import("std");
 const shared = @import("shared");
+const Client = shared.SteamNet.Client;
 const system = @import("../system.zig");
 const World = system.World;
 const Spawner = @import("Spawner.zig");
 const Info = system.Info;
 const nz = shared.numz;
+const ServerList = struct {
+    servers: [8]Client.ServerInfo = undefined,
+    count: usize = 0,
+    refresh: bool = false,
+};
 
 gpa: std.mem.Allocator,
 io: std.Io,
-steam_client: *shared.SteamNet.Client,
+steam_client: *Client,
 spawner: *Spawner,
 /// Active connection to the server (0 = not yet connected). Filled in from
 /// SteamNet.events on the first .connected event.
 server_conn: shared.SteamNet.Conn = 0,
 /// Whether we've sent the "connect" handshake on the current server_conn.
 sent_connect: bool = false,
-
-refresh_server_list: bool = false,
+server_list: ServerList = .{},
 
 pub fn init(
     self: *@This(),
@@ -56,11 +61,17 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
     try self.steam_client.packet_mutex.lock(self.io);
 
     // 0. server list update.
-    if (self.refresh_server_list == true and self.steam_client.browser.list.refresh_state == .idle) {
+    if (self.server_list.refresh == true and self.steam_client.browser.list.refresh_state == .idle) {
         self.steam_client.browser.list.refresh_state = .request;
     } else if (self.steam_client.browser.list.refresh_state == .done) {
-        self.refresh_server_list = false;
+        self.server_list.refresh = false;
         self.steam_client.browser.list.refresh_state = .idle;
+        for (0..self.steam_client.browser.list.count) |i| {
+            @memcpy(self.server_list.servers[i].name[0..], self.steam_client.browser.list.servers[i].name[0..]);
+            self.server_list.servers[i].steam_id = self.steam_client.browser.list.servers[i].steam_id;
+            _ = try std.fmt.bufPrint(&self.server_list.servers[i].id_str, "{d}", .{self.server_list.servers[i].steam_id});
+        }
+        self.server_list.count = self.steam_client.browser.list.count;
     }
 
     // 1. Drain lifecycle events.

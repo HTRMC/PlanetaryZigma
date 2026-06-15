@@ -16,7 +16,6 @@ sensitivity: f32 = 1,
 was_rotating: bool = false,
 mouse_pos: [2]f64 = .{ 0, 0 },
 mouse_prev_pos: [2]f64 = .{ 0, 0 },
-was_running: bool = false,
 
 input_map: shared.net.Command.Input = .{},
 
@@ -37,62 +36,61 @@ pub fn update(self: *@This(), info: *const Info, network_manager: *NetworkManage
         .right_click = self.input_map.mouse_button_right,
     });
     // if (true) return;
-    ui.add(null, .{ .position = .{
-        .fixed = .{
-            .left = 0,
-            .top = 40,
-        },
-    }, .size = .{
-        .fixed = .{
-            .heigth = 40,
-            .width = 100,
-        },
-    }, .color = if (ui.isHot("refresh")) .new(1, 1, 1, 1) else .grey, .name = "refresh", .text = "Refresh" });
-
-    if (self.was_running == false or ui.isActive("refresh") and network_manager.refresh_server_list == false) {
-        network_manager.refresh_server_list = true;
-        self.was_running = true;
-        std.log.debug("Pressed button", .{});
-    }
-
     ui.add(null, .{
-        .name = "panel",
+        .name = "root",
         .size = .{ .fixed = .{
             .heigth = 500,
             .width = 400,
         } },
-        .gap = 10,
         .position = .center,
         .color = .new(0.5, 0.5, 0.5, 0.8),
         .axis_align = .verical,
         .children = &.{
             .{
+                .name = "servers",
                 .position = .{ .fixed = .{ .left = 0, .top = 0 } },
-                .size = .{ .percent = .{ .heigth = 0.20, .width = 1 } },
-                .color = .new(1, 0, 0, 1),
-                .axis_align = .horizontal,
-                .gap = 20,
-                .children = &.{ .{
-                    .position = .{ .fixed = .{ .left = 0, .top = 0 } },
-                    .size = .{ .percent = .{ .heigth = 1, .width = 0.4 } },
-                    .color = .new(1, 1, 0, 1),
-                }, .{
-                    .name = "button",
-                    .text = "hello",
-                    .position = .{ .fixed = .{ .left = 0, .top = 0 } },
-                    .size = .{ .percent = .{ .heigth = 1, .width = if (ui.isHot("button")) 1 else 0.4 } },
-                    .color = if (ui.isHot("button")) .new(1, 1, 1, 1) else .new(1, 1, 0, 1),
-                } },
+                .axis_align = .verical,
+                .size = .{
+                    .percent = .{
+                        .heigth = 0.8,
+                        .width = 1.0,
+                    },
+                },
             },
-            .{
-                .position = .{ .fixed = .{ .left = 0, .top = 0 } },
-                .size = .{ .percent = .{ .heigth = 0.20, .width = 1 } },
-                .color = .new(1, 1, 0, 1),
-            },
+            .{ .name = "buttons", .position = .{
+                .fixed = .{ .left = 0, .top = 0 },
+            }, .axis_align = .horizontal, .size = .{
+                .percent = .{
+                    .heigth = 0.2,
+                    .width = 1.0,
+                },
+            }, .color = .new(0.1, 0.1, 0.1, 1), .children = &.{
+                .{ .position = .center, .size = .{
+                    .fixed = .{
+                        .heigth = 40,
+                        .width = 100,
+                    },
+                }, .color = if (ui.isHot("refresh")) .new(0.2, 0.2, 0.2, 1) else .grey, .name = "refresh", .text = "Refresh" },
+            } },
         },
     });
-    if (ui.isActive("button")) {
-        std.log.debug("Pressed button", .{});
+    for (0..network_manager.server_list.count) |i| {
+        const server = &network_manager.server_list.servers[i];
+        ui.add("servers", .{
+            .name = &server.id_str,
+            .text = &server.id_str,
+            .position = .{ .fixed = .{ .left = 0, .top = 0 } },
+            .size = .{ .percent = .{
+                .heigth = 0.2,
+                .width = 1.0,
+            } },
+            .color = if (ui.isHot(&server.id_str)) .new(0.2, 0.2, 0.2, 1) else .grey,
+        });
+        if (ui.isActive(&server.id_str)) std.log.debug("connect to {d}", .{server.steam_id});
+    }
+    if (ui.isActive("refresh") and network_manager.server_list.refresh == false) {
+        network_manager.server_list.refresh = true;
+        std.log.debug("Pressed button, {d}", .{network_manager.server_list.count});
     }
 
     ui.end();
