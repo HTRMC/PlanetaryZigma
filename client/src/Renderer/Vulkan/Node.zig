@@ -4,9 +4,9 @@ const nz = @import("shared").numz;
 const Mesh = @import("Mesh.zig");
 const Material = @import("Material.zig");
 
-parent: ?*@This() = null,
+parent: ?usize = null,
 index: u32 = 0,
-children: std.ArrayList(*@This()) = .empty,
+children: std.ArrayList(usize) = .empty,
 mesh_id: ?[]const u8 = null,
 translation: nz.Vec3(f32) = @splat(0),
 scale: nz.Vec3(f32) = @splat(1),
@@ -24,10 +24,10 @@ pub fn getLocalMatrix(self: *@This()) nz.Mat4x4(f32) {
         .mul(.scale(self.scale));
 }
 
-pub fn refreshMatrices(self: *@This(), parent_matrix: *nz.Mat4x4(f32)) void {
+pub fn refreshMatrices(self: *@This(), nodes: []@This(), parent_matrix: *nz.Mat4x4(f32)) void {
     self.world_matrix = parent_matrix.mul(self.getLocalMatrix());
     for (self.children.items[0..self.children.items.len]) |child| {
-        child.refreshMatrices(&self.world_matrix);
+        nodes[child].refreshMatrices(nodes, &self.world_matrix);
     }
 }
 

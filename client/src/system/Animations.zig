@@ -6,6 +6,7 @@ const nz = shared.numz;
 const Model = @import("../Renderer/Vulkan/GltfModel.zig");
 const Renderer = @import("../Renderer/Vulkan.zig");
 const Node = @import("../Renderer/Vulkan/Node.zig");
+const SkeletonAnimation = @import("../Renderer/Vulkan/SkeletonAnimation.zig");
 
 gpa: std.mem.Allocator,
 
@@ -16,27 +17,28 @@ pub fn init(self: *@This(), gpa: std.mem.Allocator) void {
 pub fn update(
     self: *@This(),
     info: *const Info,
-    models: *std.ArrayList(*Model),
+    skeletons: *std.AutoHashMap(u32, SkeletonAnimation),
 ) !void {
     _ = self;
 
     // std.log.debug("render ptr {*}, model ptr{*}", .{ self.renderer, models });
     for (info.world.entities.values()) |*entity| {
-        if (!entity.flags.model) continue;
-        const model = models.items[entity.model.id];
+        const skeleton_animation = skeletons.getPtr(entity.id) orelse continue;
+        const model = skeleton_animation.model;
         if (model.animations.items.len == 0) continue;
-        var animation = &model.animations.items[model.active_animation];
-        animation.current_time += info.delta_time;
+        const animation = model.animations.items[model.active_animation];
+        skeleton_animation.curremt_time += info.delta_time;
 
-        if (animation.current_time > animation.end) animation.current_time -= animation.end;
+        if (skeleton_animation.curremt_time > animation.end) skeleton_animation.curremt_time -= animation.end;
         for (animation.channels.items) |*channel| {
             const sampler = animation.samplers.items[channel.sampler_index];
             for (0..sampler.inputs.items.len - 1) |i| {
                 const sampler_in = sampler.inputs.items[i];
                 const sampler_in_next = sampler.inputs.items[i + 1];
-                if (animation.current_time >= sampler_in and animation.current_time <= sampler_in_next) {
-                    const interpolate_value: f32 = (animation.current_time - sampler_in) / (sampler_in_next - sampler_in);
-                    const node = channel.node orelse return error.NoNode;
+                if (skeleton_animation.curremt_time >= sampler_in and skeleton_animation.curremt_time <= sampler_in_next) {
+                    const interpolate_value: f32 = (skeleton_animation.curremt_time - sampler_in) / (sampler_in_next - sampler_in);
+                    const node_id = channel.node orelse return error.NoNode;
+                    const node = &skeleton_animation.nodes[node_id];
                     const sampler_out = sampler.outputs.items[i];
                     const sampler_out_next = sampler.outputs.items[i + 1];
                     switch (channel.path) {
@@ -70,28 +72,29 @@ pub fn update(
                 }
             }
         }
-        for (model.top_nodes.items) |node| {
+        for (model.top_nodes.items) |node_index| {
             var top_matrix: nz.Mat4x4(f32) = .identity;
-            node.refreshMatrices(&top_matrix);
+            skeleton_animation.nodes[node_index].refreshMatrices(skeleton_animation.nodes, &top_matrix);
         }
-        for (model.top_nodes.items) |node| {
-            updateJoints(node, model);
+        for (model.top_nodes.items) |root_index| {
+            updateJoints(root_index, skeleton_animation, model);
         }
     }
 }
 
-fn updateJoints(node: *Node, model: *Model) void {
+fn updateJoints(node_index: usize, skeleton_animation: *SkeletonAnimation, model: *Model) void {
+    const node = &skeleton_animation.nodes[node_index];
     if (node.skin_id > -1) {
         const skin = &model.skins.items[@intCast(node.skin_id)];
         const inverse_bind_matrices = skin.inverse_bind_matrices.?;
         const inverse_transform: nz.Mat4x4(f32) = node.world_matrix.inverse();
-        const joint_matrices: [*]nz.Mat4x4(f32) = @ptrCast(@alignCast(skin.buffer.?.info.pMappedData));
-        for (skin.joints.items, 0..) |joint, i| {
-            joint_matrices[i] = inverse_transform.mul(joint.world_matrix.mul(inverse_bind_matrices.items[i]));
+        const joint_matrices: [*]nz.Mat4x4(f32) = @ptrCast(@alignCast(skeleton_animation.buffers[@intCast(node.skin_id)].info.pMappedData));
+        for (skin.joints, 0..) |joint_idnex, i| {
+            joint_matrices[i] = inverse_transform.mul(skeleton_animation.nodes[joint_idnex].world_matrix.mul(inverse_bind_matrices.items[i]));
         }
     }
-    for (node.children.items) |child_node| {
+    for (node.children.items) |child_id| {
         // std.log.debug("Update Child", .{node.translation});
-        updateJoints(child_node, model);
+        updateJoints(child_id, skeleton_animation, model);
     }
 }
