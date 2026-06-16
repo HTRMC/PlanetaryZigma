@@ -55,6 +55,7 @@ fn decodeImages(gpa: std.mem.Allocator, tasks: []ImageDecodeTask) !void {
         return;
     }
 
+    // TODO: Replace per-model thread spawning with a persistent asset thread pool.
     var threads = try gpa.alloc(std.Thread, worker_count);
     defer gpa.free(threads);
 
