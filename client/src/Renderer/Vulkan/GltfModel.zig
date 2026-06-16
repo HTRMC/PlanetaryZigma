@@ -17,6 +17,7 @@ const ext = @import("procs.zig").device.ProcTable;
 const RenderResources = @import("RenderResources.zig");
 const check = @import("utils.zig").check;
 const Info = @import("../Vulkan.zig").Info;
+const tracy = @import("ztracy");
 
 device: Device,
 vma: Vma,
@@ -69,6 +70,8 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
 
 fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: std.Io.File, file_path: []const u8) !void {
     _ = file_path;
+    const load_zone = tracy.zoneNamed(@src(), "loadModel");
+    defer load_zone.end();
     const self: *@This() = @ptrCast(@alignCast(user_data));
     var read_buffer: [4096]u8 = undefined;
     var reader = file.reader(io, &read_buffer);
@@ -76,7 +79,9 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
     defer gpa.free(content);
     std.debug.print("size:  {d}\n", .{content.len});
 
+    const parse_zone = tracy.zoneNamed(@src(), "parseGlbSlice");
     var loaded = try zgltf.parseGlbSlice(gpa, content);
+    parse_zone.end();
     defer loaded.deinit();
     const gltf_loaded = loaded.parsed.value;
     const bin = loaded.bin orelse return error.MissingBin;

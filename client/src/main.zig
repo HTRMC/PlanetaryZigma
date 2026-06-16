@@ -5,8 +5,11 @@ const system = @import("system");
 const World = system.World;
 const yes = @import("yes");
 const window_util = @import("window.zig");
+const tracy = @import("ztracy");
 
 pub fn main(init: std.process.Init) !void {
+    tracy.setThreadName("main");
+    const startup_zone = tracy.zoneNamed(@src(), "startup");
     var gpa_impl = if (builtin.mode == .Debug) std.heap.DebugAllocator(.{ .stack_trace_frames = 16, .verbose_log = false }).init else init.gpa;
     defer {
         if (builtin.mode == .Debug) _ = gpa_impl.deinit();
@@ -14,8 +17,10 @@ pub fn main(init: std.process.Init) !void {
     const gpa = gpa_impl.allocator();
     const io = init.io;
 
+    const steam_zone = tracy.zoneNamed(@src(), "steam init");
     var steam_client: shared.SteamNet.Client = try .init(gpa, io);
     steam_client.handle_packets_future = try io.concurrent(shared.SteamNet.Client.handlePackets, .{&steam_client});
+    steam_zone.end();
 
     defer steam_client.deinit();
 
@@ -26,6 +31,7 @@ pub fn main(init: std.process.Init) !void {
     var cross_window: yes.Platform.Cross.Window = .empty(platform);
     const window = cross_window.interface(platform);
     const window_size: yes.Window.Size = .{ .width = 854, .height = 480 };
+    const window_zone = tracy.zoneNamed(@src(), "window open");
     try window.open(platform, .{
         .title = "PlanetaryZigma",
         .size = window_size,
@@ -35,6 +41,7 @@ pub fn main(init: std.process.Init) !void {
         } },
         .surface_type = .vulkan,
     });
+    window_zone.end();
     defer window.close(platform);
 
     var asset_server = try shared.AssetServer.init(gpa, init.io);
@@ -50,6 +57,7 @@ pub fn main(init: std.process.Init) !void {
     var system_context: system.Context = undefined;
     var system_table: system.ffi.Table = try .load(&watcher.dynlib.?);
 
+    const ctx_zone = tracy.zoneNamed(@src(), "systemContextInit");
     system_table.systemContextInit(&system_context, &system.Context.Data{
         .gpa = gpa,
         .asset_server = &asset_server,
@@ -59,12 +67,15 @@ pub fn main(init: std.process.Init) !void {
         .world = &world,
         .steam_client = &steam_client,
     });
+    ctx_zone.end();
     defer system_table.systemContextDeinit(&system_context);
 
     var elapsed_time: f32 = 0;
     var accumlated_time: f32 = 0;
     const time_step: f32 = 0.0167;
+    startup_zone.end();
     main_loop: while (true) {
+        tracy.frameMark();
         accumlated_time += getDeltaTime(io);
         if (accumlated_time < time_step) continue;
         accumlated_time -= time_step;
