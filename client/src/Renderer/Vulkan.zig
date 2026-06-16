@@ -192,10 +192,10 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         self.vma,
         self.device,
         asset_server,
-        "objects/Mousey.glb",
+        "objects/skeleton.glb",
         &self.render_resources,
         .{
-            .position = .{ 0, -1, 0 },
+            .position = .{ 0, -0.6, 0 },
             .rotation = nz.Quat(f32).angleAxis(std.math.pi, .{ 0, 1, 0 }),
         },
     );
