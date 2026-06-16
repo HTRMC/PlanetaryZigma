@@ -62,7 +62,7 @@ pub const World = struct {
     }
 
     pub fn despawn(self: *@This(), id: u32) bool {
-        if (self.entities.getPtr(id)) |entity| entity.deinit(self.gpa);
+        // if (self.entities.getPtr(id)) |entity| entity.deinit(self.gpa);
         return self.entities.swapRemove(id);
     }
 };
@@ -114,7 +114,7 @@ pub const Context = struct {
     pub fn update(self: *@This(), info: *const Info) !void {
         try info.world.camera.update(info, &self.network_manager, &self.renderer.inner.ui);
         try self.renderer.update(info);
-        try self.animation.update(info, &self.renderer.inner.models);
+        try self.animation.update(info, &self.renderer.inner.skelentons);
         try self.asset_server.update();
         try self.network_manager.update(info);
         try self.spawner.update(info, self);

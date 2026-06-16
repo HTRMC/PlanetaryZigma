@@ -28,8 +28,8 @@ pub fn deinit(self: *@This()) void {
     self.pending_despawn.deinit(self.gpa);
 }
 
-pub fn spawn(self: *@This(), kind: shared.Entity.Kind, server_id: u32) !*void {
-    self.pending_spawn.appendAssumeCapacity(.{ .kind = kind, .server_id = server_id });
+pub fn spawn(self: *@This(), entity_info: SpawnInfo) void {
+    self.pending_spawn.appendAssumeCapacity(entity_info);
 }
 
 pub fn depspawn(self: *@This(), entity_id: u32) !void {
@@ -37,16 +37,16 @@ pub fn depspawn(self: *@This(), entity_id: u32) !void {
     self.pending_despawn.appendAssumeCapacity(entity_id);
 }
 
-pub fn update(self: *@This(), info: *const system.Info, system_context: *system) !void {
+pub fn update(self: *@This(), info: *const system.Info, system_context: *system.Context) !void {
     _ = info;
     std.debug.assert(self.pending_despawn.items.len < system.World.max_entities);
     std.debug.assert(self.pending_spawn.items.len < system.World.max_entities);
 
     for (self.pending_spawn.items) |entity_info| {
         if (self.world.getPtr(entity_info.server_id) == null) {
-            var entity = try self.world.spawn();
+            const entity = try self.world.spawn();
             const client_id = entity.id;
-            entity = .{ .id = client_id, .kind = entity_info.kind, .flags = .{ .transform = true } };
+            entity.* = .{ .id = client_id, .kind = entity_info.kind, .flags = .{ .transform = true } };
             switch (entity_info.kind) {
                 .enemy, .player => |kind| {
                     try system_context.renderer.inner.attachSkeleton(self.gpa, client_id, kind);
@@ -63,6 +63,9 @@ pub fn update(self: *@This(), info: *const system.Info, system_context: *system)
                         .planet,
                     );
                     std.log.debug("SPAWNED: Planet {d}", .{size});
+                },
+                .bullet => {
+                    entity.transform.scale = @splat(0.1);
                 },
                 else => {},
             }

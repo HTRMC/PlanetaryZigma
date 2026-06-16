@@ -10,8 +10,8 @@ const Buffer = @import("Buffer.zig");
 nodes: []Node,
 buffers: []Buffer,
 model: *Model,
-animation_curremt_time: f32 = 0,
-animation_active: usize = 0,
+curremt_time: f32 = 0,
+active: usize = 0,
 
 pub fn init(gpa: std.mem.Allocator, vma: Vma, device: Device, model: *Model) !@This() {
     const nodes = try gpa.alloc(Node, model.nodes.items.len);
@@ -34,12 +34,12 @@ pub fn init(gpa: std.mem.Allocator, vma: Vma, device: Device, model: *Model) !@T
         );
     }
 
-    return .{ .nodes = nodes, .model = model, .buffer = buffers };
+    return .{ .nodes = nodes, .model = model, .buffers = buffers };
 }
 
-pub fn deint(self: *@This(), gpa: std.mem.Allocator, vma: Vma) !void {
-    for (self.nodes.items) |*node| node.deinit(gpa);
-    self.nodes.deinit(gpa);
-    for (self.buffers.items) |*buffer| buffer.deinit(vma);
-    self.buffers.deinit(gpa);
+pub fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma) void {
+    for (self.nodes) |*node| node.deinit(gpa);
+    gpa.free(self.nodes);
+    for (self.buffers) |*buffer| buffer.deinit(vma);
+    gpa.free(self.buffers);
 }

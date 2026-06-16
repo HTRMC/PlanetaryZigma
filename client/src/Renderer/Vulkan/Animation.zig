@@ -24,7 +24,7 @@ const Sampler = struct {
 
 const Channel = struct {
     path: AnimationPathCore,
-    node: ?*Node,
+    node: ?u32,
     sampler_index: u32,
 };
 

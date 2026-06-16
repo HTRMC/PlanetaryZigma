@@ -57,7 +57,7 @@ pub fn sendCommand(self: *@This(), command: shared.net.Command, flags: shared.St
     try self.steam_client.packets.pushOutgoing(self.gpa, self.server_conn, w.buffered(), flags);
 }
 
-pub fn update(self: *@This(), system_context: *system.Context, info: *const Info) !void {
+pub fn update(self: *@This(), info: *const Info) !void {
     try self.steam_client.packet_mutex.lock(self.io);
 
     // 0. server list update.
@@ -109,7 +109,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
             std.log.err("parse command: {s}", .{@errorName(err)});
             continue;
         };
-        try self.handleCommand(system_context, info, parsed.command);
+        try self.handleCommand(info, parsed.command);
     }
     self.steam_client.packets.incoming.clearRetainingCapacity();
     self.steam_client.packet_mutex.unlock(self.io);
@@ -119,19 +119,20 @@ fn handleCommand(self: *@This(), info: *const Info, command: shared.net.Command)
     switch (command) {
         .acknowledge => |acknowledge| {
             info.world.camera = .{ .transform = .{ .position = .{ 0, 0, 0 } } };
-            try self.spawner.spawn(.player);
+            self.spawner.spawn(.{ .kind = .player, .server_id = acknowledge.id });
             info.world.my_server_id = acknowledge.id;
             std.log.debug("ack entities: {d}", .{info.world.next_id});
         },
         .spawn_entity => |spawn_entity| {
             if (info.world.enitity_mapping.contains(spawn_entity.id)) return;
+            const server_id = spawn_entity.id;
 
             switch (spawn_entity.kind) {
                 .player => {
-                    try self.spawner.spawn(.player);
+                    self.spawner.spawn(.{ .kind = .player, .server_id = server_id });
                 },
                 .planet => {
-                    try self.spawner.spawn(.planet);
+                    self.spawner.spawn(.{ .kind = .planet, .server_id = server_id, .data = spawn_entity.data });
                     // const size: u32 = @intCast(spawn_entity.data[0]);
                     // const planet: shared.Planet(.renderable) = try .init(self.gpa, size);
                     // system_context.planet = planet;
@@ -146,10 +147,10 @@ fn handleCommand(self: *@This(), info: *const Info, command: shared.net.Command)
                     // new_entity.kind = .planet;
                 },
                 .enemy => {
-                    try self.spawner.spawn(.enemy);
+                    self.spawner.spawn(.{ .kind = .enemy, .server_id = server_id });
                 },
                 .bullet => {
-                    try self.spawner.spawn(.bullet);
+                    self.spawner.spawn(.{ .kind = .bullet, .server_id = server_id });
                 },
                 .unknown => @panic("unknown entity type... wtf"),
             }

@@ -24,10 +24,10 @@ pub fn getLocalMatrix(self: *@This()) nz.Mat4x4(f32) {
         .mul(.scale(self.scale));
 }
 
-pub fn refreshMatrices(self: *@This(), nodes: std.ArrayList(@This()), parent_matrix: *nz.Mat4x4(f32)) void {
+pub fn refreshMatrices(self: *@This(), nodes: []@This(), parent_matrix: *nz.Mat4x4(f32)) void {
     self.world_matrix = parent_matrix.mul(self.getLocalMatrix());
     for (self.children.items[0..self.children.items.len]) |child| {
-        nodes.items[child].refreshMatrices(nodes, &self.world_matrix);
+        nodes[child].refreshMatrices(nodes, &self.world_matrix);
     }
 }
 

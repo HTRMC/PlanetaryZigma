@@ -21,7 +21,7 @@ vma: Vma,
 model_name: []const u8,
 render_resources: *RenderResources,
 nodes: std.ArrayList(Node) = .empty,
-top_nodes: std.ArrayList(*Node) = .empty,
+top_nodes: std.ArrayList(usize) = .empty,
 animations: std.ArrayList(Animation) = .empty,
 active_animation: usize = 0,
 skins: std.ArrayList(Skin) = .empty,
@@ -360,20 +360,20 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
             }
         }
     }
-    for (self.nodes.items) |*node| {
+    for (self.nodes.items, 0..) |*node, i| {
         if (node.parent == null) {
-            try self.top_nodes.append(gpa, node);
+            try self.top_nodes.append(gpa, i);
             var top_matrix: nz.Mat4x4(f32) = .identity;
-            node.refreshMatrices(self.nodes, &top_matrix);
+            node.refreshMatrices(self.nodes.items, &top_matrix);
         }
     }
 
     if (gltf_loaded.skins) |skins| {
         const model_skins = try self.skins.addManyAsSlice(gpa, skins.len);
         for (skins, model_skins) |skin, *model_skin| {
-            const joints = try gpa.alloc(*Node, skin.joints.len);
+            const joints = try gpa.alloc(usize, skin.joints.len);
             for (skin.joints, 0..) |node_index, joint_index| {
-                joints[joint_index] = &self.nodes.items[node_index];
+                joints[joint_index] = node_index;
             }
             var matrices: ?[]nz.Mat4x4(f32) = null;
             if (skin.inverseBindMatrices.? > -1) {
@@ -446,7 +446,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                 const model_channel = model_animation.channels.addOneAssumeCapacity();
                 model_channel.* = .{
                     .path = channel.target.coreKind() orelse return error.AnimationTargetPath,
-                    .node = if (channel.target.node) |node_index| &self.nodes.items[node_index] else null,
+                    .node = if (channel.target.node) |node_index| node_index else null,
                     .sampler_index = channel.sampler,
                 };
             }
