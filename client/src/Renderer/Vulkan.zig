@@ -84,6 +84,8 @@ pub const InitOptions = struct {
 };
 
 pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOptions) !*@This() {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const self = try gpa.create(@This());
     self.models = .empty;
 
@@ -319,6 +321,8 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
 }
 
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     check(c.vkDeviceWaitIdle(self.device.handle)) catch {};
 
     self.render_resources.deinit(gpa, self.vma, self.device);
@@ -346,6 +350,8 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
 }
 
 pub fn update(self: *@This(), info: *const Info) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     // const time = data.delta_time;
     // const elapsed_time = data.elapsed_time;
     var image_index: u32 = undefined;
@@ -436,6 +442,8 @@ pub fn update(self: *@This(), info: *const Info) !void {
 }
 
 pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *FrameData, info: *const Info) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const elapsed_time = info.elapsed_time;
     var draw_image_barrier: Image.Barrier = .init(cmd, self.swapchain.draw_image.vk_image, c.VK_IMAGE_ASPECT_COLOR_BIT);
 
@@ -668,6 +676,8 @@ pub fn draw(
     node: *Node,
     top_matrix: nz.Mat4x4(f32),
 ) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     // const node_transform: nz.Transform3D(f32) = .fromMat4x4(top_transform.toMat4x4().mul(node.world_transform.toMat4x4()));
     // TODO: World tansform incorrect?
     const node_matrix = top_matrix.mul(node.world_matrix);
@@ -732,6 +742,8 @@ pub fn draw(
 }
 
 pub fn resize(self: *@This(), gpa: std.mem.Allocator, width: u32, height: u32) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     try self.swapchain.recreate(
         gpa,
         self.vma,
@@ -746,6 +758,8 @@ pub fn resize(self: *@This(), gpa: std.mem.Allocator, width: u32, height: u32) !
 }
 
 pub fn createModelWithMesh(self: *@This(), gpa: std.mem.Allocator, name: []const u8, verices: []const Mesh.Vertex, indices: []const u32) !usize {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const mesh = try Mesh.init(
         gpa,
         self.vma,
@@ -775,6 +789,8 @@ pub fn createModelWithMesh(self: *@This(), gpa: std.mem.Allocator, name: []const
 }
 
 fn getViewMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const inv_rotation = transform.rotation.conjugate().toMat4x4();
     const inv_translation = nz.Mat4x4(f32).translate(-transform.position);
 
@@ -782,6 +798,8 @@ fn getViewMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {
 }
 
 fn perspective(fovy_rad: f32, aspect: f32, near: f32, far: f32) nz.Mat4x4(f32) {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const f = 1.0 / std.math.tan(fovy_rad / 2.0);
     return .new(.{
         f / aspect, 0, 0, 0,
@@ -792,6 +810,8 @@ fn perspective(fovy_rad: f32, aspect: f32, near: f32, far: f32) nz.Mat4x4(f32) {
 }
 
 fn orthographic(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) nz.Mat4x4(f32) {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     return .new(.{
         2.0 / (right - left),             0.0,                              0.0,                          0.0,
         0.0,                              2.0 / (top - bottom),             0.0,                          0.0,

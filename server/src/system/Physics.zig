@@ -1,6 +1,7 @@
 const std = @import("std");
 const shared = @import("shared");
 const system = @import("../system.zig");
+const tracy = @import("ztracy");
 const nz = shared.numz;
 
 pub const zphy = @import("zphy");
@@ -55,6 +56,8 @@ const BroadPhaseLayerInterface = extern struct {
     object_to_broad_phase: [object_layers.len]zphy.BroadPhaseLayer = undefined,
 
     fn init() BroadPhaseLayerInterface {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         var object_to_broad_phase: [object_layers.len]zphy.BroadPhaseLayer = undefined;
         object_to_broad_phase[object_layers.non_moving] = broad_phase_layers.non_moving;
         object_to_broad_phase[object_layers.moving] = broad_phase_layers.moving;
@@ -62,14 +65,20 @@ const BroadPhaseLayerInterface = extern struct {
     }
 
     fn selfPtr(broad_phase_layer_interface: *zphy.BroadPhaseLayerInterface) *BroadPhaseLayerInterface {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         return @alignCast(@fieldParentPtr("broad_phase_layer_interface", broad_phase_layer_interface));
     }
 
     fn selfPtrConst(broad_phase_layer_interface: *const zphy.BroadPhaseLayerInterface) *const BroadPhaseLayerInterface {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         return @alignCast(@fieldParentPtr("broad_phase_layer_interface", broad_phase_layer_interface));
     }
 
     pub fn getNumBroadPhaseLayers(_: *const zphy.BroadPhaseLayerInterface) callconv(.c) u32 {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         return broad_phase_layers.len;
     }
 
@@ -77,6 +86,8 @@ const BroadPhaseLayerInterface = extern struct {
         broad_phase_layer_interface: *const zphy.BroadPhaseLayerInterface,
         layer: zphy.ObjectLayer,
     ) callconv(.c) zphy.BroadPhaseLayer {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         return selfPtrConst(broad_phase_layer_interface).object_to_broad_phase[layer];
     }
 };
@@ -88,6 +99,8 @@ const ObjectVsBroadPhaseLayerFilter = extern struct {
         layer1: zphy.ObjectLayer,
         layer2: zphy.BroadPhaseLayer,
     ) callconv(.c) bool {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         return switch (layer1) {
             object_layers.non_moving => layer2 == broad_phase_layers.moving,
             object_layers.moving => true,
@@ -103,6 +116,8 @@ const ObjectLayerPairFilter = extern struct {
         object1: zphy.ObjectLayer,
         object2: zphy.ObjectLayer,
     ) callconv(.c) bool {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         return switch (object1) {
             object_layers.non_moving => object2 == object_layers.moving,
             object_layers.moving => true,
@@ -115,10 +130,14 @@ const ContactListener = extern struct {
     contact_listener: zphy.ContactListener = .init(@This()),
 
     fn selfPtr(contact_listener: *zphy.ContactListener) *ContactListener {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         return @alignCast(@fieldParentPtr("contact_listener", contact_listener));
     }
 
     fn selfPtrConst(contact_listener: *const zphy.ContactListener) *const ContactListener {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         return @alignCast(@fieldParentPtr("contact_listener", contact_listener));
     }
 
@@ -129,6 +148,8 @@ const ContactListener = extern struct {
         base_offset: *const [3]zphy.Real,
         collision_result: *const zphy.CollideShapeResult,
     ) callconv(.c) zphy.ValidateResult {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         _ = contact_listener;
         _ = body1;
         _ = body2;
@@ -144,6 +165,8 @@ const ContactListener = extern struct {
         _: *const zphy.ContactManifold,
         _: *zphy.ContactSettings,
     ) callconv(.c) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         _ = contact_listener;
         _ = body1;
         _ = body2;
@@ -156,6 +179,8 @@ const ContactListener = extern struct {
         _: *const zphy.ContactManifold,
         _: *zphy.ContactSettings,
     ) callconv(.c) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         _ = contact_listener;
         _ = body1;
         _ = body2;
@@ -165,12 +190,16 @@ const ContactListener = extern struct {
         contact_listener: *zphy.ContactListener,
         sub_shape_id_pair: *const zphy.SubShapeIdPair,
     ) callconv(.c) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         _ = contact_listener;
         _ = sub_shape_id_pair;
     }
 };
 
 pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     try zphy.init(gpa, io, .{});
     const broad_phase_layer_interface = try gpa.create(BroadPhaseLayerInterface);
     broad_phase_layer_interface.* = BroadPhaseLayerInterface.init();
@@ -238,6 +267,8 @@ pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io) !void {
 
 //NOTE: Jolt leaks memory ;_;
 pub fn deinit(self: *@This()) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     std.log.err(
         \\
         \\╔════════════════════════════════════╗
@@ -253,6 +284,8 @@ pub fn deinit(self: *@This()) void {
 }
 
 pub fn reload(self: *@This(), pre_reload: bool, world: *system.World) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     if (pre_reload) {
         // Serialize body states before destroying
         // TODO: Implement body serialization when you have active bodies
@@ -295,6 +328,8 @@ pub fn reload(self: *@This(), pre_reload: bool, world: *system.World) !void {
 }
 
 pub fn update(self: *@This(), info: *const system.Info) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const body_interface = self.physics_system.getBodyInterfaceMut();
 
     // 1. Apply custom gravity per dynamic entity.
@@ -326,6 +361,8 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
 }
 
 fn alignToPlanet(self: *@This(), info: *const system.Info) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const body_interface = self.physics_system.getBodyInterfaceMut();
 
     for (info.world.entities.values()) |*entity| {
@@ -353,6 +390,8 @@ fn alignToPlanet(self: *@This(), info: *const system.Info) void {
 }
 
 pub fn createBody(self: *@This(), entity: *system.Entity) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const collider = &entity.collider;
     const transform = entity.transform;
     const matrix = transform.toMat4x4();
@@ -413,6 +452,8 @@ pub fn createBody(self: *@This(), entity: *system.Entity) !void {
 }
 
 pub fn destroyBody(self: *@This(), body_id: zphy.BodyId) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const body_interface = self.physics_system.getBodyInterfaceMut();
     body_interface.removeAndDestroyBody(body_id);
 }

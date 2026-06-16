@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const shared = @import("shared");
 const Info = @import("system.zig").Info;
 const yes = @import("yes");
+const tracy = @import("ztracy");
 const AssetServer = shared.AssetServer;
 
 inner: Inner,
@@ -18,12 +19,16 @@ const YesSurfaceCreateUserData = struct {
 };
 
 pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, platform: yes.Platform, window: *yes.Window) !@This() {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     return switch (builtin.os.tag) {
         else => initVulkan(gpa, asset_server, platform, window),
     };
 }
 
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     self.inner.deinit(gpa);
     switch (builtin.os.tag) {
         .macos => self.inner.deinit(),
@@ -34,14 +39,20 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
 }
 
 pub fn update(self: *@This(), info: *const Info) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     try self.inner.update(info);
 }
 
 pub fn resize(self: *@This(), gpa: std.mem.Allocator, window: *yes.Window) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     try self.inner.resize(gpa, window.size.width, window.size.height);
 }
 
 pub fn initVulkan(gpa: std.mem.Allocator, asset_server: *AssetServer, platform: yes.Platform, window: *yes.Window) !@This() {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const extensions: []const [*:0]const u8 = switch (builtin.os.tag) {
         .windows => &.{
             Vulkan.c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
@@ -115,5 +126,7 @@ pub fn initVulkan(gpa: std.mem.Allocator, asset_server: *AssetServer, platform: 
 }
 
 fn createVulkanSurface(instance: *Vulkan.c.VkInstance, user_data: *const YesSurfaceCreateUserData) !Vulkan.c.VkSurfaceKHR {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     return @ptrCast(try yes.vulkan.createSurface(user_data.platform, user_data.window, @ptrCast(instance), null, @ptrCast(&Vulkan.c.vkGetInstanceProcAddr)));
 }

@@ -3,20 +3,27 @@ const shared = @import("shared");
 const system = @import("../system.zig");
 const Physics = @import("Physics.zig");
 const Spawner = @import("Spawner.zig");
+const tracy = @import("ztracy");
 const nz = shared.numz;
 
 physics: *Physics,
 spawner: *Spawner,
 
 pub fn init(self: *@This(), physics: *Physics, spawner: *Spawner) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     self.* = .{ .physics = physics, .spawner = spawner };
 }
 
 pub fn deinit(self: *@This()) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     _ = self;
 }
 
 pub fn update(self: *@This(), info: *const system.Info) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const body_interface = self.physics.physics_system.getBodyInterfaceMut();
 
     for (info.world.entities.values()) |*player| {

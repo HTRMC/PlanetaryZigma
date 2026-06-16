@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const c = @import("vulkan");
+const tracy = @import("ztracy");
 
 pub const instance = struct {
     pub const ProcTable = struct {
@@ -9,6 +10,8 @@ pub const instance = struct {
     };
 
     pub fn load(vk_instance: c.VkInstance, log: ?bool) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         const decls = @typeInfo(ProcTable).@"struct".decls;
         @setEvalBranchQuota(decls.len);
         inline for (decls) |decl| {
@@ -61,6 +64,8 @@ pub const device = struct {
         pub var vkGetDescriptorSetLayoutBindingOffsetEXT: *const fn (c.VkDevice, c.VkDescriptorSetLayout, u32, *c.VkDeviceSize) callconv(.c) void = undefined;
     };
     pub fn load(vk_device: c.VkDevice, log: ?bool) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         const decls = @typeInfo(ProcTable).@"struct".decls;
         @setEvalBranchQuota(decls.len);
         inline for (decls) |decl| {

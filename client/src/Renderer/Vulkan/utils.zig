@@ -1,7 +1,10 @@
 const std = @import("std");
 const c = @import("vulkan");
+const tracy = @import("ztracy");
 
 pub fn check(result: c.VkResult) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     if (result != c.VK_SUCCESS) return switch (result) {
         c.VK_ERROR_OUT_OF_HOST_MEMORY => error.OutOfHostMemory,
         c.VK_ERROR_OUT_OF_DEVICE_MEMORY => error.OutOfDeviceMemory,
@@ -686,6 +689,10 @@ pub const Func = enum {
     cmdDrawMeshTasksIndirectCountEXT,
 
     pub fn Proc(func: @This()) type {
+        if (!@inComptime()) {
+            const tracy_scope = tracy.zone(@src());
+            defer tracy_scope.end();
+        }
         return struct {
             pub const name = std.fmt.comptimePrint("vk{c}{s}", .{ std.ascii.toUpper(@tagName(func)[0]), @tagName(func)[1..] });
             pub const PFN: type = switch (func) {
@@ -1331,6 +1338,8 @@ pub const Func = enum {
             };
 
             pub fn load(instance: anytype) !Inner {
+                const tracy_scope = tracy.zone(@src());
+                defer tracy_scope.end();
                 const ptr = c.vkGetInstanceProcAddr(instance.handle, name) orelse @panic("failed to find proc " ++ @tagName(func));
                 return @ptrCast(ptr);
             }

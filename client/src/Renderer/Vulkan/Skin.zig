@@ -6,6 +6,7 @@ const Buffer = @import("Buffer.zig");
 const Device = @import("device.zig").Logical;
 const Vma = @import("Vma.zig");
 const Node = @import("Node.zig");
+const tracy = @import("ztracy");
 
 name: []const u8,
 buffer: ?Buffer,
@@ -22,6 +23,8 @@ pub fn init(
     root: ?*Node,
     joints: []*Node,
 ) !@This() {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     return .{
         .name = try gpa.dupe(u8, name),
         .buffer = if (inversse_bind_matrices) |matrices| try .init(
@@ -42,6 +45,8 @@ pub fn init(
 }
 
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     if (self.buffer) |*buffer| buffer.deinit(vma);
     gpa.free(self.name);
     if (self.inverse_bind_matrices) |*matrices| matrices.deinit(gpa);

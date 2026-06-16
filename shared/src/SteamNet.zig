@@ -1,5 +1,6 @@
 const std = @import("std");
 const steam = @import("steamworks");
+const tracy = @import("ztracy");
 
 pub const Server = @import("steamNet/Server.zig");
 pub const Client = @import("steamNet/Client.zig");
@@ -25,6 +26,8 @@ pub const Message = struct {
     bytes: [max_msg_bytes]u8 = undefined,
 
     pub fn slice(self: *const Message) []const u8 {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         return self.bytes[0..self.len];
     }
 };
@@ -40,12 +43,16 @@ pub const Packets = struct {
     events: std.ArrayListUnmanaged(Event) = .empty,
 
     pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         self.incoming.deinit(gpa);
         self.outgoing.deinit(gpa);
         self.events.deinit(gpa);
     }
 
     pub fn pushIncoming(self: *@This(), gpa: std.mem.Allocator, conn: Conn, bytes: []const u8) !void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         const len: u32 = @intCast(@min(bytes.len, max_msg_bytes));
         var msg: Message = .{ .conn = conn, .len = len };
         @memcpy(msg.bytes[0..len], bytes[0..len]);
@@ -53,6 +60,8 @@ pub const Packets = struct {
     }
 
     pub fn pushOutgoing(self: *@This(), gpa: std.mem.Allocator, conn: Conn, bytes: []const u8, flags: SendFlags) !void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         const len: u32 = @intCast(@min(bytes.len, max_msg_bytes));
         var msg: Message = .{ .conn = conn, .flags = flags, .len = len };
         @memcpy(msg.bytes[0..len], bytes[0..len]);
@@ -60,6 +69,8 @@ pub const Packets = struct {
     }
 
     pub fn pushEvent(self: *@This(), gpa: std.mem.Allocator, event: Event) !void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         try self.events.append(gpa, event);
     }
 };

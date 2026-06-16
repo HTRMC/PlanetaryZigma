@@ -8,6 +8,8 @@ const window_util = @import("window.zig");
 const tracy = @import("ztracy");
 
 pub fn main(init: std.process.Init) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     tracy.setThreadName("main");
     const startup_zone = tracy.zoneNamed(@src(), "Startup");
     var gpa_impl = if (builtin.mode == .Debug) std.heap.DebugAllocator(.{ .stack_trace_frames = 16, .verbose_log = false }).init else init.gpa;
@@ -110,6 +112,8 @@ pub fn main(init: std.process.Init) !void {
 }
 
 pub fn getDeltaTime(io: std.Io) f32 {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const static = struct {
         var previous: ?std.Io.Timestamp = null;
     };

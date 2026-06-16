@@ -4,17 +4,17 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const shared = b.dependency("shared", .{ .target = target, .optimize = optimize }).module("shared");
+    const tracy_enable = b.option(bool, "tracy", "Enable Tracy profiling") orelse false;
+    const ztracy_dep = b.dependency("ztracy", .{ .target = target, .optimize = optimize, .tracy = tracy_enable });
+    const ztracy = ztracy_dep.module("ztracy");
+
+    const shared = b.dependency("shared", .{ .target = target, .optimize = optimize, .tracy = tracy_enable }).module("shared");
     const yes = b.dependency("yes", .{ .target = target, .optimize = optimize, .x_backend = .xlib }).module("yes");
 
     const steam_dep = b.dependency("zig_steamworks", .{ .target = target, .optimize = optimize });
     const steam_module = steam_dep.module("steamworks");
 
     const zgltf = b.dependency("zgltf", .{ .target = target, .optimize = optimize }).module("zgltf");
-
-    const tracy_enable = b.option(bool, "tracy", "Enable Tracy profiling") orelse false;
-    const ztracy_dep = b.dependency("ztracy", .{ .target = target, .optimize = optimize, .tracy = tracy_enable });
-    const ztracy = ztracy_dep.module("ztracy");
 
     const stb_dep = b.dependency("stb", .{});
     const stb_image = b.addTranslateC(.{

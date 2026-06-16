@@ -3,6 +3,7 @@ const c = @import("vulkan");
 const Device = @import("device.zig").Logical;
 const descriptor = @import("desrciptor.zig");
 const check = @import("utils.zig").check;
+const tracy = @import("ztracy");
 
 pub const Layout = struct {
     handle: c.VkPipelineLayout,
@@ -11,6 +12,8 @@ pub const Layout = struct {
         comptime PushConstant: type,
         descriptor_set_layouts: []const c.VkDescriptorSetLayout,
     ) !@This() {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         const ranges: c.VkPushConstantRange = .{
             .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
             .offset = 0,
@@ -33,6 +36,8 @@ pub const Layout = struct {
     }
 
     pub fn deinit(self: *@This(), device: Device) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         c.vkDestroyPipelineLayout(device.handle, self.handle, null);
     }
 };

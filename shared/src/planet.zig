@@ -1,5 +1,6 @@
 const std = @import("std");
 const nz = @import("numz");
+const tracy = @import("ztracy");
 
 pub const PlanetKind = enum {
     logical,
@@ -7,6 +8,10 @@ pub const PlanetKind = enum {
 };
 
 pub fn Planet(kind: PlanetKind) type {
+    if (!@inComptime()) {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
+    }
     return struct {
         vertices: []Vertex,
         indices: []u32,
@@ -25,6 +30,8 @@ pub fn Planet(kind: PlanetKind) type {
         };
 
         pub fn init(gpa: std.mem.Allocator, size: u32) !@This() {
+            const tracy_scope = tracy.zone(@src());
+            defer tracy_scope.end();
             const clamped_size = @max(size, 3);
             const radius: f32 = (@as(f32, @floatFromInt(clamped_size)) / 2);
             var points = try gpa.alloc(f32, (clamped_size + 1) * (clamped_size + 1) * (clamped_size + 1));
@@ -86,6 +93,8 @@ pub fn Planet(kind: PlanetKind) type {
         }
 
         pub fn deinit(self: @This(), gpa: std.mem.Allocator) void {
+            const tracy_scope = tracy.zone(@src());
+            defer tracy_scope.end();
             gpa.free(self.vertices);
             gpa.free(self.indices);
         }
@@ -97,6 +106,8 @@ pub fn Planet(kind: PlanetKind) type {
             gen_vertices: *std.ArrayList(Vertex),
             gen_indices: *std.ArrayList(u32),
         ) !void {
+            const tracy_scope = tracy.zone(@src());
+            defer tracy_scope.end();
             var config_index: u32 = 0;
             const terrain_surface: f32 = 0.5;
             for (0..8) |i| {
@@ -161,6 +172,8 @@ pub fn Planet(kind: PlanetKind) type {
         }
 
         fn getIndex(size: u32, x: usize, y: usize, z: usize) usize {
+            const tracy_scope = tracy.zone(@src());
+            defer tracy_scope.end();
             return (x + y * size + z * size * size);
         }
     };

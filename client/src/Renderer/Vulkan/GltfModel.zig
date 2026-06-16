@@ -39,6 +39,8 @@ pub fn init(
     render_resources: *RenderResources,
     offset: nz.Transform3D(f32),
 ) !*@This() {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const self = try gpa.create(@This());
     self.* = .{
         .vma = vma,
@@ -56,6 +58,8 @@ pub fn init(
     return self;
 }
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     for (self.nodes.items) |*node| node.deinit(gpa);
     self.nodes.deinit(gpa);
     for (self.animations.items) |*animation| animation.deinit(gpa);
@@ -69,6 +73,8 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
 }
 
 fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: std.Io.File, file_path: []const u8) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     _ = file_path;
     const load_zone = tracy.zoneNamed(@src(), "LoadModel");
     defer load_zone.end();

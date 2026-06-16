@@ -3,6 +3,7 @@ const vk = @import("vulkan");
 const nz = @import("shared").numz;
 const Mesh = @import("Mesh.zig");
 const Material = @import("Material.zig");
+const tracy = @import("ztracy");
 
 parent: ?*@This() = null,
 index: u32 = 0,
@@ -15,16 +16,22 @@ skin_id: i32 = -1,
 world_matrix: nz.Mat4x4(f32) = undefined,
 
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     self.children.deinit(gpa);
 }
 
 pub fn getLocalMatrix(self: *@This()) nz.Mat4x4(f32) {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     return nz.Mat4x4(f32).translate(self.translation)
         .mul(self.rotation.toMat4x4())
         .mul(.scale(self.scale));
 }
 
 pub fn refreshMatrices(self: *@This(), parent_matrix: *nz.Mat4x4(f32)) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     self.world_matrix = parent_matrix.mul(self.getLocalMatrix());
     for (self.children.items[0..self.children.items.len]) |child| {
         child.refreshMatrices(&self.world_matrix);

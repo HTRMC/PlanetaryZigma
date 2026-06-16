@@ -2,6 +2,7 @@ const std = @import("std");
 const c = @import("vulkan");
 const Instance = @import("Instance.zig");
 const check = @import("utils.zig").check;
+const tracy = @import("ztracy");
 
 pub const Physical = struct {
     handle: c.VkPhysicalDevice,
@@ -9,6 +10,8 @@ pub const Physical = struct {
     graphics_queue_family_index: u32,
 
     pub fn pick(instance: Instance, surface: c.VkSurfaceKHR) !@This() {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         var device_count: u32 = 0;
         try check(c.vkEnumeratePhysicalDevices(instance.handle, &device_count, null));
         if (device_count == 0) return error.NoPhysicalDevices;
@@ -56,6 +59,8 @@ pub const Logical = struct {
     pub const CommandPool = struct {
         handle: c.VkCommandPool,
         pub fn init(device: c.VkDevice, queue_family_index: u32) !@This() {
+            const tracy_scope = tracy.zone(@src());
+            defer tracy_scope.end();
             const command_pool_info: c.VkCommandPoolCreateInfo = .{
                 .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
                 .pNext = null,
@@ -68,11 +73,15 @@ pub const Logical = struct {
             return .{ .handle = command_pool };
         }
         pub fn deinit(self: @This(), device: Logical) void {
+            const tracy_scope = tracy.zone(@src());
+            defer tracy_scope.end();
             c.vkDestroyCommandPool(device.handle, self.handle, null);
         }
     };
 
     pub fn init(physical_device: Physical, extensions: []const [*:0]const u8) !@This() {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         var extension_count: u32 = undefined;
         try check(c.vkEnumerateDeviceExtensionProperties(physical_device.handle, null, &extension_count, null));
         var extension_properties: [516]c.VkExtensionProperties = undefined;
@@ -164,6 +173,8 @@ pub const Logical = struct {
     }
 
     pub fn deinit(self: @This()) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         self.command_pool.deinit(self);
         c.vkDestroyFence(self.handle, self.immidiate_fence, null);
         c.vkDestroyDevice(self.handle, null);
@@ -172,6 +183,8 @@ pub const Logical = struct {
     pub fn beginImmediateCommand(
         device: @This(),
     ) !c.VkCommandBuffer {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         var alloc_info: c.VkCommandBufferAllocateInfo = .{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
             .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
@@ -198,6 +211,8 @@ pub const Logical = struct {
         device: @This(),
         command_buffer: c.VkCommandBuffer,
     ) !void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         try check(c.vkEndCommandBuffer(command_buffer));
 
         var submit_info: c.VkSubmitInfo = .{

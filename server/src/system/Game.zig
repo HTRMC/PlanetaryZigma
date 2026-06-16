@@ -1,5 +1,6 @@
 const std = @import("std");
 const shared = @import("shared");
+const tracy = @import("ztracy");
 const nz = shared.numz;
 const system = @import("../system.zig");
 const Spawner = @import("Spawner.zig");
@@ -11,6 +12,8 @@ gpa: std.mem.Allocator,
 world: *system.World,
 
 pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World, spawner: *Spawner) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     self.* = .{
         .gpa = gpa,
         .world = world,
@@ -35,10 +38,14 @@ pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World, spawne
 }
 
 pub fn deinit(self: *@This()) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     _ = self;
 }
 
 pub fn update(self: *@This(), info: *const Info, physics: *const Physics) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     _ = self;
     // std.log.debug("\n\neneties: {d}\n\n", .{info.world.entities.entries.len});
     var player: *system.Entity = undefined;

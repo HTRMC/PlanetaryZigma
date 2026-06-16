@@ -4,6 +4,7 @@ const ext = @import("procs.zig").device.ProcTable;
 const Buffer = @import("Buffer.zig");
 const Device = @import("device.zig").Logical;
 const Vma = @import("Vma.zig");
+const tracy = @import("ztracy");
 
 buffer: Buffer,
 name: []const u8,
@@ -18,6 +19,8 @@ pub fn init(
     sampler: c.VkSampler,
     view_image: c.VkImageView,
 ) !@This() {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const new_desc_buf = try Buffer.init(
         device,
         vma,
@@ -48,6 +51,8 @@ pub fn init(
 }
 
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     self.buffer.deinit(vma);
     gpa.free(self.name);
 }

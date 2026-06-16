@@ -15,6 +15,10 @@
             .url = "git+https://github.com/menduz/zig-steamworks.git#7ef8943e7aa9e47abc057e32bc1e1ad63b8ca86d",
             .hash = "zig_steamworks-0.0.0-QF-Y-5rWxgB893nUytb-BxR5B8XE8FS4CUA2YoaolUSB",
         },
+        .ztracy = .{
+            .url = "git+https://github.com/HTRMC/ztracy?ref=v0.2.0#de6115570d79f96e47aa3291e54d350bae88289c",
+            .hash = "ztracy-0.2.0-q8LWRbsbAAB2Nrt_8RFByk_XNYfq5jR3HDDy9JXzPMr9",
+        },
     },
     .paths = .{
         "build.zig",

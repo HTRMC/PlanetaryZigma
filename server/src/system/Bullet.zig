@@ -3,6 +3,7 @@ const shared = @import("shared");
 const system = @import("../system.zig");
 const Physics = @import("Physics.zig");
 const Spawner = @import("Spawner.zig");
+const tracy = @import("ztracy");
 const nz = shared.numz;
 
 const gravity_acceleration: f32 = 100;
@@ -14,6 +15,8 @@ world: *system.World,
 to_despawn: std.ArrayList(u32) = .empty,
 
 pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World, physics: *Physics, spawner: *Spawner) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     self.* = .{
         .gpa = gpa,
         .physics = physics,
@@ -23,10 +26,14 @@ pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World, physic
 }
 
 pub fn deinit(self: *@This()) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     self.to_despawn.deinit(self.gpa);
 }
 
 pub fn update(self: *@This(), info: *const system.Info) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const query = self.physics.physics_system.getNarrowPhaseQuery();
     const dt = info.delta_time;
 

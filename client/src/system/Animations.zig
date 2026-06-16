@@ -1,6 +1,7 @@
 const std = @import("std");
 const system = @import("../system.zig");
 const shared = @import("shared");
+const tracy = @import("ztracy");
 const Info = system.Info;
 const nz = shared.numz;
 const Model = @import("../Renderer/Vulkan/GltfModel.zig");
@@ -10,6 +11,8 @@ const Node = @import("../Renderer/Vulkan/Node.zig");
 gpa: std.mem.Allocator,
 
 pub fn init(self: *@This(), gpa: std.mem.Allocator) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     self.* = .{ .gpa = gpa };
 }
 
@@ -18,6 +21,8 @@ pub fn update(
     info: *const Info,
     models: *std.ArrayList(*Model),
 ) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     _ = self;
 
     // std.log.debug("render ptr {*}, model ptr{*}", .{ self.renderer, models });
@@ -81,6 +86,8 @@ pub fn update(
 }
 
 fn updateJoints(node: *Node, model: *Model) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     if (node.skin_id > -1) {
         const skin = &model.skins.items[@intCast(node.skin_id)];
         const inverse_bind_matrices = skin.inverse_bind_matrices.?;
