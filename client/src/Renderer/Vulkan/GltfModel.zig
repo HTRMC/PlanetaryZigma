@@ -70,7 +70,7 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
 
 fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: std.Io.File, file_path: []const u8) !void {
     _ = file_path;
-    const load_zone = tracy.zoneNamed(@src(), "loadModel");
+    const load_zone = tracy.zoneNamed(@src(), "LoadModel");
     defer load_zone.end();
     const self: *@This() = @ptrCast(@alignCast(user_data));
     var read_buffer: [4096]u8 = undefined;
@@ -79,7 +79,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
     defer gpa.free(content);
     std.debug.print("size:  {d}\n", .{content.len});
 
-    const parse_zone = tracy.zoneNamed(@src(), "parseGlbSlice");
+    const parse_zone = tracy.zoneNamed(@src(), "ParseGlbSlice");
     var loaded = try zgltf.parseGlbSlice(gpa, content);
     parse_zone.end();
     defer loaded.deinit();

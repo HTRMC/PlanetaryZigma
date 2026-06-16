@@ -9,7 +9,7 @@ const tracy = @import("ztracy");
 
 pub fn main(init: std.process.Init) !void {
     tracy.setThreadName("main");
-    const startup_zone = tracy.zoneNamed(@src(), "startup");
+    const startup_zone = tracy.zoneNamed(@src(), "Startup");
     var gpa_impl = if (builtin.mode == .Debug) std.heap.DebugAllocator(.{ .stack_trace_frames = 16, .verbose_log = false }).init else init.gpa;
     defer {
         if (builtin.mode == .Debug) _ = gpa_impl.deinit();
@@ -17,7 +17,7 @@ pub fn main(init: std.process.Init) !void {
     const gpa = gpa_impl.allocator();
     const io = init.io;
 
-    const steam_zone = tracy.zoneNamed(@src(), "steam init");
+    const steam_zone = tracy.zoneNamed(@src(), "SteamInit");
     var steam_client: shared.SteamNet.Client = try .init(gpa, io);
     steam_client.handle_packets_future = try io.concurrent(shared.SteamNet.Client.handlePackets, .{&steam_client});
     steam_zone.end();
@@ -31,7 +31,7 @@ pub fn main(init: std.process.Init) !void {
     var cross_window: yes.Platform.Cross.Window = .empty(platform);
     const window = cross_window.interface(platform);
     const window_size: yes.Window.Size = .{ .width = 854, .height = 480 };
-    const window_zone = tracy.zoneNamed(@src(), "window open");
+    const window_zone = tracy.zoneNamed(@src(), "WindowOpen");
     try window.open(platform, .{
         .title = "PlanetaryZigma",
         .size = window_size,
@@ -57,7 +57,7 @@ pub fn main(init: std.process.Init) !void {
     var system_context: system.Context = undefined;
     var system_table: system.ffi.Table = try .load(&watcher.dynlib.?);
 
-    const ctx_zone = tracy.zoneNamed(@src(), "systemContextInit");
+    const ctx_zone = tracy.zoneNamed(@src(), "SystemContextInit");
     system_table.systemContextInit(&system_context, &system.Context.Data{
         .gpa = gpa,
         .asset_server = &asset_server,
