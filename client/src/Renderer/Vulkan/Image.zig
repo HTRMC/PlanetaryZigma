@@ -95,6 +95,29 @@ pub fn deinit(self: *@This(), vulkan_mem_alloc: Vma, device: Device) void {
 pub fn uploadDataToImage(self: *@This(), vma: Vma, device: Device, data: anytype, bytes_per_pixel: u32) !void {
     const tracy_scope = tracy.zone(@src());
     defer tracy_scope.end();
+    var upload_buffers: std.ArrayList(Buffer) = .empty;
+    defer {
+        for (upload_buffers.items) |*upload_buffer| upload_buffer.deinit(vma);
+        upload_buffers.deinit(std.heap.page_allocator);
+    }
+
+    const cmd = try device.beginImmediateCommand();
+    try self.recordUploadDataToImage(std.heap.page_allocator, vma, device, cmd, data, bytes_per_pixel, &upload_buffers);
+    try device.endImmediateCommand(cmd);
+}
+
+pub fn recordUploadDataToImage(
+    self: *@This(),
+    gpa: std.mem.Allocator,
+    vma: Vma,
+    device: Device,
+    cmd: c.VkCommandBuffer,
+    data: anytype,
+    bytes_per_pixel: u32,
+    upload_buffers: *std.ArrayList(Buffer),
+) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const data_size: u32 = self.extent.depth * self.extent.width * self.extent.height * bytes_per_pixel;
 
     var upload_buffer: Buffer = try .init(
@@ -108,14 +131,12 @@ pub fn uploadDataToImage(self: *@This(), vma: Vma, device: Device, data: anytype
             .flags = Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
         },
     );
-    defer upload_buffer.deinit(vma);
+    errdefer upload_buffer.deinit(vma);
 
     @memcpy(
         @as([*]u8, @ptrCast(upload_buffer.info.pMappedData))[0..@intCast(data_size)],
         @as([*]u8, @ptrCast(data))[0..@intCast(data_size)],
     );
-
-    const cmd = try device.beginImmediateCommand();
 
     var image_barrier: Barrier = .init(cmd, self.vk_image, c.VK_IMAGE_ASPECT_COLOR_BIT);
     image_barrier.transition(
@@ -156,7 +177,7 @@ pub fn uploadDataToImage(self: *@This(), vma: Vma, device: Device, data: anytype
         );
     }
 
-    try device.endImmediateCommand(cmd);
+    try upload_buffers.append(gpa, upload_buffer);
 }
 
 fn generateMipmaps(self: *@This(), cmd_buffer: c.VkCommandBuffer, image_size: c.VkExtent3D) void {

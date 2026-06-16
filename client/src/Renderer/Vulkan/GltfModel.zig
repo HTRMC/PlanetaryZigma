@@ -133,6 +133,12 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
     const original_image_count = self.render_resources.images.items.len;
     if (gltf_loaded.images) |images| {
         std.log.info("image count was {d}", .{images.len});
+        var upload_buffers: std.ArrayList(Buffer) = .empty;
+        defer {
+            for (upload_buffers.items) |*upload_buffer| upload_buffer.deinit(self.vma);
+            upload_buffers.deinit(gpa);
+        }
+        const upload_cmd = try self.device.beginImmediateCommand();
         for (images) |image| {
             if (image.uri == null and image.bufferView == null) return error.FailedToLoadGLTFImage;
             var pixels: [*c]stb_image.stbi_uc = null;
@@ -160,9 +166,10 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                 c.VK_IMAGE_ASPECT_COLOR_BIT,
                 true,
             );
-            try new_image.uploadDataToImage(self.vma, self.device, pixels, 4);
+            try new_image.recordUploadDataToImage(gpa, self.vma, self.device, upload_cmd, pixels, 4, &upload_buffers);
             try self.render_resources.images.append(gpa, new_image);
         }
+        try self.device.endImmediateCommand(upload_cmd);
     } else {
         std.log.info("image count was 0", .{});
     }
