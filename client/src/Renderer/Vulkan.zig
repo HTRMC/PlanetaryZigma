@@ -154,13 +154,13 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
     self.pipeline_layout = try .init(
         self.device,
         Shader.AnimationPushConstant,
-        &self.layouts.layouts,
+        &self.layouts.vk_handles,
     );
 
     self.ui_pipeline_layout = try .init(
         self.device,
         Shader.UiPushConstant,
-        &.{self.material_layout},
+        &.{self.material_layout.handle},
     );
 
     _ = try createModelWithMesh(
