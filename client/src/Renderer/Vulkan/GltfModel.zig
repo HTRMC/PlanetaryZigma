@@ -215,35 +215,44 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                 bin[pos_offset .. pos_offset + pos_accessor.count * @sizeOf([3]f32)],
             );
 
-            const material_index = primitive.material.?;
-            const material = gltf_loaded.materials.?[material_index];
-            // std.log.debug("MATERIAL : {any}", .{material});
             var base_color: [4]f32 = .{ 1, 0, 0, 1 };
             var material_name: ?[]const u8 = null;
-            if (material.pbrMetallicRoughness) |matallic_roughness| {
-                base_color = matallic_roughness.baseColorFactor;
-                if (matallic_roughness.baseColorTexture) |base_texture| {
-                    if (material.name != null and self.render_resources.materials.contains(material.name.?)) {
-                        material_name = (try self.render_resources.getMaterialPtr(material.name.?)).name;
-                    } else {
-                        const texture_index = base_texture.index;
+            if (primitive.material) |material_index| {
+                if (gltf_loaded.materials) |materials| {
+                    const material = materials[material_index];
+                    // std.log.debug("MATERIAL : {any}", .{material});
+                    if (material.pbrMetallicRoughness) |matallic_roughness| {
+                        base_color = matallic_roughness.baseColorFactor;
+                        if (matallic_roughness.baseColorTexture) |base_texture| {
+                            if (material.name != null and self.render_resources.materials.contains(material.name.?)) {
+                                material_name = (try self.render_resources.getMaterialPtr(material.name.?)).name;
+                            } else if (material.name) |name| {
+                                const texture_index = base_texture.index;
 
-                        const texture_info = gltf_loaded.textures.?[texture_index];
-                        const image_index = texture_info.source.?;
-                        const sampler_index = texture_info.sampler.?;
+                                const texture_info = gltf_loaded.textures.?[texture_index];
+                                const sampler = if (texture_info.sampler) |sampler_index|
+                                    self.render_resources.samplers.items[original_sample_count + sampler_index]
+                                else
+                                    self.render_resources.samplers.items[0];
+                                const image_view = if (texture_info.source) |image_index|
+                                    self.render_resources.images.items[original_image_count + image_index].vk_imageview
+                                else
+                                    self.render_resources.images.items[0].vk_imageview;
 
-                        const new_material: Material = try .init(
-                            gpa,
-                            material.name.?,
-                            self.device,
-                            self.vma,
-                            self.render_resources.set_size,
-                            self.render_resources.combined_image_sampler_descriptor_size,
-                            self.render_resources.samplers.items[original_sample_count + sampler_index],
-                            self.render_resources.images.items[original_image_count + image_index].vk_imageview,
-                        );
-                        try self.render_resources.createMaterial(gpa, new_material);
-                        material_name = new_material.name;
+                                const new_material: Material = try .init(
+                                    gpa,
+                                    name,
+                                    self.device,
+                                    self.vma,
+                                    self.render_resources.set_size,
+                                    self.render_resources.combined_image_sampler_descriptor_size,
+                                    sampler,
+                                    image_view,
+                                );
+                                try self.render_resources.createMaterial(gpa, new_material);
+                                material_name = new_material.name;
+                            }
+                        }
                     }
                 }
             }
@@ -254,15 +263,16 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                 .material_name = if (material_name) |name| name else RenderResources.default_material_name,
             });
 
-            const uv_accessor_idx = primitive.attributes.map.get("TEXCOORD_0") orelse return error.NoUV;
-            const uv_accessor = gltf_loaded.accessors.?[uv_accessor_idx];
-            std.debug.assert(uv_accessor.componentType == @intFromEnum(zgltf.ComponentType.float));
-            const uv_buffer_view = gltf_loaded.bufferViews.?[uv_accessor.bufferView.?];
-            const uv_offset = (uv_accessor.byteOffset + uv_buffer_view.byteOffset);
-            const uvs = std.mem.bytesAsSlice(
-                [2]f32,
-                bin[uv_offset .. uv_offset + uv_accessor.count * @sizeOf([2]f32)],
-            );
+            const uvs: ?[]align(1) const [2]f32 = if (primitive.attributes.map.get("TEXCOORD_0")) |uv_accessor_idx| blk: {
+                const uv_accessor = gltf_loaded.accessors.?[uv_accessor_idx];
+                std.debug.assert(uv_accessor.componentType == @intFromEnum(zgltf.ComponentType.float));
+                const uv_buffer_view = gltf_loaded.bufferViews.?[uv_accessor.bufferView.?];
+                const uv_offset = (uv_accessor.byteOffset + uv_buffer_view.byteOffset);
+                break :blk std.mem.bytesAsSlice(
+                    [2]f32,
+                    bin[uv_offset .. uv_offset + uv_accessor.count * @sizeOf([2]f32)],
+                );
+            } else null;
 
             const normal_accessor_idx = primitive.attributes.map.get("NORMAL") orelse return error.NoNormal;
             const normal_accessor = gltf_loaded.accessors.?[normal_accessor_idx];
@@ -302,8 +312,8 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                         .color = base_color,
                         .normal = normals[i],
                         .position = positions[i],
-                        .uv_x = uvs[i][0],
-                        .uv_y = uvs[i][1],
+                        .uv_x = if (uvs) |values| values[i][0] else 0,
+                        .uv_y = if (uvs) |values| values[i][1] else 0,
                         .joint_indices = blk: {
                             var joint_indices: [4]i32 = undefined;
                             inline for (0..4) |j| joint_indices[j] = joints[i][j];
@@ -323,8 +333,8 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                         .color = base_color,
                         .normal = normals[i],
                         .position = positions[i],
-                        .uv_x = uvs[i][0],
-                        .uv_y = uvs[i][1],
+                        .uv_x = if (uvs) |values| values[i][0] else 0,
+                        .uv_y = if (uvs) |values| values[i][1] else 0,
                     };
                 }
             }
