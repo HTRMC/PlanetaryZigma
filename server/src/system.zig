@@ -84,6 +84,7 @@ pub const Entity = struct {
 };
 
 pub const World = struct {
+    pub const max_entities: usize = 1024;
     gpa: std.mem.Allocator,
     entities: std.AutoArrayHashMapUnmanaged(u32, Entity) = .empty,
     next_id: u32 = 1,
@@ -92,7 +93,7 @@ pub const World = struct {
         const tracy_scope = tracy.zone(@src());
         defer tracy_scope.end();
         var entities: std.AutoArrayHashMapUnmanaged(u32, Entity) = .empty;
-        try entities.ensureTotalCapacity(gpa, 1000);
+        try entities.ensureTotalCapacity(gpa, max_entities);
 
         return .{
             .gpa = gpa,
@@ -111,7 +112,7 @@ pub const World = struct {
     pub fn spawn(self: *@This()) !*Entity {
         const tracy_scope = tracy.zone(@src());
         defer tracy_scope.end();
-        std.debug.assert(self.entities.entries.len < 1000);
+        std.debug.assert(self.entities.entries.len < max_entities);
         const id = self.next_id;
         self.next_id += 1;
         self.entities.putAssumeCapacity(id, .{ .id = id });

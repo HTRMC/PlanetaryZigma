@@ -12,7 +12,7 @@ name: []const u8,
 buffer: ?Buffer,
 skeleton_root: ?*Node,
 inverse_bind_matrices: ?std.ArrayList(nz.Mat4x4(f32)),
-joints: std.ArrayList(*Node),
+joints: []usize,
 
 pub fn init(
     gpa: std.mem.Allocator,
@@ -21,7 +21,7 @@ pub fn init(
     name: []const u8,
     inversse_bind_matrices: ?[]nz.Mat4x4(f32),
     root: ?*Node,
-    joints: []*Node,
+    joints: []usize,
 ) !@This() {
     const tracy_scope = tracy.zone(@src());
     defer tracy_scope.end();
@@ -40,7 +40,7 @@ pub fn init(
         ) else null,
         .inverse_bind_matrices = if (inversse_bind_matrices) |matrices| .fromOwnedSlice(matrices) else null,
         .skeleton_root = root,
-        .joints = .fromOwnedSlice(joints),
+        .joints = joints,
     };
 }
 
@@ -50,5 +50,5 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma) void {
     if (self.buffer) |*buffer| buffer.deinit(vma);
     gpa.free(self.name);
     if (self.inverse_bind_matrices) |*matrices| matrices.deinit(gpa);
-    self.joints.deinit(gpa);
+    gpa.free(self.joints);
 }

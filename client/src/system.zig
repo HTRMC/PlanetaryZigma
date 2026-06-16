@@ -20,17 +20,14 @@ pub const Info = struct {
 pub const Entity = struct {
     pub const Flags = packed struct {
         transform: bool = false,
-        model: bool = false,
         screen_space: bool = false,
-    };
-    pub const Model = struct {
-        id: u32 = 0,
+        animated: bool = false,
     };
 
     id: u32 = 0,
     flags: Flags = .{},
+    kind: shared.Entity.Kind,
 
-    model: Model = .{},
     transform: nz.Transform3D(f32) = .{},
 
     pub fn deinit(self: *Entity, gpa: std.mem.Allocator) void {
@@ -42,6 +39,7 @@ pub const Entity = struct {
 };
 
 pub const World = struct {
+    pub const max_entities: usize = 1024;
     mutex: std.Io.Mutex = .init,
     gpa: std.mem.Allocator,
     entities: std.AutoArrayHashMapUnmanaged(u32, Entity) = .empty,
@@ -68,7 +66,7 @@ pub const World = struct {
         defer tracy_scope.end();
         const id = self.next_id;
         self.next_id += 1;
-        try self.entities.put(self.gpa, id, .{ .id = id });
+        try self.entities.put(self.gpa, id, .{ .id = id, .kind = .unknown });
         return self.entities.getPtr(id).?;
     }
 
@@ -139,10 +137,10 @@ pub const Context = struct {
         defer tracy_scope.end();
         try info.world.camera.update(info, &self.network_manager, &self.renderer.inner.ui);
         try self.renderer.update(info);
-        try self.animation.update(info, &self.renderer.inner.models);
+        try self.animation.update(info, &self.renderer.inner.skelentons);
         try self.asset_server.update();
-        try self.network_manager.update(self, info);
-        try self.spawner.update(info);
+        try self.network_manager.update(info);
+        try self.spawner.update(info, self);
     }
 
     pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.Event) !void {
@@ -166,6 +164,7 @@ pub const Context = struct {
                     "planet",
                     p.vertices,
                     p.indices,
+                    .planet,
                 );
                 //TODO: take care of handle matching
                 _ = vulkan_mesh_handle;

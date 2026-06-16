@@ -1,6 +1,7 @@
 const std = @import("std");
-const nz = @import("shared").numz;
-const AssetServer = @import("shared").AssetServer;
+const shared = @import("shared");
+const nz = shared.numz;
+const AssetServer = shared.AssetServer;
 const system = @import("../system.zig");
 const World = system.World;
 const shaderc = @import("shaderc");
@@ -12,6 +13,7 @@ const Mesh = @import("Vulkan/Mesh.zig");
 const Node = @import("Vulkan/Node.zig");
 const Material = @import("Vulkan/Material.zig");
 const GltfModel = @import("Vulkan/GltfModel.zig");
+const SkeletonAnimation = @import("Vulkan/SkeletonAnimation.zig");
 const Vma = @import("Vulkan/Vma.zig");
 const Swapchain = @import("Vulkan/Swapchain.zig");
 const FrameData = @import("Vulkan/FrameData.zig");
@@ -43,7 +45,8 @@ device: Device,
 vma: Vma,
 swapchain: Swapchain,
 render_resources: RenderResources,
-models: std.ArrayList(*GltfModel) = .empty,
+models: std.EnumMap(shared.Entity.Kind, *GltfModel),
+skelentons: std.AutoHashMap(u32, SkeletonAnimation),
 current_frame_inflight: u32 = 0,
 frames: [max_frames_inflight]FrameData,
 ui: Ui,
@@ -87,7 +90,7 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
     const tracy_scope = tracy.zone(@src());
     defer tracy_scope.end();
     const self = try gpa.create(@This());
-    self.models = .empty;
+    self.skelentons = .init(gpa);
 
     const device_zone = tracy.zoneNamed(@src(), "DeviceSetup");
     {
@@ -218,6 +221,7 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
             RenderResources.default_mesh_name,
             Mesh.box.verticies,
             Mesh.box.indicies,
+            .unknown,
         );
         zone.end();
     }
@@ -225,7 +229,7 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
 
     const glb_zone = tracy.zoneNamed(@src(), "GltfModelInit");
     defer glb_zone.end();
-    const model: *GltfModel = try .init(
+    const player_model: *GltfModel = try .init(
         gpa,
         self.vma,
         self.device,
@@ -237,7 +241,20 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
             .rotation = nz.Quat(f32).angleAxis(std.math.pi, .{ 0, 1, 0 }),
         },
     );
-    try self.models.append(gpa, model);
+    self.models.put(.player, player_model);
+    const enemy_model: *GltfModel = try .init(
+        gpa,
+        self.vma,
+        self.device,
+        asset_server,
+        "objects/Mousey.glb",
+        &self.render_resources,
+        .{
+            .position = .{ 0, -1, 0 },
+            .rotation = nz.Quat(f32).angleAxis(std.math.pi, .{ 0, 1, 0 }),
+        },
+    );
+    self.models.put(.enemy, enemy_model);
 
     const shader_zone = tracy.zoneNamed(@src(), "ShaderCompile");
     {
@@ -327,8 +344,15 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
 
     self.render_resources.deinit(gpa, self.vma, self.device);
 
-    for (self.models.items) |model| model.deinit(gpa);
-    self.models.deinit(gpa);
+    var model_it = self.models.iterator();
+    while (model_it.next()) |model| {
+        model.value.*.deinit(gpa);
+    }
+    var it = self.skelentons.valueIterator();
+    while (it.next()) |skeleton| {
+        skeleton.deinit(gpa, self.vma);
+    }
+    self.skelentons.deinit();
 
     self.material_layout.deinit(self.device);
     self.scene_layout.deinit(self.device);
@@ -593,10 +617,8 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *FrameData,
 
     ext.vkCmdBeginRendering(cmd, &render_info);
     for (info.world.entities.values()) |*entity| {
-        if (!entity.flags.model or !entity.flags.transform) continue;
-        var model_id = entity.model.id;
-        model_id = if (model_id >= self.models.items.len) 0 else model_id;
-        const model = self.models.items[model_id];
+        if (!entity.flags.transform) continue;
+        const model = self.models.get(entity.kind) orelse self.models.get(.unknown).?;
         var transform = entity.transform;
 
         // if (entity.flags.screen_space) {
@@ -673,14 +695,18 @@ pub fn draw(
     entity: *system.Entity,
     current_frame: *const FrameData,
     model: *const GltfModel,
-    node: *Node,
+    node_id: usize,
     top_matrix: nz.Mat4x4(f32),
 ) !void {
     const tracy_scope = tracy.zone(@src());
     defer tracy_scope.end();
     // const node_transform: nz.Transform3D(f32) = .fromMat4x4(top_transform.toMat4x4().mul(node.world_transform.toMat4x4()));
     // TODO: World tansform incorrect?
+    const skeleton = self.skelentons.get(entity.id);
+    const node = if (skeleton) |skel| skel.nodes[node_id] else model.nodes.items[node_id];
     const node_matrix = top_matrix.mul(node.world_matrix);
+    // std.log.debug("skelentons {d}", .{self.skelentons.capacity()});
+    if (skeleton != null) std.log.debug("found skeleton for id {d}", .{entity.id});
     // const node_matrix = top_matrix;
     // std.log.debug("top_pos: {any}", .{top_transform});
     // std.log.debug("\nworld: {any}", .{node.world_matrix});
@@ -694,13 +720,22 @@ pub fn draw(
     // if (true) @panic("LOLXD")
 
     if (node.mesh_id) |mesh_id| {
+        std.log.debug("mesh_id found", .{});
         const mesh = try self.render_resources.getMeshPtr(mesh_id);
 
         var push: Shader.AnimationPushConstant = .{
             .vertex_buffer_address = mesh.vertex_buffer.getGPUAddress(),
             .model_matrix = node_matrix.d,
-            .inverse_bind_matrices_addess = if (node.skin_id > -1) model.skins.items[@intCast(node.skin_id)].buffer.?.getGPUAddress() else undefined,
+            .inverse_bind_matrices_addess = undefined,
         };
+        if (node.skin_id > -1) {
+            std.log.debug("skin_id found", .{});
+            if (skeleton) |skel| {
+                push.inverse_bind_matrices_addess = skel.buffers[@intCast(node.skin_id)].getGPUAddress();
+            } else {
+                push.inverse_bind_matrices_addess = model.skins.items[@intCast(node.skin_id)].buffer.?.getGPUAddress();
+            }
+        }
         // if (node.skin_id > -1) std.log.debug("address  {d}", .{model.skins.items[@intCast(node.skin_id)].buffer.?.device_address});
 
         c.vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
@@ -736,8 +771,8 @@ pub fn draw(
         }
     }
 
-    for (node.children.items) |child| {
-        try draw(self, cmd, entity, current_frame, model, child, node_matrix);
+    for (node.children.items) |child_id| {
+        try draw(self, cmd, entity, current_frame, model, child_id, node_matrix);
     }
 }
 
@@ -757,7 +792,7 @@ pub fn resize(self: *@This(), gpa: std.mem.Allocator, width: u32, height: u32) !
     self.ui.screen_width = @floatFromInt(self.swapchain.extent.width);
 }
 
-pub fn createModelWithMesh(self: *@This(), gpa: std.mem.Allocator, name: []const u8, verices: []const Mesh.Vertex, indices: []const u32) !usize {
+pub fn createModelWithMesh(self: *@This(), gpa: std.mem.Allocator, name: []const u8, verices: []const Mesh.Vertex, indices: []const u32, kind: shared.Entity.Kind) !void {
     const tracy_scope = tracy.zone(@src());
     defer tracy_scope.end();
     const mesh = try Mesh.init(
@@ -783,9 +818,14 @@ pub fn createModelWithMesh(self: *@This(), gpa: std.mem.Allocator, name: []const
         .model_name = try gpa.dupe(u8, name),
     };
     try model.nodes.append(gpa, .{ .mesh_id = mesh.name, .index = 0, .world_matrix = nz.Mat4x4(f32).identity });
-    try model.top_nodes.append(gpa, &model.nodes.items[0]);
-    try self.models.append(gpa, model);
-    return (self.models.items.len - 1);
+    try model.top_nodes.append(gpa, 0);
+    self.models.put(kind, model);
+}
+
+pub fn attachSkeleton(self: *@This(), gpa: std.mem.Allocator, entity_id: u32, entity_kind: shared.Entity.Kind) !void {
+    const model = self.models.get(entity_kind) orelse return;
+    try self.skelentons.put(entity_id, try .init(gpa, self.vma, self.device, model));
+    std.log.debug("added ID: {d}, kind {t}, capcity: {d}", .{ entity_id, entity_kind, self.skelentons.capacity() });
 }
 
 fn getViewMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {

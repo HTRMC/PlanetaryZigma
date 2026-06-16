@@ -29,7 +29,7 @@ const Sampler = struct {
 
 const Channel = struct {
     path: AnimationPathCore,
-    node: ?*Node,
+    node: ?u32,
     sampler_index: u32,
 };
 
@@ -38,7 +38,6 @@ samplers: std.ArrayList(Sampler),
 channels: std.ArrayList(Channel),
 start: f32 = std.math.floatMax(f32),
 end: f32 = std.math.floatMin(f32),
-current_time: f32 = 0,
 
 pub fn init(gpa: std.mem.Allocator, name: []const u8, num_samplers: usize, num_channels: usize) !@This() {
     const tracy_scope = tracy.zone(@src());

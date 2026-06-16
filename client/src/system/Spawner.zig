@@ -5,12 +5,16 @@ const tracy = @import("ztracy");
 const Info = system.Info;
 const nz = shared.nz;
 
+pub const SpawnInfo = struct {
+    kind: shared.Entity.Kind,
+    server_id: u32,
+    data: [4]u8 = @splat(0),
+};
+
 gpa: std.mem.Allocator,
 world: *system.World,
-
+pending_spawn: std.ArrayList(SpawnInfo) = .empty,
 pending_despawn: std.ArrayList(u32) = .empty,
-
-const max_despawn_count: u32 = 1000;
 
 pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World) !void {
     const tracy_scope = tracy.zone(@src());
@@ -18,7 +22,8 @@ pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World) !void 
     self.* = .{
         .gpa = gpa,
         .world = world,
-        .pending_despawn = try .initCapacity(gpa, max_despawn_count),
+        .pending_spawn = try .initCapacity(gpa, system.World.max_entities),
+        .pending_despawn = try .initCapacity(gpa, system.World.max_entities),
     };
 }
 pub fn deinit(self: *@This()) void {
@@ -27,14 +32,10 @@ pub fn deinit(self: *@This()) void {
     self.pending_despawn.deinit(self.gpa);
 }
 
-pub fn spawn(self: *@This(), entity_info: system.Entity) !*system.Entity {
+pub fn spawn(self: *@This(), entity_info: SpawnInfo) void {
     const tracy_scope = tracy.zone(@src());
     defer tracy_scope.end();
-    const entity = try self.world.spawn();
-    const id: u32 = entity.id;
-    entity.* = entity_info;
-    entity.id = id;
-    return entity;
+    self.pending_spawn.appendAssumeCapacity(entity_info);
 }
 
 pub fn depspawn(self: *@This(), entity_id: u32) !void {
@@ -44,11 +45,45 @@ pub fn depspawn(self: *@This(), entity_id: u32) !void {
     self.pending_despawn.appendAssumeCapacity(entity_id);
 }
 
-pub fn update(self: *@This(), info: *const system.Info) !void {
+pub fn update(self: *@This(), info: *const system.Info, system_context: *system.Context) !void {
     const tracy_scope = tracy.zone(@src());
     defer tracy_scope.end();
     _ = info;
-    std.debug.assert(self.pending_despawn.items.len < max_despawn_count);
+    std.debug.assert(self.pending_despawn.items.len < system.World.max_entities);
+    std.debug.assert(self.pending_spawn.items.len < system.World.max_entities);
+
+    for (self.pending_spawn.items) |entity_info| {
+        if (self.world.getPtr(entity_info.server_id) == null) {
+            const entity = try self.world.spawn();
+            const client_id = entity.id;
+            entity.* = .{ .id = client_id, .kind = entity_info.kind, .flags = .{ .transform = true } };
+            switch (entity_info.kind) {
+                .enemy, .player => |kind| {
+                    try system_context.renderer.inner.attachSkeleton(self.gpa, client_id, kind);
+                },
+                .planet => {
+                    const size: u32 = @intCast(entity_info.data[0]);
+                    const planet: shared.Planet(.renderable) = try .init(self.gpa, size);
+                    system_context.planet = planet;
+                    try system_context.renderer.inner.createModelWithMesh(
+                        self.gpa,
+                        "planet",
+                        planet.vertices,
+                        planet.indices,
+                        .planet,
+                    );
+                    std.log.debug("SPAWNED: Planet {d}", .{size});
+                },
+                .bullet => {
+                    entity.transform.scale = @splat(0.1);
+                },
+                else => {},
+            }
+            try self.world.enitity_mapping.put(self.gpa, entity_info.server_id, client_id);
+        }
+    }
+    self.pending_spawn.clearRetainingCapacity();
+
     for (self.pending_despawn.items) |entity_id| {
         if (self.world.getPtr(entity_id)) |entity| {
             _ = entity;

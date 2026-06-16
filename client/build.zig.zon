@@ -12,8 +12,8 @@
             .hash = "N-V-__8AAAh4EgD_1vyfeRQed3y6urhGewfbgX0yP6g04hGv",
         },
         .yes = .{
-            .url = "git+https://github.com/HaraldWik/yes#2f81f477191df6b3aa9a54de055a43cb033c79d9",
-            .hash = "yes-0.0.0-pN7MXb2IAwCN587HNAztbaBxXkwZ4jqYu4bNZIUABpQF",
+            .url = "git+https://github.com/HaraldWik/yes#15df350fdc9b61fa5fc217aa87dc732f53f0876c",
+            .hash = "yes-0.0.0-pN7MXZKJAwCzS53dDdhq8GAT3MVay2KuvoHmZrSSCHeW",
         },
         .vulkan_headers = .{ // TODO: Update to v1.4.354
             .url = "git+https://github.com/KhronosGroup/Vulkan-Headers#33d7f512583b8de44d1b6384aa1cf482f92e53e9",
