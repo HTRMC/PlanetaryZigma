@@ -36,8 +36,8 @@
             .hash = "N-V-__8AACIvTgCTqOj6KM32YnqNx1bcsaMuGAeKQEIWZ8Ph",
         },
         .ztracy = .{
-            .url = "git+https://github.com/HTRMC/ztracy?ref=master#1867aec93fad920eeed41a5b2ff7b814294bb53c",
-            .hash = "ztracy-0.1.0-q8LWRc4YAACyovPn6x1SOxjrK2CFW8dE38-yIPd98K85",
+            .url = "git+https://github.com/HTRMC/ztracy?ref=v0.2.0#de6115570d79f96e47aa3291e54d350bae88289c",
+            .hash = "ztracy-0.2.0-q8LWRbsbAAB2Nrt_8RFByk_XNYfq5jR3HDDy9JXzPMr9",
         },
     },
     .paths = .{

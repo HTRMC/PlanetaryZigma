@@ -13,7 +13,8 @@ pub fn build(b: *std.Build) void {
     const zgltf = b.dependency("zgltf", .{ .target = target, .optimize = optimize }).module("zgltf");
 
     const tracy_enable = b.option(bool, "tracy", "Enable Tracy profiling") orelse false;
-    const ztracy = b.dependency("ztracy", .{ .target = target, .optimize = optimize, .tracy = tracy_enable }).module("ztracy");
+    const ztracy_dep = b.dependency("ztracy", .{ .target = target, .optimize = optimize, .tracy = tracy_enable });
+    const ztracy = ztracy_dep.module("ztracy");
 
     const stb_dep = b.dependency("stb", .{});
     const stb_image = b.addTranslateC(.{
@@ -139,6 +140,9 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(system);
     b.installArtifact(exe);
+
+    // Shared Tracy client dll must sit next to the binaries that link it.
+    if (tracy_enable) b.installArtifact(ztracy_dep.artifact("tracy"));
 
     if (target.result.os.tag == .windows) {
         const install_steam_dll = b.addInstallBinFile(steam_dep.path("steamworks/redistributable_bin/win64/steam_api64.dll"), "steam_api64.dll");
