@@ -4,6 +4,7 @@ const shared = @import("shared");
 const system = @import("system");
 const World = system.World;
 const yes = @import("yes");
+const window_util = @import("window.zig");
 
 pub fn main(init: std.process.Init) !void {
     var gpa_impl = if (builtin.mode == .Debug) std.heap.DebugAllocator(.{ .stack_trace_frames = 16, .verbose_log = false }).init else init.gpa;
@@ -24,9 +25,11 @@ pub fn main(init: std.process.Init) !void {
 
     var cross_window: yes.Platform.Cross.Window = .empty(platform);
     const window = cross_window.interface(platform);
+    const window_size: yes.Window.Size = .{ .width = 854, .height = 480 };
     try window.open(platform, .{
         .title = "PlanetaryZigma",
-        .size = .{ .width = 600, .height = 400 },
+        .size = window_size,
+        .position = window_util.centeredPosition(window_size),
         .resize_policy = .{ .specified = .{
             .min_size = .{ .width = 300, .height = 200 },
         } },
