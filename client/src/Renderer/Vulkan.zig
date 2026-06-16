@@ -87,34 +87,54 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
     const self = try gpa.create(@This());
     self.models = .empty;
 
-    const device_zone = tracy.zoneNamed(@src(), "vk device setup");
-    self.instance = try .init(gpa, options.instance.extensions, options.instance.layers);
-    procs.instance.load(self.instance.handle, null);
-    self.debug_messenger = try .init(self.instance, .{
-        .severities = if (try std.process.Environ.contains(.empty, gpa, "RENDERDOC_CAPFILE")) .{} else .{
-            .warning = true,
-            .verbose = true,
-            .@"error" = true,
-            .info = true,
-        },
-    });
-    self.surface = if (options.surface.init != null and options.surface.data != null) .{
-        .handle = @ptrCast(try options.surface.init.?(self.instance.handle, options.surface.data.?)),
-    } else return error.configSurface;
-    self.physical_device = try .pick(self.instance, self.surface.handle);
-    self.device = try .init(self.physical_device, options.device.extensions);
-    procs.device.load(self.device.handle, null);
-
-    self.vma = try .init(self.instance, self.physical_device, self.device);
+    const device_zone = tracy.zoneNamed(@src(), "DeviceSetup");
+    {
+        const zone = tracy.zoneNamed(@src(), "Instance");
+        self.instance = try .init(gpa, options.instance.extensions, options.instance.layers);
+        procs.instance.load(self.instance.handle, null);
+        self.debug_messenger = try .init(self.instance, .{
+            .severities = if (try std.process.Environ.contains(.empty, gpa, "RENDERDOC_CAPFILE")) .{} else .{
+                .warning = true,
+                .verbose = true,
+                .@"error" = true,
+                .info = true,
+            },
+        });
+        self.surface = if (options.surface.init != null and options.surface.data != null) .{
+            .handle = @ptrCast(try options.surface.init.?(self.instance.handle, options.surface.data.?)),
+        } else return error.configSurface;
+        zone.end();
+    }
+    {
+        const zone = tracy.zoneNamed(@src(), "Device");
+        self.physical_device = try .pick(self.instance, self.surface.handle);
+        self.device = try .init(self.physical_device, options.device.extensions);
+        procs.device.load(self.device.handle, null);
+        zone.end();
+    }
+    {
+        const zone = tracy.zoneNamed(@src(), "Vma");
+        self.vma = try .init(self.instance, self.physical_device, self.device);
+        zone.end();
+    }
     device_zone.end();
 
-    const swapchain_zone = tracy.zoneNamed(@src(), "swapchain + frames + layouts");
-    self.swapchain = try .init(gpa, self.vma, self.physical_device, self.device, self.surface, options.swapchain.width, options.swapchain.heigth);
-    for (&self.frames) |*frame| {
-        frame.* = try .init(self.vma, self.device);
-        // std.debug.print("PTR: {*}\n", .{&frame.gpu_scene.buffer});
+    const swapchain_zone = tracy.zoneNamed(@src(), "SwapchainResources");
+    {
+        const zone = tracy.zoneNamed(@src(), "Swapchain");
+        self.swapchain = try .init(gpa, self.vma, self.physical_device, self.device, self.surface, options.swapchain.width, options.swapchain.heigth);
+        zone.end();
+    }
+    {
+        const zone = tracy.zoneNamed(@src(), "Frames");
+        for (&self.frames) |*frame| {
+            frame.* = try .init(self.vma, self.device);
+            // std.debug.print("PTR: {*}\n", .{&frame.gpu_scene.buffer});
+        }
+        zone.end();
     }
 
+    const layout_zone = tracy.zoneNamed(@src(), "DescriptorLayouts");
     self.scene_layout = try .init(self.device, &.{
         .{
             .binding = 0,
@@ -136,52 +156,72 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         .layouts = .{ self.scene_layout, self.material_layout },
         .vk_handles = .{ self.scene_layout.handle, self.material_layout.handle },
     };
+    layout_zone.end();
 
-    self.render_resources = try .init(gpa, self.vma, self.physical_device, self.device, self.material_layout);
+    {
+        const zone = tracy.zoneNamed(@src(), "RenderResources");
+        self.render_resources = try .init(gpa, self.vma, self.physical_device, self.device, self.material_layout);
+        zone.end();
+    }
     swapchain_zone.end();
 
-    const font_zone = tracy.zoneNamed(@src(), "font + ui");
-    self.font = try .init(
-        gpa,
-        self.vma,
-        self.device,
-        "fonts/Roboto-Regular.ttf",
-        asset_server,
-        &self.render_resources,
-    );
-    self.ui = try .init(
-        gpa,
-        self.vma,
-        self.device,
-        self.swapchain.extent.width,
-        self.swapchain.extent.height,
-        self.font,
-    );
+    const font_zone = tracy.zoneNamed(@src(), "FontAndUi");
+    {
+        const zone = tracy.zoneNamed(@src(), "Font");
+        self.font = try .init(
+            gpa,
+            self.vma,
+            self.device,
+            "fonts/Roboto-Regular.ttf",
+            asset_server,
+            &self.render_resources,
+        );
+        zone.end();
+    }
+    {
+        const zone = tracy.zoneNamed(@src(), "Ui");
+        self.ui = try .init(
+            gpa,
+            self.vma,
+            self.device,
+            self.swapchain.extent.width,
+            self.swapchain.extent.height,
+            self.font,
+        );
+        zone.end();
+    }
     font_zone.end();
 
-    const pipeline_zone = tracy.zoneNamed(@src(), "pipeline layouts + box mesh");
-    self.pipeline_layout = try .init(
-        self.device,
-        Shader.AnimationPushConstant,
-        &self.layouts.vk_handles,
-    );
+    const pipeline_zone = tracy.zoneNamed(@src(), "PipelinesAndMesh");
+    {
+        const zone = tracy.zoneNamed(@src(), "PipelineLayouts");
+        self.pipeline_layout = try .init(
+            self.device,
+            Shader.AnimationPushConstant,
+            &self.layouts.vk_handles,
+        );
 
-    self.ui_pipeline_layout = try .init(
-        self.device,
-        Shader.UiPushConstant,
-        &.{self.material_layout.handle},
-    );
-
-    _ = try createModelWithMesh(
-        self,
-        gpa,
-        RenderResources.default_mesh_name,
-        Mesh.box.verticies,
-        Mesh.box.indicies,
-    );
+        self.ui_pipeline_layout = try .init(
+            self.device,
+            Shader.UiPushConstant,
+            &.{self.material_layout.handle},
+        );
+        zone.end();
+    }
+    {
+        const zone = tracy.zoneNamed(@src(), "BoxMesh");
+        _ = try createModelWithMesh(
+            self,
+            gpa,
+            RenderResources.default_mesh_name,
+            Mesh.box.verticies,
+            Mesh.box.indicies,
+        );
+        zone.end();
+    }
     pipeline_zone.end();
 
-    const glb_zone = tracy.zoneNamed(@src(), "glb model init");
+    const glb_zone = tracy.zoneNamed(@src(), "GltfModelInit");
     const model: *GltfModel = try .init(
         gpa,
         self.vma,
@@ -197,67 +237,82 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
     try self.models.append(gpa, model);
     glb_zone.end();
 
-    const shader_zone = tracy.zoneNamed(@src(), "shader compile (4x)");
-    self.vertex_shader = try .init(
-        gpa,
-        self.device,
-        asset_server,
-        .{
-            .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
-            .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
-            .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
-            .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-            .pSetLayouts = &self.layouts.vk_handles[0],
-            .setLayoutCount = @intCast(self.layouts.vk_handles.len),
-            .pushConstantRangeCount = 1,
-            .pName = "main",
-        },
-        "shaders/vertex.vert",
-        Shader.AnimationPushConstant,
-    );
-    self.fragment_shader = try .init(
-        gpa,
-        self.device,
-        asset_server,
-        .{
+    const shader_zone = tracy.zoneNamed(@src(), "ShaderCompile");
+    {
+        const zone = tracy.zoneNamed(@src(), "VertexShader");
+        self.vertex_shader = try .init(
+            gpa,
+            self.device,
+            asset_server,
+            .{
+                .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
+                .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
+                .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+                .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
+                .pSetLayouts = &self.layouts.vk_handles[0],
+                .setLayoutCount = @intCast(self.layouts.vk_handles.len),
+                .pushConstantRangeCount = 1,
+                .pName = "main",
+            },
+            "shaders/vertex.vert",
+            Shader.AnimationPushConstant,
+        );
+        zone.end();
+    }
+    {
+        const zone = tracy.zoneNamed(@src(), "FragmentShader");
+        self.fragment_shader = try .init(
+            gpa,
+            self.device,
+            asset_server,
+            .{
+                .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
+                .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+                .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
+                .pSetLayouts = &self.layouts.vk_handles[0],
+                .setLayoutCount = @intCast(self.layouts.vk_handles.len),
+                .pushConstantRangeCount = 1,
+                .pName = "main",
+            },
+            "shaders/fragment.frag",
+            Shader.AnimationPushConstant,
+        );
+        zone.end();
+    }
+    {
+        const zone = tracy.zoneNamed(@src(), "UiVertexShader");
+        self.ui_vertex_shader = try .init(
+            gpa,
+            self.device,
+            asset_server,
+            .{
+                .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
+                .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
+                .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+                .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
+                .pSetLayouts = &self.layouts.vk_handles[1],
+                .setLayoutCount = 1,
+                .pushConstantRangeCount = 1,
+                .pName = "main",
+            },
+            "shaders/ui.vert",
+            Shader.UiPushConstant,
+        );
+        zone.end();
+    }
+    {
+        const zone = tracy.zoneNamed(@src(), "UiFragmentShader");
+        self.ui_fragment_shader = try .init(gpa, self.device, asset_server, .{
             .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
             .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
-            .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-            .pSetLayouts = &self.layouts.vk_handles[0],
-            .setLayoutCount = @intCast(self.layouts.vk_handles.len),
-            .pushConstantRangeCount = 1,
-            .pName = "main",
-        },
-        "shaders/fragment.frag",
-        Shader.AnimationPushConstant,
-    );
-
-    self.ui_vertex_shader = try .init(
-        gpa,
-        self.device,
-        asset_server,
-        .{
-            .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
-            .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
-            .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
             .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
             .pSetLayouts = &self.layouts.vk_handles[1],
             .setLayoutCount = 1,
             .pushConstantRangeCount = 1,
             .pName = "main",
-        },
-        "shaders/ui.vert",
-        Shader.UiPushConstant,
-    );
-    self.ui_fragment_shader = try .init(gpa, self.device, asset_server, .{
-        .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
-        .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
-        .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-        .pSetLayouts = &self.layouts.vk_handles[1],
-        .setLayoutCount = 1,
-        .pushConstantRangeCount = 1,
-        .pName = "main",
-    }, "shaders/ui.frag", Shader.UiPushConstant);
+        }, "shaders/ui.frag", Shader.UiPushConstant);
+        zone.end();
+    }
     shader_zone.end();
 
     return self;
