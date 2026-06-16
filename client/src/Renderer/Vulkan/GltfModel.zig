@@ -79,15 +79,21 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
     const load_zone = tracy.zoneNamed(@src(), "LoadModel");
     defer load_zone.end();
     const self: *@This() = @ptrCast(@alignCast(user_data));
-    var read_buffer: [4096]u8 = undefined;
-    var reader = file.reader(io, &read_buffer);
-    const content = try reader.interface.allocRemaining(gpa, .unlimited);
+    const content = blk: {
+        const zone = tracy.zoneNamed(@src(), "ReadGlbFile");
+        defer zone.end();
+        var read_buffer: [4096]u8 = undefined;
+        var reader = file.reader(io, &read_buffer);
+        break :blk try reader.interface.allocRemaining(gpa, .unlimited);
+    };
     defer gpa.free(content);
     std.debug.print("size:  {d}\n", .{content.len});
 
-    const parse_zone = tracy.zoneNamed(@src(), "ParseGlbSlice");
-    var loaded = try zgltf.parseGlbSlice(gpa, content);
-    parse_zone.end();
+    var loaded = blk: {
+        const parse_zone = tracy.zoneNamed(@src(), "ParseGlbSlice");
+        defer parse_zone.end();
+        break :blk try zgltf.parseGlbSlice(gpa, content);
+    };
     defer loaded.deinit();
     const gltf_loaded = loaded.parsed.value;
     const bin = loaded.bin orelse return error.MissingBin;
@@ -95,272 +101,306 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
     // self.clear(gpa);
 
     const original_sample_count = self.render_resources.samplers.items.len;
-    if (gltf_loaded.samplers) |samplers| {
-        std.log.info("Sampler count was {d}", .{samplers.len});
-        for (samplers) |sampler| {
-            const sampler_info: c.VkSamplerCreateInfo = .{
-                .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-                .maxLod = c.VK_LOD_CLAMP_NONE,
-                .minLod = 0,
-                .magFilter = if (sampler.magFilter) |filter| switch (filter) {
-                    .nearest => c.VK_FILTER_NEAREST,
-                    .linear => c.VK_FILTER_LINEAR,
-                } else c.VK_FILTER_LINEAR,
-                .minFilter = if (sampler.minFilter) |filter| switch (filter) {
-                    .nearest => c.VK_FILTER_NEAREST,
-                    .linear => c.VK_FILTER_LINEAR,
-                    else => c.VK_FILTER_LINEAR,
-                } else c.VK_FILTER_LINEAR,
-                .mipmapMode = c.VK_SAMPLER_MIPMAP_MODE_NEAREST,
-                .addressModeU = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-                .addressModeV = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-                .addressModeW = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-                .anisotropyEnable = c.VK_FALSE,
-                .borderColor = c.VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-                .unnormalizedCoordinates = c.VK_FALSE,
-                .compareEnable = c.VK_FALSE,
-                .compareOp = c.VK_COMPARE_OP_ALWAYS,
-            };
-            var new_sampler: c.VkSampler = undefined;
-            try check(c.vkCreateSampler(self.device.handle, &sampler_info, null, &new_sampler));
-            //TODO: map sampler when getting more meshes.
-            try self.render_resources.samplers.append(gpa, new_sampler);
+    {
+        const zone = tracy.zoneNamed(@src(), "SamplerSetup");
+        defer zone.end();
+        if (gltf_loaded.samplers) |samplers| {
+            std.log.info("Sampler count was {d}", .{samplers.len});
+            for (samplers) |sampler| {
+                const sampler_info: c.VkSamplerCreateInfo = .{
+                    .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+                    .maxLod = c.VK_LOD_CLAMP_NONE,
+                    .minLod = 0,
+                    .magFilter = if (sampler.magFilter) |filter| switch (filter) {
+                        .nearest => c.VK_FILTER_NEAREST,
+                        .linear => c.VK_FILTER_LINEAR,
+                    } else c.VK_FILTER_LINEAR,
+                    .minFilter = if (sampler.minFilter) |filter| switch (filter) {
+                        .nearest => c.VK_FILTER_NEAREST,
+                        .linear => c.VK_FILTER_LINEAR,
+                        else => c.VK_FILTER_LINEAR,
+                    } else c.VK_FILTER_LINEAR,
+                    .mipmapMode = c.VK_SAMPLER_MIPMAP_MODE_NEAREST,
+                    .addressModeU = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+                    .addressModeV = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+                    .addressModeW = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+                    .anisotropyEnable = c.VK_FALSE,
+                    .borderColor = c.VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+                    .unnormalizedCoordinates = c.VK_FALSE,
+                    .compareEnable = c.VK_FALSE,
+                    .compareOp = c.VK_COMPARE_OP_ALWAYS,
+                };
+                var new_sampler: c.VkSampler = undefined;
+                try check(c.vkCreateSampler(self.device.handle, &sampler_info, null, &new_sampler));
+                //TODO: map sampler when getting more meshes.
+                try self.render_resources.samplers.append(gpa, new_sampler);
+            }
+        } else {
+            std.log.info("Sampler count was 0", .{});
         }
-    } else {
-        std.log.info("Sampler count was 0", .{});
     }
 
     const original_image_count = self.render_resources.images.items.len;
-    if (gltf_loaded.images) |images| {
-        std.log.info("image count was {d}", .{images.len});
-        var upload_buffers: std.ArrayList(Buffer) = .empty;
-        defer {
-            for (upload_buffers.items) |*upload_buffer| upload_buffer.deinit(self.vma);
-            upload_buffers.deinit(gpa);
-        }
-        const upload_cmd = try self.device.beginImmediateCommand();
-        for (images) |image| {
-            if (image.uri == null and image.bufferView == null) return error.FailedToLoadGLTFImage;
-            var pixels: [*c]stb_image.stbi_uc = null;
-            var width: i32, var height: i32, var nr_channel: i32 = .{ 0, 0, 0 };
-            if (image.uri) |uri| {
-                try if (std.mem.eql(u8, "data:", uri[0..5])) error.DataNotsupported;
-                const c_uri = try gpa.dupeSentinel(u8, uri, 0);
-                defer gpa.free(c_uri);
-                pixels = stb_image.stbi_load(c_uri, &width, &height, &nr_channel, 4);
-            } else if (image.bufferView) |buffer_view_index| {
-                const buffer_view = gltf_loaded.bufferViews.?[buffer_view_index];
-                const bytes_offset = buffer_view.byteOffset;
-                const byte_len = buffer_view.byteLength;
-                const bytes = bin[bytes_offset .. bytes_offset + byte_len];
-                pixels = stb_image.stbi_load_from_memory(bytes.ptr, @intCast(bytes.len), &width, &height, &nr_channel, 4);
+    {
+        const zone = tracy.zoneNamed(@src(), "ImageSetup");
+        defer zone.end();
+        if (gltf_loaded.images) |images| {
+            std.log.info("image count was {d}", .{images.len});
+            var upload_buffers: std.ArrayList(Buffer) = .empty;
+            defer {
+                for (upload_buffers.items) |*upload_buffer| upload_buffer.deinit(self.vma);
+                upload_buffers.deinit(gpa);
             }
-            defer stb_image.stbi_image_free(pixels);
-            try if (pixels == null) error.LoadingStbi;
-            var new_image: Image = try .init(
-                self.vma,
-                self.device,
-                c.VK_FORMAT_R8G8B8A8_UNORM,
-                .{ .width = @intCast(width), .height = @intCast(height), .depth = 1 },
-                c.VK_IMAGE_USAGE_SAMPLED_BIT | c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-                c.VK_IMAGE_ASPECT_COLOR_BIT,
-                true,
-            );
-            try new_image.recordUploadDataToImage(gpa, self.vma, self.device, upload_cmd, pixels, 4, &upload_buffers);
-            try self.render_resources.images.append(gpa, new_image);
+            const upload_cmd = try self.device.beginImmediateCommand();
+            for (images) |image| {
+                const image_zone = tracy.zoneNamed(@src(), "Image");
+                defer image_zone.end();
+                if (image.uri == null and image.bufferView == null) return error.FailedToLoadGLTFImage;
+                var pixels: [*c]stb_image.stbi_uc = null;
+                var width: i32, var height: i32, var nr_channel: i32 = .{ 0, 0, 0 };
+                {
+                    const decode_zone = tracy.zoneNamed(@src(), "ImageDecode");
+                    defer decode_zone.end();
+                    if (image.uri) |uri| {
+                        try if (std.mem.eql(u8, "data:", uri[0..5])) error.DataNotsupported;
+                        const c_uri = try gpa.dupeSentinel(u8, uri, 0);
+                        defer gpa.free(c_uri);
+                        pixels = stb_image.stbi_load(c_uri, &width, &height, &nr_channel, 4);
+                    } else if (image.bufferView) |buffer_view_index| {
+                        const buffer_view = gltf_loaded.bufferViews.?[buffer_view_index];
+                        const bytes_offset = buffer_view.byteOffset;
+                        const byte_len = buffer_view.byteLength;
+                        const bytes = bin[bytes_offset .. bytes_offset + byte_len];
+                        pixels = stb_image.stbi_load_from_memory(bytes.ptr, @intCast(bytes.len), &width, &height, &nr_channel, 4);
+                    }
+                }
+                defer stb_image.stbi_image_free(pixels);
+                try if (pixels == null) error.LoadingStbi;
+                var new_image: Image = try .init(
+                    self.vma,
+                    self.device,
+                    c.VK_FORMAT_R8G8B8A8_UNORM,
+                    .{ .width = @intCast(width), .height = @intCast(height), .depth = 1 },
+                    c.VK_IMAGE_USAGE_SAMPLED_BIT | c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                    c.VK_IMAGE_ASPECT_COLOR_BIT,
+                    true,
+                );
+                {
+                    const upload_zone = tracy.zoneNamed(@src(), "ImageUpload");
+                    defer upload_zone.end();
+                    try new_image.recordUploadDataToImage(gpa, self.vma, self.device, upload_cmd, pixels, 4, &upload_buffers);
+                }
+                try self.render_resources.images.append(gpa, new_image);
+            }
+            try self.device.endImmediateCommand(upload_cmd);
+        } else {
+            std.log.info("image count was 0", .{});
         }
-        try self.device.endImmediateCommand(upload_cmd);
-    } else {
-        std.log.info("image count was 0", .{});
     }
 
-    if (gltf_loaded.meshes) |meshes| for (meshes) |mesh| {
-        var surfaces: std.ArrayList(Mesh.GeoSurface) = try .initCapacity(gpa, mesh.primitives.len);
-        defer surfaces.deinit(gpa);
-        var vertices: std.ArrayList(Mesh.Vertex) = .empty;
-        defer vertices.deinit(gpa);
-        var indices: std.ArrayList(u32) = .empty;
-        defer indices.deinit(gpa);
+    {
+        const mesh_setup_zone = tracy.zoneNamed(@src(), "MeshSetup");
+        defer mesh_setup_zone.end();
+        if (gltf_loaded.meshes) |meshes| for (meshes) |mesh| {
+            const mesh_zone = tracy.zoneNamed(@src(), "Mesh");
+            defer mesh_zone.end();
+            var surfaces: std.ArrayList(Mesh.GeoSurface) = try .initCapacity(gpa, mesh.primitives.len);
+            defer surfaces.deinit(gpa);
+            var vertices: std.ArrayList(Mesh.Vertex) = .empty;
+            defer vertices.deinit(gpa);
+            var indices: std.ArrayList(u32) = .empty;
+            defer indices.deinit(gpa);
 
-        std.log.debug("MESH primitives: {d}\n", .{mesh.primitives.len});
-        for (mesh.primitives) |primitive| {
-            var indices_start: u32 = 0;
-            var indices_count: u32 = 0;
-            {
-                indices_start = @intCast(indices.items.len);
+            std.log.debug("MESH primitives: {d}\n", .{mesh.primitives.len});
+            for (mesh.primitives) |primitive| {
+                const primitive_zone = tracy.zoneNamed(@src(), "Primitive");
+                defer primitive_zone.end();
+                var indices_start: u32 = 0;
+                var indices_count: u32 = 0;
+                {
+                    const index_zone = tracy.zoneNamed(@src(), "IndexBuild");
+                    defer index_zone.end();
+                    indices_start = @intCast(indices.items.len);
 
-                const acc_idx = primitive.indices.?;
-                var acc = gltf_loaded.accessors.?[acc_idx];
-                const bv = gltf_loaded.bufferViews.?[acc.bufferView.?];
-                const index_offset = bv.byteOffset + acc.byteOffset;
+                    const acc_idx = primitive.indices.?;
+                    var acc = gltf_loaded.accessors.?[acc_idx];
+                    const bv = gltf_loaded.bufferViews.?[acc.bufferView.?];
+                    const index_offset = bv.byteOffset + acc.byteOffset;
 
-                const element_size = try acc.elementSize();
-                const amount_of_bytes = acc.count * element_size;
-                const bytes = bin[index_offset .. index_offset + amount_of_bytes];
+                    const element_size = try acc.elementSize();
+                    const amount_of_bytes = acc.count * element_size;
+                    const bytes = bin[index_offset .. index_offset + amount_of_bytes];
 
-                const dst = try indices.addManyAsSlice(gpa, acc.count);
-                for (0..acc.count) |i| {
-                    const off = i * element_size;
-                    dst[i] = switch (element_size) {
-                        1 => bytes[off],
-                        2 => std.mem.readInt(u16, bytes[off..][0..2], .little),
-                        4 => std.mem.readInt(u32, bytes[off..][0..4], .little),
-                        else => return error.BadIndexSize,
-                    };
-                    dst[i] += @intCast(vertices.items.len);
+                    const dst = try indices.addManyAsSlice(gpa, acc.count);
+                    for (0..acc.count) |i| {
+                        const off = i * element_size;
+                        dst[i] = switch (element_size) {
+                            1 => bytes[off],
+                            2 => std.mem.readInt(u16, bytes[off..][0..2], .little),
+                            4 => std.mem.readInt(u32, bytes[off..][0..4], .little),
+                            else => return error.BadIndexSize,
+                        };
+                        dst[i] += @intCast(vertices.items.len);
+                    }
+                    indices_count = @intCast(acc.count);
                 }
-                indices_count = @intCast(acc.count);
-            }
 
-            const pos_accessor_idx = primitive.attributes.map.get("POSITION") orelse return error.NoPosition;
-            const pos_accessor = gltf_loaded.accessors.?[pos_accessor_idx];
-            const pos_buffer_view = gltf_loaded.bufferViews.?[pos_accessor.bufferView.?];
-            const pos_offset = (pos_accessor.byteOffset + pos_buffer_view.byteOffset);
-            std.debug.assert(pos_accessor.componentType == @intFromEnum(zgltf.ComponentType.float));
-            const positions = std.mem.bytesAsSlice(
-                [3]f32,
-                bin[pos_offset .. pos_offset + pos_accessor.count * @sizeOf([3]f32)],
-            );
+                const pos_accessor_idx = primitive.attributes.map.get("POSITION") orelse return error.NoPosition;
+                const pos_accessor = gltf_loaded.accessors.?[pos_accessor_idx];
+                const pos_buffer_view = gltf_loaded.bufferViews.?[pos_accessor.bufferView.?];
+                const pos_offset = (pos_accessor.byteOffset + pos_buffer_view.byteOffset);
+                std.debug.assert(pos_accessor.componentType == @intFromEnum(zgltf.ComponentType.float));
+                const positions = std.mem.bytesAsSlice(
+                    [3]f32,
+                    bin[pos_offset .. pos_offset + pos_accessor.count * @sizeOf([3]f32)],
+                );
 
-            var base_color: [4]f32 = .{ 1, 0, 0, 1 };
-            var material_name: ?[]const u8 = null;
-            if (primitive.material) |material_index| {
-                if (gltf_loaded.materials) |materials| {
-                    const material = materials[material_index];
-                    // std.log.debug("MATERIAL : {any}", .{material});
-                    if (material.pbrMetallicRoughness) |matallic_roughness| {
-                        base_color = matallic_roughness.baseColorFactor;
-                        if (matallic_roughness.baseColorTexture) |base_texture| {
-                            if (material.name != null and self.render_resources.materials.contains(material.name.?)) {
-                                material_name = (try self.render_resources.getMaterialPtr(material.name.?)).name;
-                            } else if (material.name) |name| {
-                                const texture_index = base_texture.index;
+                var base_color: [4]f32 = .{ 1, 0, 0, 1 };
+                var material_name: ?[]const u8 = null;
+                if (primitive.material) |material_index| {
+                    if (gltf_loaded.materials) |materials| {
+                        const material = materials[material_index];
+                        // std.log.debug("MATERIAL : {any}", .{material});
+                        if (material.pbrMetallicRoughness) |matallic_roughness| {
+                            base_color = matallic_roughness.baseColorFactor;
+                            if (matallic_roughness.baseColorTexture) |base_texture| {
+                                if (material.name != null and self.render_resources.materials.contains(material.name.?)) {
+                                    material_name = (try self.render_resources.getMaterialPtr(material.name.?)).name;
+                                } else if (material.name) |name| {
+                                    const texture_index = base_texture.index;
 
-                                const texture_info = gltf_loaded.textures.?[texture_index];
-                                const sampler = if (texture_info.sampler) |sampler_index|
-                                    self.render_resources.samplers.items[original_sample_count + sampler_index]
-                                else
-                                    self.render_resources.samplers.items[0];
-                                const image_view = if (texture_info.source) |image_index|
-                                    self.render_resources.images.items[original_image_count + image_index].vk_imageview
-                                else
-                                    self.render_resources.images.items[0].vk_imageview;
+                                    const texture_info = gltf_loaded.textures.?[texture_index];
+                                    const sampler = if (texture_info.sampler) |sampler_index|
+                                        self.render_resources.samplers.items[original_sample_count + sampler_index]
+                                    else
+                                        self.render_resources.samplers.items[0];
+                                    const image_view = if (texture_info.source) |image_index|
+                                        self.render_resources.images.items[original_image_count + image_index].vk_imageview
+                                    else
+                                        self.render_resources.images.items[0].vk_imageview;
 
-                                const new_material: Material = try .init(
-                                    gpa,
-                                    name,
-                                    self.device,
-                                    self.vma,
-                                    self.render_resources.set_size,
-                                    self.render_resources.combined_image_sampler_descriptor_size,
-                                    sampler,
-                                    image_view,
-                                );
-                                try self.render_resources.createMaterial(gpa, new_material);
-                                material_name = new_material.name;
+                                    const new_material: Material = try .init(
+                                        gpa,
+                                        name,
+                                        self.device,
+                                        self.vma,
+                                        self.render_resources.set_size,
+                                        self.render_resources.combined_image_sampler_descriptor_size,
+                                        sampler,
+                                        image_view,
+                                    );
+                                    try self.render_resources.createMaterial(gpa, new_material);
+                                    material_name = new_material.name;
+                                }
                             }
                         }
                     }
                 }
+
+                surfaces.appendAssumeCapacity(.{
+                    .index_count = indices_count,
+                    .index_start = indices_start,
+                    .material_name = if (material_name) |name| name else RenderResources.default_material_name,
+                });
+
+                const uvs: ?[]align(1) const [2]f32 = if (primitive.attributes.map.get("TEXCOORD_0")) |uv_accessor_idx| blk: {
+                    const uv_accessor = gltf_loaded.accessors.?[uv_accessor_idx];
+                    std.debug.assert(uv_accessor.componentType == @intFromEnum(zgltf.ComponentType.float));
+                    const uv_buffer_view = gltf_loaded.bufferViews.?[uv_accessor.bufferView.?];
+                    const uv_offset = (uv_accessor.byteOffset + uv_buffer_view.byteOffset);
+                    break :blk std.mem.bytesAsSlice(
+                        [2]f32,
+                        bin[uv_offset .. uv_offset + uv_accessor.count * @sizeOf([2]f32)],
+                    );
+                } else null;
+
+                const normal_accessor_idx = primitive.attributes.map.get("NORMAL") orelse return error.NoNormal;
+                const normal_accessor = gltf_loaded.accessors.?[normal_accessor_idx];
+                std.debug.assert(normal_accessor.componentType == @intFromEnum(zgltf.ComponentType.float));
+                const normal_buffer_view = gltf_loaded.bufferViews.?[normal_accessor.bufferView.?];
+                const normal_offset = (normal_accessor.byteOffset + normal_buffer_view.byteOffset);
+                const normals = std.mem.bytesAsSlice(
+                    [3]f32,
+                    bin[normal_offset .. normal_offset + normal_accessor.count * @sizeOf([3]f32)],
+                );
+
+                if (gltf_loaded.animations != null) {
+                    const vertex_zone = tracy.zoneNamed(@src(), "SkinnedVertexBuild");
+                    defer vertex_zone.end();
+                    const joint_accessor_idx = primitive.attributes.map.get("JOINTS_0") orelse return error.NoJoints;
+                    const joint_accessor = gltf_loaded.accessors.?[joint_accessor_idx];
+                    std.debug.assert(joint_accessor.componentType == @intFromEnum(zgltf.ComponentType.unsigned_byte));
+                    const joint_buffer_view = gltf_loaded.bufferViews.?[joint_accessor.bufferView.?];
+                    const joint_offset = (joint_accessor.byteOffset + joint_buffer_view.byteOffset);
+                    const joints = std.mem.bytesAsSlice(
+                        [4]u8,
+                        bin[joint_offset .. joint_offset + joint_accessor.count * @sizeOf([4]u8)],
+                    );
+
+                    const weights_accessor_idx = primitive.attributes.map.get("WEIGHTS_0") orelse return error.NoJoints;
+                    const weights_accessor = gltf_loaded.accessors.?[weights_accessor_idx];
+                    std.debug.assert(weights_accessor.componentType == @intFromEnum(zgltf.ComponentType.float));
+                    std.debug.assert(weights_accessor.type == .VEC4);
+                    const weights_buffer_view = gltf_loaded.bufferViews.?[weights_accessor.bufferView.?];
+                    const weights_offset = (weights_accessor.byteOffset + weights_buffer_view.byteOffset);
+                    const weights = std.mem.bytesAsSlice(
+                        [4]f32,
+                        bin[weights_offset .. weights_offset + weights_accessor.count * @sizeOf([4]f32)],
+                    );
+
+                    var dst = try vertices.addManyAsSlice(gpa, pos_accessor.count);
+                    for (0..pos_accessor.count) |i| {
+                        dst[i] = .{
+                            .color = base_color,
+                            .normal = normals[i],
+                            .position = positions[i],
+                            .uv_x = if (uvs) |values| values[i][0] else 0,
+                            .uv_y = if (uvs) |values| values[i][1] else 0,
+                            .joint_indices = blk: {
+                                var joint_indices: [4]i32 = undefined;
+                                inline for (0..4) |j| joint_indices[j] = joints[i][j];
+                                break :blk joint_indices;
+                            },
+                            .joint_weights = blk: {
+                                var joint_weights: [4]f32 = undefined;
+                                inline for (0..4) |j| joint_weights[j] = weights[i][j];
+                                break :blk joint_weights;
+                            },
+                        };
+                    }
+                } else {
+                    const vertex_zone = tracy.zoneNamed(@src(), "VertexBuild");
+                    defer vertex_zone.end();
+                    var dst = try vertices.addManyAsSlice(gpa, pos_accessor.count);
+                    for (0..pos_accessor.count) |i| {
+                        dst[i] = .{
+                            .color = base_color,
+                            .normal = normals[i],
+                            .position = positions[i],
+                            .uv_x = if (uvs) |values| values[i][0] else 0,
+                            .uv_y = if (uvs) |values| values[i][1] else 0,
+                        };
+                    }
+                }
             }
 
-            surfaces.appendAssumeCapacity(.{
-                .index_count = indices_count,
-                .index_start = indices_start,
-                .material_name = if (material_name) |name| name else RenderResources.default_material_name,
-            });
-
-            const uvs: ?[]align(1) const [2]f32 = if (primitive.attributes.map.get("TEXCOORD_0")) |uv_accessor_idx| blk: {
-                const uv_accessor = gltf_loaded.accessors.?[uv_accessor_idx];
-                std.debug.assert(uv_accessor.componentType == @intFromEnum(zgltf.ComponentType.float));
-                const uv_buffer_view = gltf_loaded.bufferViews.?[uv_accessor.bufferView.?];
-                const uv_offset = (uv_accessor.byteOffset + uv_buffer_view.byteOffset);
-                break :blk std.mem.bytesAsSlice(
-                    [2]f32,
-                    bin[uv_offset .. uv_offset + uv_accessor.count * @sizeOf([2]f32)],
+            if (mesh.name != null and !self.render_resources.meshes.contains(mesh.name.?)) {
+                const mesh_upload_zone = tracy.zoneNamed(@src(), "MeshGpuUpload");
+                defer mesh_upload_zone.end();
+                const new_mesh: Mesh = try .init(
+                    gpa,
+                    self.vma,
+                    mesh.name.?,
+                    self.device,
+                    Mesh.Vertex,
+                    vertices.items,
+                    indices.items,
+                    surfaces.items,
                 );
-            } else null;
-
-            const normal_accessor_idx = primitive.attributes.map.get("NORMAL") orelse return error.NoNormal;
-            const normal_accessor = gltf_loaded.accessors.?[normal_accessor_idx];
-            std.debug.assert(normal_accessor.componentType == @intFromEnum(zgltf.ComponentType.float));
-            const normal_buffer_view = gltf_loaded.bufferViews.?[normal_accessor.bufferView.?];
-            const normal_offset = (normal_accessor.byteOffset + normal_buffer_view.byteOffset);
-            const normals = std.mem.bytesAsSlice(
-                [3]f32,
-                bin[normal_offset .. normal_offset + normal_accessor.count * @sizeOf([3]f32)],
-            );
-
-            if (gltf_loaded.animations != null) {
-                const joint_accessor_idx = primitive.attributes.map.get("JOINTS_0") orelse return error.NoJoints;
-                const joint_accessor = gltf_loaded.accessors.?[joint_accessor_idx];
-                std.debug.assert(joint_accessor.componentType == @intFromEnum(zgltf.ComponentType.unsigned_byte));
-                const joint_buffer_view = gltf_loaded.bufferViews.?[joint_accessor.bufferView.?];
-                const joint_offset = (joint_accessor.byteOffset + joint_buffer_view.byteOffset);
-                const joints = std.mem.bytesAsSlice(
-                    [4]u8,
-                    bin[joint_offset .. joint_offset + joint_accessor.count * @sizeOf([4]u8)],
-                );
-
-                const weights_accessor_idx = primitive.attributes.map.get("WEIGHTS_0") orelse return error.NoJoints;
-                const weights_accessor = gltf_loaded.accessors.?[weights_accessor_idx];
-                std.debug.assert(weights_accessor.componentType == @intFromEnum(zgltf.ComponentType.float));
-                std.debug.assert(weights_accessor.type == .VEC4);
-                const weights_buffer_view = gltf_loaded.bufferViews.?[weights_accessor.bufferView.?];
-                const weights_offset = (weights_accessor.byteOffset + weights_buffer_view.byteOffset);
-                const weights = std.mem.bytesAsSlice(
-                    [4]f32,
-                    bin[weights_offset .. weights_offset + weights_accessor.count * @sizeOf([4]f32)],
-                );
-
-                var dst = try vertices.addManyAsSlice(gpa, pos_accessor.count);
-                for (0..pos_accessor.count) |i| {
-                    dst[i] = .{
-                        .color = base_color,
-                        .normal = normals[i],
-                        .position = positions[i],
-                        .uv_x = if (uvs) |values| values[i][0] else 0,
-                        .uv_y = if (uvs) |values| values[i][1] else 0,
-                        .joint_indices = blk: {
-                            var joint_indices: [4]i32 = undefined;
-                            inline for (0..4) |j| joint_indices[j] = joints[i][j];
-                            break :blk joint_indices;
-                        },
-                        .joint_weights = blk: {
-                            var joint_weights: [4]f32 = undefined;
-                            inline for (0..4) |j| joint_weights[j] = weights[i][j];
-                            break :blk joint_weights;
-                        },
-                    };
-                }
-            } else {
-                var dst = try vertices.addManyAsSlice(gpa, pos_accessor.count);
-                for (0..pos_accessor.count) |i| {
-                    dst[i] = .{
-                        .color = base_color,
-                        .normal = normals[i],
-                        .position = positions[i],
-                        .uv_x = if (uvs) |values| values[i][0] else 0,
-                        .uv_y = if (uvs) |values| values[i][1] else 0,
-                    };
-                }
+                try self.render_resources.createMesh(gpa, new_mesh);
             }
-        }
-
-        if (mesh.name != null and !self.render_resources.meshes.contains(mesh.name.?)) {
-            const new_mesh: Mesh = try .init(
-                gpa,
-                self.vma,
-                mesh.name.?,
-                self.device,
-                Mesh.Vertex,
-                vertices.items,
-                indices.items,
-                surfaces.items,
-            );
-            try self.render_resources.createMesh(gpa, new_mesh);
-        }
-    };
+        };
+    }
 
     if (gltf_loaded.nodes) |nodes| {
         _ = try self.nodes.addManyAsSlice(gpa, nodes.len);

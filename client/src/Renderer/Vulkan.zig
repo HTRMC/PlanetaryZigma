@@ -224,6 +224,7 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
     pipeline_zone.end();
 
     const glb_zone = tracy.zoneNamed(@src(), "GltfModelInit");
+    defer glb_zone.end();
     const model: *GltfModel = try .init(
         gpa,
         self.vma,
@@ -237,7 +238,6 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         },
     );
     try self.models.append(gpa, model);
-    glb_zone.end();
 
     const shader_zone = tracy.zoneNamed(@src(), "ShaderCompile");
     {
