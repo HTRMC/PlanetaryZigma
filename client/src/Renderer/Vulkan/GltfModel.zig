@@ -19,6 +19,91 @@ const check = @import("utils.zig").check;
 const Info = @import("../Vulkan.zig").Info;
 const tracy = @import("ztracy");
 
+const DecodeError = error{
+    DataNotSupported,
+    FailedToLoadGLTFImage,
+    LoadingStbi,
+    MissingBufferViews,
+};
+
+const DecodedImage = struct {
+    pixels: [*c]stb_image.stbi_uc = null,
+    width: i32 = 0,
+    height: i32 = 0,
+    nr_channel: i32 = 0,
+    err: ?DecodeError = null,
+
+    fn deinit(self: *@This()) void {
+        if (self.pixels != null) stb_image.stbi_image_free(self.pixels);
+        self.* = .{};
+    }
+};
+
+const ImageDecodeTask = struct {
+    bytes: ?[]const u8 = null,
+    uri: ?[:0]const u8 = null,
+    result: *DecodedImage,
+};
+
+fn decodeImages(gpa: std.mem.Allocator, tasks: []ImageDecodeTask) !void {
+    if (tasks.len == 0) return;
+
+    const cpu_count = std.Thread.getCpuCount() catch 1;
+    const worker_count = @min(tasks.len, @max(@as(usize, 1), cpu_count));
+    if (worker_count == 1) {
+        decodeImageWorker(tasks, 0, 1);
+        return;
+    }
+
+    var threads = try gpa.alloc(std.Thread, worker_count);
+    defer gpa.free(threads);
+
+    var spawned: usize = 0;
+    errdefer {
+        for (threads[0..spawned]) |thread| thread.join();
+    }
+
+    while (spawned < worker_count) : (spawned += 1) {
+        threads[spawned] = try std.Thread.spawn(.{}, decodeImageWorker, .{ tasks, spawned, worker_count });
+    }
+    for (threads) |thread| thread.join();
+}
+
+fn decodeImageWorker(tasks: []ImageDecodeTask, worker_index: usize, worker_count: usize) void {
+    tracy.setThreadName("image decode");
+    var image_index = worker_index;
+    while (image_index < tasks.len) : (image_index += worker_count) {
+        decodeImageTask(&tasks[image_index]);
+    }
+}
+
+fn decodeImageTask(task: *ImageDecodeTask) void {
+    const decode_zone = tracy.zoneNamed(@src(), "ImageDecodeTask");
+    defer decode_zone.end();
+
+    var width: i32 = 0;
+    var height: i32 = 0;
+    var nr_channel: i32 = 0;
+
+    if (task.uri) |uri| {
+        task.result.pixels = stb_image.stbi_load(uri, &width, &height, &nr_channel, 4);
+    } else if (task.bytes) |bytes| {
+        task.result.pixels = stb_image.stbi_load_from_memory(bytes.ptr, @intCast(bytes.len), &width, &height, &nr_channel, 4);
+    } else {
+        task.result.err = error.FailedToLoadGLTFImage;
+        return;
+    }
+
+    if (task.result.pixels == null) {
+        task.result.err = error.LoadingStbi;
+        return;
+    }
+
+    task.result.width = width;
+    task.result.height = height;
+    task.result.nr_channel = nr_channel;
+}
+
 device: Device,
 vma: Vma,
 model_name: []const u8,
@@ -146,41 +231,58 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
         defer zone.end();
         if (gltf_loaded.images) |images| {
             std.log.info("image count was {d}", .{images.len});
+            var decoded_images = try gpa.alloc(DecodedImage, images.len);
+            defer {
+                for (decoded_images) |*decoded_image| decoded_image.deinit();
+                gpa.free(decoded_images);
+            }
+            @memset(decoded_images, .{});
+
+            var decode_tasks = try gpa.alloc(ImageDecodeTask, images.len);
+            defer {
+                for (decode_tasks) |*task| {
+                    if (task.uri) |uri| gpa.free(uri);
+                }
+                gpa.free(decode_tasks);
+            }
+            for (images, 0..) |image, image_index| {
+                if (image.uri == null and image.bufferView == null) return error.FailedToLoadGLTFImage;
+
+                decode_tasks[image_index] = .{ .result = &decoded_images[image_index] };
+                if (image.uri) |uri| {
+                    if (std.mem.startsWith(u8, uri, "data:")) return error.DataNotSupported;
+                    decode_tasks[image_index].uri = try gpa.dupeSentinel(u8, uri, 0);
+                } else if (image.bufferView) |buffer_view_index| {
+                    const buffer_views = gltf_loaded.bufferViews orelse return error.MissingBufferViews;
+                    const buffer_view = buffer_views[buffer_view_index];
+                    const bytes_offset = buffer_view.byteOffset;
+                    const byte_len = buffer_view.byteLength;
+                    decode_tasks[image_index].bytes = bin[bytes_offset .. bytes_offset + byte_len];
+                }
+            }
+
+            {
+                const decode_zone = tracy.zoneNamed(@src(), "ImageDecode");
+                defer decode_zone.end();
+                try decodeImages(gpa, decode_tasks);
+            }
+
             var upload_buffers: std.ArrayList(Buffer) = .empty;
             defer {
                 for (upload_buffers.items) |*upload_buffer| upload_buffer.deinit(self.vma);
                 upload_buffers.deinit(gpa);
             }
             const upload_cmd = try self.device.beginImmediateCommand();
-            for (images) |image| {
+            for (decoded_images) |*decoded_image| {
                 const image_zone = tracy.zoneNamed(@src(), "Image");
                 defer image_zone.end();
-                if (image.uri == null and image.bufferView == null) return error.FailedToLoadGLTFImage;
-                var pixels: [*c]stb_image.stbi_uc = null;
-                var width: i32, var height: i32, var nr_channel: i32 = .{ 0, 0, 0 };
-                {
-                    const decode_zone = tracy.zoneNamed(@src(), "ImageDecode");
-                    defer decode_zone.end();
-                    if (image.uri) |uri| {
-                        try if (std.mem.eql(u8, "data:", uri[0..5])) error.DataNotsupported;
-                        const c_uri = try gpa.dupeSentinel(u8, uri, 0);
-                        defer gpa.free(c_uri);
-                        pixels = stb_image.stbi_load(c_uri, &width, &height, &nr_channel, 4);
-                    } else if (image.bufferView) |buffer_view_index| {
-                        const buffer_view = gltf_loaded.bufferViews.?[buffer_view_index];
-                        const bytes_offset = buffer_view.byteOffset;
-                        const byte_len = buffer_view.byteLength;
-                        const bytes = bin[bytes_offset .. bytes_offset + byte_len];
-                        pixels = stb_image.stbi_load_from_memory(bytes.ptr, @intCast(bytes.len), &width, &height, &nr_channel, 4);
-                    }
-                }
-                defer stb_image.stbi_image_free(pixels);
-                try if (pixels == null) error.LoadingStbi;
+                if (decoded_image.err) |err| return err;
+                try if (decoded_image.pixels == null) error.LoadingStbi;
                 var new_image: Image = try .init(
                     self.vma,
                     self.device,
                     c.VK_FORMAT_R8G8B8A8_UNORM,
-                    .{ .width = @intCast(width), .height = @intCast(height), .depth = 1 },
+                    .{ .width = @intCast(decoded_image.width), .height = @intCast(decoded_image.height), .depth = 1 },
                     c.VK_IMAGE_USAGE_SAMPLED_BIT | c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
                     c.VK_IMAGE_ASPECT_COLOR_BIT,
                     true,
@@ -188,8 +290,9 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                 {
                     const upload_zone = tracy.zoneNamed(@src(), "ImageUpload");
                     defer upload_zone.end();
-                    try new_image.recordUploadDataToImage(gpa, self.vma, self.device, upload_cmd, pixels, 4, &upload_buffers);
+                    try new_image.recordUploadDataToImage(gpa, self.vma, self.device, upload_cmd, decoded_image.pixels, 4, &upload_buffers);
                 }
+                decoded_image.deinit();
                 try self.render_resources.images.append(gpa, new_image);
             }
             try self.device.endImmediateCommand(upload_cmd);
