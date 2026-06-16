@@ -12,6 +12,9 @@ pub fn build(b: *std.Build) void {
 
     const zgltf = b.dependency("zgltf", .{ .target = target, .optimize = optimize }).module("zgltf");
 
+    const tracy_enable = b.option(bool, "tracy", "Enable Tracy profiling") orelse false;
+    const ztracy = b.dependency("ztracy", .{ .target = target, .optimize = optimize, .tracy = tracy_enable }).module("ztracy");
+
     const stb_dep = b.dependency("stb", .{});
     const stb_image = b.addTranslateC(.{
         .root_source_file = stb_dep.path("stb_image.h"),
@@ -39,6 +42,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "zgltf", .module = zgltf },
                 .{ .name = "stb_image", .module = stb_image.createModule() },
                 .{ .name = "stb_truetype", .module = stb_truetype.createModule() },
+                .{ .name = "ztracy", .module = ztracy },
             },
             .link_libc = true,
         }),
@@ -68,6 +72,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "system", .module = system.root_module },
                 .{ .name = "yes", .module = yes },
                 .{ .name = "steamworks", .module = steam_module },
+                .{ .name = "ztracy", .module = ztracy },
             },
             .link_libc = true,
         }),

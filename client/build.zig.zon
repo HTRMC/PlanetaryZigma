@@ -16,7 +16,7 @@
             .hash = "yes-0.0.0-pN7MXb2IAwCN587HNAztbaBxXkwZ4jqYu4bNZIUABpQF",
         },
         .vulkan_headers = .{ // TODO: Update to v1.4.354
-        .url = "git+https://github.com/KhronosGroup/Vulkan-Headers#33d7f512583b8de44d1b6384aa1cf482f92e53e9",
+            .url = "git+https://github.com/KhronosGroup/Vulkan-Headers#33d7f512583b8de44d1b6384aa1cf482f92e53e9",
             .hash = "N-V-__8AABoW_QEK-3TzuDEzM4iIfxXkfm2qHw0hBj0rutkl",
         },
         .vma = .{ //TODO: Update to v3.4.0
@@ -34,6 +34,10 @@
         .stb = .{
             .url = "git+https://github.com/nothings/stb#fede005abaf93d9d7f3a679d1999b2db341b360f",
             .hash = "N-V-__8AACIvTgCTqOj6KM32YnqNx1bcsaMuGAeKQEIWZ8Ph",
+        },
+        .ztracy = .{
+            .url = "git+https://github.com/HTRMC/ztracy?ref=master#1867aec93fad920eeed41a5b2ff7b814294bb53c",
+            .hash = "ztracy-0.1.0-q8LWRc4YAACyovPn6x1SOxjrK2CFW8dE38-yIPd98K85",
         },
     },
     .paths = .{
