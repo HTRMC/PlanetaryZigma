@@ -1,6 +1,7 @@
 const std = @import("std");
-const nz = @import("shared").numz;
-const AssetServer = @import("shared").AssetServer;
+const shared = @import("shared");
+const nz = shared.numz;
+const AssetServer = shared.AssetServer;
 const system = @import("../system.zig");
 const World = system.World;
 const shaderc = @import("shaderc");
@@ -12,6 +13,7 @@ const Mesh = @import("Vulkan/Mesh.zig");
 const Node = @import("Vulkan/Node.zig");
 const Material = @import("Vulkan/Material.zig");
 const GltfModel = @import("Vulkan/GltfModel.zig");
+const SkeletonInstance = @import("Vulkan/SkeletonInstance.zig");
 const Vma = @import("Vulkan/Vma.zig");
 const Swapchain = @import("Vulkan/Swapchain.zig");
 const FrameData = @import("Vulkan/FrameData.zig");
@@ -42,7 +44,8 @@ device: Device,
 vma: Vma,
 swapchain: Swapchain,
 render_resources: RenderResources,
-models: std.ArrayList(*GltfModel) = .empty,
+models: std.EnumMap(shared.Entity.Kind, *GltfModel),
+skelentons: std.AutoHashMap(u32, SkeletonInstance),
 current_frame_inflight: u32 = 0,
 frames: [max_frames_inflight]FrameData,
 ui: Ui,
@@ -84,7 +87,6 @@ pub const InitOptions = struct {
 
 pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOptions) !*@This() {
     const self = try gpa.create(@This());
-    self.models = .empty;
 
     self.instance = try .init(gpa, options.instance.extensions, options.instance.layers);
     procs.instance.load(self.instance.handle, null);
@@ -169,8 +171,9 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         RenderResources.default_mesh_name,
         Mesh.box.verticies,
         Mesh.box.indicies,
+        .unknown,
     );
-    const model: *GltfModel = try .init(
+    const player_model: *GltfModel = try .init(
         gpa,
         self.vma,
         self.device,
@@ -182,7 +185,20 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
             .rotation = nz.Quat(f32).angleAxis(std.math.pi, .{ 0, 1, 0 }),
         },
     );
-    try self.models.append(gpa, model);
+    self.models.put(.player, player_model);
+    const enemy_model: *GltfModel = try .init(
+        gpa,
+        self.vma,
+        self.device,
+        asset_server,
+        "objects/Mousey.glb",
+        &self.render_resources,
+        .{
+            .position = .{ 0, -1, 0 },
+            .rotation = nz.Quat(f32).angleAxis(std.math.pi, .{ 0, 1, 0 }),
+        },
+    );
+    self.models.put(.enemy, enemy_model);
 
     self.vertex_shader = try .init(
         gpa,
@@ -253,8 +269,7 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
 
     self.render_resources.deinit(gpa, self.vma, self.device);
 
-    for (self.models.items) |model| model.deinit(gpa);
-    self.models.deinit(gpa);
+    for (self.models.values) |model| model.deinit(gpa);
 
     self.material_layout.deinit(self.device);
     self.scene_layout.deinit(self.device);
@@ -515,10 +530,8 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *FrameData,
 
     ext.vkCmdBeginRendering(cmd, &render_info);
     for (info.world.entities.values()) |*entity| {
-        if (!entity.flags.model or !entity.flags.transform) continue;
-        var model_id = entity.model.id;
-        model_id = if (model_id >= self.models.items.len) 0 else model_id;
-        const model = self.models.items[model_id];
+        if (!entity.flags.transform) continue;
+        const model = self.models.get(entity.kind) orelse self.models.get(.unknown).?;
         var transform = entity.transform;
 
         // if (entity.flags.screen_space) {
@@ -656,8 +669,8 @@ pub fn draw(
         }
     }
 
-    for (node.children.items) |child| {
-        try draw(self, cmd, entity, current_frame, model, child, node_matrix);
+    for (node.children.items) |child_id| {
+        try draw(self, cmd, entity, current_frame, model, &model.nodes.items[child_id], node_matrix);
     }
 }
 
@@ -675,7 +688,7 @@ pub fn resize(self: *@This(), gpa: std.mem.Allocator, width: u32, height: u32) !
     self.ui.screen_width = @floatFromInt(self.swapchain.extent.width);
 }
 
-pub fn createModelWithMesh(self: *@This(), gpa: std.mem.Allocator, name: []const u8, verices: []const Mesh.Vertex, indices: []const u32) !usize {
+pub fn createModelWithMesh(self: *@This(), gpa: std.mem.Allocator, name: []const u8, verices: []const Mesh.Vertex, indices: []const u32, kind: shared.Entity.Kind) !void {
     const mesh = try Mesh.init(
         gpa,
         self.vma,
@@ -700,8 +713,12 @@ pub fn createModelWithMesh(self: *@This(), gpa: std.mem.Allocator, name: []const
     };
     try model.nodes.append(gpa, .{ .mesh_id = mesh.name, .index = 0, .world_matrix = nz.Mat4x4(f32).identity });
     try model.top_nodes.append(gpa, &model.nodes.items[0]);
-    try self.models.append(gpa, model);
-    return (self.models.items.len - 1);
+    self.models.put(kind, model);
+}
+
+pub fn attachSkeleton(self: *@This(), gpa: std.mem.Allocator, entity_id: u32, entity_kind: shared.Entity.Kind) !void {
+    const model = self.models.get(entity_kind) orelse return;
+    try self.skelentons.put(entity_id, try .init(gpa, self.vma, self.device, model));
 }
 
 fn getViewMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {

@@ -13,10 +13,8 @@ const Material = @import("Material.zig");
 const Skin = @import("Skin.zig");
 const Animation = @import("Animation.zig");
 const Buffer = @import("Buffer.zig");
-const ext = @import("procs.zig").device.ProcTable;
 const RenderResources = @import("RenderResources.zig");
 const check = @import("utils.zig").check;
-const Info = @import("../Vulkan.zig").Info;
 
 device: Device,
 vma: Vma,
@@ -336,7 +334,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
 
     if (gltf_loaded.nodes) |nodes| {
         _ = try self.nodes.addManyAsSlice(gpa, nodes.len);
-        for (nodes, self.nodes.items) |gltf_node, *scene_node| {
+        for (nodes, self.nodes.items, 0..) |gltf_node, *scene_node, scene_node_id| {
             scene_node.* = .{ .skin_id = if (gltf_node.skin) |skin_id| @intCast(skin_id) else -1 };
             if (gltf_node.mesh) |mesh_id| {
                 const gltf_mesh = gltf_loaded.meshes.?[mesh_id];
@@ -356,8 +354,8 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
             }
             if (gltf_node.children) |children| {
                 for (children) |child_id| {
-                    try scene_node.children.append(gpa, &self.nodes.items[child_id]);
-                    self.nodes.items[child_id].parent = scene_node;
+                    try scene_node.children.append(gpa, child_id);
+                    self.nodes.items[child_id].parent = scene_node_id;
                 }
             }
         }
@@ -366,7 +364,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
         if (node.parent == null) {
             try self.top_nodes.append(gpa, node);
             var top_matrix: nz.Mat4x4(f32) = .identity;
-            node.refreshMatrices(&top_matrix);
+            node.refreshMatrices(self.nodes, &top_matrix);
         }
     }
 

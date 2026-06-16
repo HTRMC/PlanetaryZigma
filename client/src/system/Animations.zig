@@ -16,26 +16,25 @@ pub fn init(self: *@This(), gpa: std.mem.Allocator) void {
 pub fn update(
     self: *@This(),
     info: *const Info,
-    models: *std.ArrayList(*Model),
+    models: *std.EnumMap(shared.Entity.Kind, *Model),
 ) !void {
     _ = self;
 
     // std.log.debug("render ptr {*}, model ptr{*}", .{ self.renderer, models });
     for (info.world.entities.values()) |*entity| {
-        if (!entity.flags.model) continue;
-        const model = models.items[entity.model.id];
+        const model = models.get(entity.kind) orelse return;
         if (model.animations.items.len == 0) continue;
-        var animation = &model.animations.items[model.active_animation];
-        animation.current_time += info.delta_time;
+        const animation = &model.animations.items[model.active_animation];
+        entity.animation_info.time += info.delta_time;
 
-        if (animation.current_time > animation.end) animation.current_time -= animation.end;
+        if (entity.animation_info.time > animation.end) entity.animation_info.time -= animation.end;
         for (animation.channels.items) |*channel| {
             const sampler = animation.samplers.items[channel.sampler_index];
             for (0..sampler.inputs.items.len - 1) |i| {
                 const sampler_in = sampler.inputs.items[i];
                 const sampler_in_next = sampler.inputs.items[i + 1];
-                if (animation.current_time >= sampler_in and animation.current_time <= sampler_in_next) {
-                    const interpolate_value: f32 = (animation.current_time - sampler_in) / (sampler_in_next - sampler_in);
+                if (entity.animation_info.time >= sampler_in and entity.animation_info.time <= sampler_in_next) {
+                    const interpolate_value: f32 = (entity.animation_info.time - sampler_in) / (sampler_in_next - sampler_in);
                     const node = channel.node orelse return error.NoNode;
                     const sampler_out = sampler.outputs.items[i];
                     const sampler_out_next = sampler.outputs.items[i + 1];
@@ -72,7 +71,7 @@ pub fn update(
         }
         for (model.top_nodes.items) |node| {
             var top_matrix: nz.Mat4x4(f32) = .identity;
-            node.refreshMatrices(&top_matrix);
+            node.refreshMatrices(model.nodes, &top_matrix);
         }
         for (model.top_nodes.items) |node| {
             updateJoints(node, model);
@@ -90,8 +89,8 @@ fn updateJoints(node: *Node, model: *Model) void {
             joint_matrices[i] = inverse_transform.mul(joint.world_matrix.mul(inverse_bind_matrices.items[i]));
         }
     }
-    for (node.children.items) |child_node| {
+    for (node.children.items) |child_id| {
         // std.log.debug("Update Child", .{node.translation});
-        updateJoints(child_node, model);
+        updateJoints(&model.nodes.items[child_id], model);
     }
 }

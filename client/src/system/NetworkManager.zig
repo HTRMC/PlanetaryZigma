@@ -9,7 +9,7 @@ const nz = shared.numz;
 const ServerList = struct {
     servers: [8]Client.ServerInfo = undefined,
     count: usize = 0,
-    refresh: bool = false,
+    refresh: bool = true,
 };
 
 gpa: std.mem.Allocator,
@@ -115,51 +115,45 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
     self.steam_client.packet_mutex.unlock(self.io);
 }
 
-fn handleCommand(self: *@This(), system_context: *system.Context, info: *const Info, command: shared.net.Command) !void {
+fn handleCommand(self: *@This(), info: *const Info, command: shared.net.Command) !void {
     switch (command) {
         .acknowledge => |acknowledge| {
             info.world.camera = .{ .transform = .{ .position = .{ 0, 0, 0 } } };
-            const new_player = try self.spawner.spawn(.{
-                .transform = .{ .position = .{ 0, 0, 0 } },
-                .model = .{ .id = 1 },
-                .flags = .{ .transform = true, .model = true },
-            });
-            try info.world.enitity_mapping.put(self.gpa, acknowledge.id, new_player.id);
+            try self.spawner.spawn(.player);
             info.world.my_server_id = acknowledge.id;
             std.log.debug("ack entities: {d}", .{info.world.next_id});
-            std.log.debug("ACK: MY ID: {d}, server ID: {d} ", .{ new_player.id, acknowledge.id });
         },
         .spawn_entity => |spawn_entity| {
             if (info.world.enitity_mapping.contains(spawn_entity.id)) return;
-            const new_entity = try self.spawner.spawn(.{
-                .transform = .{ .position = .{ 0, 0, 0 } },
-                .flags = .{ .transform = true, .model = true },
-            });
+
             switch (spawn_entity.kind) {
                 .player => {
-                    new_entity.model = .{ .id = 1 };
+                    try self.spawner.spawn(.player);
                 },
                 .planet => {
-                    const size: u32 = @intCast(spawn_entity.data[0]);
-                    const planet: shared.Planet(.renderable) = try .init(self.gpa, size);
-                    system_context.planet = planet;
-                    const vulkan_model_handel = try system_context.renderer.inner.createModelWithMesh(
-                        self.gpa,
-                        "planet",
-                        planet.vertices,
-                        planet.indices,
-                    );
-                    std.log.debug("SPAWNED: Planet {d}", .{size});
-                    new_entity.model = .{ .id = @intCast(vulkan_model_handel) };
+                    try self.spawner.spawn(.planet);
+                    // const size: u32 = @intCast(spawn_entity.data[0]);
+                    // const planet: shared.Planet(.renderable) = try .init(self.gpa, size);
+                    // system_context.planet = planet;
+                    // try system_context.renderer.inner.createModelWithMesh(
+                    //     self.gpa,
+                    //     "planet",
+                    //     planet.vertices,
+                    //     planet.indices,
+                    //     .planet,
+                    // );
+                    // std.log.debug("SPAWNED: Planet {d}", .{size});
+                    // new_entity.kind = .planet;
                 },
-                .enemy => new_entity.model = .{ .id = 0 },
+                .enemy => {
+                    try self.spawner.spawn(.enemy);
+                },
                 .bullet => {
-                    new_entity.model = .{ .id = 0 };
-                    new_entity.transform.scale = @splat(0.1);
+                    try self.spawner.spawn(.bullet);
                 },
                 .unknown => @panic("unknown entity type... wtf"),
             }
-            try info.world.enitity_mapping.put(self.gpa, spawn_entity.id, new_entity.id);
+
             // std.log.debug("spawn entities : {d}", .{info.world.next_id});
             // std.log.debug("SPAWNED: MY ID: {d}, server ID: {d} ", .{ new_entity.id, spawn_entity.id });
         },
