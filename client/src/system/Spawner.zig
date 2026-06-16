@@ -25,6 +25,7 @@ pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World) !void 
     };
 }
 pub fn deinit(self: *@This()) void {
+    self.pending_spawn.deinit(self.gpa);
     self.pending_despawn.deinit(self.gpa);
 }
 
@@ -53,8 +54,8 @@ pub fn update(self: *@This(), info: *const system.Info, system_context: *system.
                 },
                 .planet => {
                     const size: u32 = @intCast(entity_info.data[0]);
-                    const planet: shared.Planet(.renderable) = try .init(self.gpa, size);
-                    system_context.planet = planet;
+                    var planet: shared.Planet(.renderable) = try .init(self.gpa, size);
+                    defer planet.deinit(self.gpa);
                     try system_context.renderer.inner.createModelWithMesh(
                         self.gpa,
                         "planet",
@@ -77,6 +78,7 @@ pub fn update(self: *@This(), info: *const system.Info, system_context: *system.
     for (self.pending_despawn.items) |entity_id| {
         if (self.world.getPtr(entity_id)) |entity| {
             _ = entity;
+            system_context.renderer.inner.removeSkeleton(self.gpa, entity_id);
             _ = self.world.despawn(entity_id);
         }
     }

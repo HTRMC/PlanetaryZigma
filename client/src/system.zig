@@ -78,7 +78,6 @@ pub const Context = struct {
     network_manager: NetworkManager,
     spawner: Spawner,
     animation: Animation,
-    planet: ?shared.Planet(.renderable),
 
     pub const Data = struct {
         gpa: std.mem.Allocator,
@@ -101,13 +100,11 @@ pub const Context = struct {
         try self.spawner.init(data.gpa, data.world);
         try self.network_manager.init(data.gpa, data.io, data.steam_client, &self.spawner);
         self.animation.init(data.gpa);
-        self.planet = null;
     }
 
     pub fn deinit(self: *@This()) void {
         self.renderer.deinit(self.gpa);
         self.network_manager.deinit();
-        if (self.planet) |*p| p.deinit(self.gpa);
         self.spawner.deinit();
     }
 
@@ -127,21 +124,9 @@ pub const Context = struct {
     fn reload(self: *@This(), pre_reload: bool) !void {
         if (pre_reload) {
             std.log.debug("pre-hotreload", .{});
-            self.renderer.deinit(self.gpa);
         } else {
             std.log.debug("post-hotreload", .{});
-            self.renderer = try .init(self.gpa, self.asset_server, self.platform, self.window);
-            if (self.planet) |p| {
-                const vulkan_mesh_handle = try self.renderer.inner.createModelWithMesh(
-                    self.gpa,
-                    "planet",
-                    p.vertices,
-                    p.indices,
-                    .planet,
-                );
-                //TODO: take care of handle matching
-                _ = vulkan_mesh_handle;
-            }
+            self.renderer.inner.rebindProcs();
         }
     }
 };

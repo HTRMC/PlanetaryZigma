@@ -238,7 +238,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
             surfaces.appendAssumeCapacity(.{
                 .index_count = indices_count,
                 .index_start = indices_start,
-                .material_name = if (material_name) |name| name else RenderResources.default_material_name,
+                .material_name = material_name,
             });
 
             const uv_accessor_idx = primitive.attributes.map.get("TEXCOORD_0") orelse return error.NoUV;
