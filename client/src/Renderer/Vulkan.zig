@@ -26,6 +26,7 @@ const Shader = @import("Vulkan/Shader.zig");
 const Ui = @import("Vulkan/Ui.zig");
 const procs = @import("Vulkan/procs.zig");
 const ext = procs.device.ProcTable;
+const tracy = @import("ztracy");
 
 const check = @import("Vulkan/utils.zig").check;
 
@@ -86,6 +87,7 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
     const self = try gpa.create(@This());
     self.models = .empty;
 
+    const device_zone = tracy.zoneNamed(@src(), "vk device setup");
     self.instance = try .init(gpa, options.instance.extensions, options.instance.layers);
     procs.instance.load(self.instance.handle, null);
     self.debug_messenger = try .init(self.instance, .{
@@ -104,6 +106,9 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
     procs.device.load(self.device.handle, null);
 
     self.vma = try .init(self.instance, self.physical_device, self.device);
+    device_zone.end();
+
+    const swapchain_zone = tracy.zoneNamed(@src(), "swapchain + frames + layouts");
     self.swapchain = try .init(gpa, self.vma, self.physical_device, self.device, self.surface, options.swapchain.width, options.swapchain.heigth);
     for (&self.frames) |*frame| {
         frame.* = try .init(self.vma, self.device);
@@ -133,7 +138,9 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
     };
 
     self.render_resources = try .init(gpa, self.vma, self.physical_device, self.device, self.material_layout);
+    swapchain_zone.end();
 
+    const font_zone = tracy.zoneNamed(@src(), "font + ui");
     self.font = try .init(
         gpa,
         self.vma,
@@ -150,7 +157,9 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         self.swapchain.extent.height,
         self.font,
     );
+    font_zone.end();
 
+    const pipeline_zone = tracy.zoneNamed(@src(), "pipeline layouts + box mesh");
     self.pipeline_layout = try .init(
         self.device,
         Shader.AnimationPushConstant,
@@ -170,6 +179,9 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         Mesh.box.verticies,
         Mesh.box.indicies,
     );
+    pipeline_zone.end();
+
+    const glb_zone = tracy.zoneNamed(@src(), "glb model init");
     const model: *GltfModel = try .init(
         gpa,
         self.vma,
@@ -183,7 +195,9 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         },
     );
     try self.models.append(gpa, model);
+    glb_zone.end();
 
+    const shader_zone = tracy.zoneNamed(@src(), "shader compile (4x)");
     self.vertex_shader = try .init(
         gpa,
         self.device,
@@ -244,6 +258,7 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         .pushConstantRangeCount = 1,
         .pName = "main",
     }, "shaders/ui.frag", Shader.UiPushConstant);
+    shader_zone.end();
 
     return self;
 }
