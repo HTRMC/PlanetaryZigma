@@ -63,8 +63,8 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     self.skins.deinit(gpa);
     self.top_nodes.deinit(gpa);
     gpa.free(self.model_name);
+    self.* = undefined;
     gpa.destroy(self);
-    self.* = undefined; // TODO move above destroy just lil correctness thing
 }
 
 fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: std.Io.File, file_path: []const u8) !void {
