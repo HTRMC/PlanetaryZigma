@@ -19,6 +19,7 @@ pub const DynLib = struct {
     pub fn close(self: *@This()) void {
         const tracy_scope = tracy.zone(@src());
         defer tracy_scope.end();
+        if (tracy.enabled) return;
         self.backend.close();
     }
 
