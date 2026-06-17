@@ -834,7 +834,10 @@ pub fn createModelWithMesh(self: *@This(), gpa: std.mem.Allocator, name: []const
 }
 
 pub fn attachSkeleton(self: *@This(), gpa: std.mem.Allocator, entity_id: u32, entity_kind: shared.Entity.Kind) !void {
-    const model = self.models.get(entity_kind) orelse return;
+    const model = self.models.get(entity_kind) orelse {
+        if (entity_kind.expectsModel()) std.debug.panic("no model registered for {s}", .{@tagName(entity_kind)});
+        return; // bullet/unknown: no skeleton
+    };
     try self.skelentons.put(entity_id, try .init(gpa, self.vma, self.device, model));
     std.log.debug("added ID: {d}, kind {t}, capcity: {d}", .{ entity_id, entity_kind, self.skelentons.capacity() });
 }
