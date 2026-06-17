@@ -116,12 +116,30 @@ pub fn deinit(self: *@This()) void {
         servers.ReleaseRequest(self.browser.request);
         self.browser.request = 0;
     }
-    self.closeConnection();
 
     //NOTE: drain or SteamAPI_Shutdown segfaults when a conn + server-list query both existed.
+    const sockets = steam.SteamNetworkingSockets_SteamAPI();
+    const conn = self.server_conn;
+    if (conn != 0) {
+        // linger=true: flush pending data and send a clean close so the server
+        // drops us immediately instead of timing out.
+        _ = sockets.CloseConnection(conn, 0, "client-shutdown", true);
+        self.server_conn = 0;
+    }
+
+    // Pump until the connection is fully torn down -- GetConnectionInfo goes
+    // false (handle recycled) or reports None -- so the low-level SDR/ICE
+    // sockets are released before SteamAPI_Shutdown. Skipping this races the
+    // P2P teardown: shutting down with sockets still open kills the
+    // SocketThread mid-flight (exit 5). Cap at ~1s so a stuck relay can't hang.
     var drained: u32 = 0;
-    while (drained < 200) : (drained += 1) {
+    while (drained < 500) : (drained += 1) {
         self.steamPump() catch {};
+        if (conn != 0) {
+            var info: steam.SteamNetConnectionInfo_t = undefined;
+            const alive = sockets.GetConnectionInfo(conn, &info);
+            if (!alive or info.m_eState == .k_ESteamNetworkingConnectionState_None) break;
+        }
         self.io.sleep(.fromMilliseconds(2), .real) catch {};
     }
 
@@ -242,10 +260,3 @@ pub fn connectToServer(self: *@This(), steam_id: u64) !void {
     std.log.info("ConnectP2P({d}) -> {d}", .{ steam_id, conn });
 }
 
-pub fn closeConnection(self: *@This()) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
-    if (self.server_conn == 0) return;
-    _ = steam.SteamNetworkingSockets_SteamAPI().CloseConnection(self.server_conn, 0, "client-shutdown", false);
-    self.server_conn = 0;
-}
