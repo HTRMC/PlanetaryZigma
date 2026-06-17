@@ -1,5 +1,6 @@
 const std = @import("std");
 const shared = @import("shared");
+const tracy = @import("ztracy");
 const nz = shared.numz;
 const yes = @import("yes");
 const NetworkManager = @import("system/NetworkManager.zig");
@@ -28,6 +29,13 @@ pub const Entity = struct {
     kind: shared.Entity.Kind,
 
     transform: nz.Transform3D(f32) = .{},
+
+    pub fn deinit(self: *Entity, gpa: std.mem.Allocator) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
+        _ = self;
+        _ = gpa;
+    }
 };
 
 pub const World = struct {
@@ -41,16 +49,21 @@ pub const World = struct {
     camera: Camera = .{},
 
     pub fn init(gpa: std.mem.Allocator) !@This() {
-        return .{
-            .gpa = gpa,
-        };
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
+        return .{ .gpa = gpa };
     }
     pub fn deinit(self: *@This()) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
+        for (self.entities.values()) |*entity| entity.deinit(self.gpa);
         self.entities.deinit(self.gpa);
         self.enitity_mapping.deinit(self.gpa);
     }
 
     pub fn spawn(self: *@This()) !*Entity {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         const id = self.next_id;
         self.next_id += 1;
         try self.entities.put(self.gpa, id, .{ .id = id, .kind = .unknown });
@@ -58,11 +71,15 @@ pub const World = struct {
     }
 
     pub fn getPtr(self: *@This(), id: u32) ?*Entity {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         return self.entities.getPtr(id);
     }
 
     pub fn despawn(self: *@This(), id: u32) bool {
-        // if (self.entities.getPtr(id)) |entity| entity.deinit(self.gpa);
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
+        if (self.entities.getPtr(id)) |entity| entity.deinit(self.gpa);
         return self.entities.swapRemove(id);
     }
 };
@@ -90,6 +107,8 @@ pub const Context = struct {
     };
 
     pub fn init(self: *@This(), data: Data) !void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         self.gpa = data.gpa;
         self.io = data.io;
         self.platform = data.platform;
@@ -103,12 +122,17 @@ pub const Context = struct {
     }
 
     pub fn deinit(self: *@This()) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         self.renderer.deinit(self.gpa);
         self.network_manager.deinit();
         self.spawner.deinit();
     }
 
     pub fn update(self: *@This(), info: *const Info) !void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
+        // tracy.frameMark();
         try info.world.camera.update(info, &self.network_manager, &self.renderer.inner.ui);
         try self.renderer.update(info);
         try self.animation.update(info, &self.renderer.inner.skelentons);
@@ -118,10 +142,14 @@ pub const Context = struct {
     }
 
     pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.Event) !void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         _ = self;
         try info.world.camera.eventUpdate(info, event);
     }
     fn reload(self: *@This(), pre_reload: bool) !void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         if (pre_reload) {
             std.log.debug("pre-hotreload", .{});
         } else {
@@ -143,6 +171,8 @@ pub const ffi = struct {
         systemContextReload: *const fn (*Context, pre_reload: bool) callconv(.c) void,
 
         pub fn load(dynlib: *shared.DynLib) !@This() {
+            const tracy_scope = tracy.zone(@src());
+            defer tracy_scope.end();
             var self: @This() = undefined;
             inline for (@typeInfo(@This()).@"struct".fields) |field| {
                 std.log.debug("Looking up symbol: {s}", .{field.name});
@@ -157,6 +187,8 @@ pub const ffi = struct {
     };
 
     pub export fn systemContextInit(context: *Context, data: *const Context.Data) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         std.log.debug("system context init", .{});
         context.init(data.*) catch |err| {
             if (@errorReturnTrace()) |trace| std.debug.dumpErrorReturnTrace(trace);
@@ -166,12 +198,16 @@ pub const ffi = struct {
     }
 
     pub export fn systemContextDeinit(context: *Context) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         std.log.debug("system context deinit", .{});
         context.deinit();
         context.* = undefined;
     }
 
     pub export fn systemContextUpdate(context: *Context, info: *const Info, event: ?*const yes.Window.Event) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         const result = if (event != null) context.eventUpdate(info, event.?) else context.update(info);
         result catch |err| {
             if (@errorReturnTrace()) |trace| std.debug.dumpErrorReturnTrace(trace);
@@ -180,6 +216,8 @@ pub const ffi = struct {
         };
     }
     pub export fn systemContextReload(context: *Context, pre_reload: bool) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         const result = context.reload(pre_reload);
         result catch |err| {
             if (@errorReturnTrace()) |trace| std.debug.dumpErrorReturnTrace(trace);

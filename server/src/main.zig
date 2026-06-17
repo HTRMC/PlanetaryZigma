@@ -2,10 +2,13 @@ const std = @import("std");
 const builtin = @import("builtin");
 const system = @import("system");
 const shared = @import("shared");
+const tracy = @import("ztracy");
 const World = system.World;
 const nz = shared.numz;
 
 pub fn main(init: std.process.Init) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     var gpa_impl = if (builtin.mode == .Debug) std.heap.DebugAllocator(.{ .verbose_log = false }).init else init.gpa;
     defer {
         if (builtin.mode == .Debug) _ = gpa_impl.deinit();
@@ -75,6 +78,8 @@ pub fn main(init: std.process.Init) !void {
 }
 
 pub fn getDeltaTime(io: std.Io) f32 {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const static = struct {
         var previous: ?std.Io.Timestamp = null;
     };

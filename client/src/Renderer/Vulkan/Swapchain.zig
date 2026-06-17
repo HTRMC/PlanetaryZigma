@@ -8,6 +8,7 @@ const Buffer = @import("Buffer.zig");
 const Surface = @import("Surface.zig");
 const Image = @import("Image.zig");
 const check = @import("utils.zig").check;
+const tracy = @import("ztracy");
 
 swapchain: c.VkSwapchainKHR,
 present_mode: c.VkPresentModeKHR,
@@ -28,6 +29,8 @@ pub fn init(
     width: u32,
     height: u32,
 ) !@This() {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const present_mode = try getPresentMode(gpa, physical_device, surface);
     const surface_format = try surface.getFormat(gpa, physical_device);
     const swapchain = try create(physical_device, device, surface, surface_format, present_mode, width, height);
@@ -92,6 +95,8 @@ pub fn deinit(
     vma: Vma,
     device: Device,
 ) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     self.draw_image.deinit(vma, device);
     self.depth_image.deinit(vma, device);
 
@@ -110,6 +115,8 @@ fn create(
     width: u32,
     height: u32,
 ) !c.VkSwapchainKHR {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     var swapchain: c.VkSwapchainKHR = undefined;
 
     var capabilities: c.VkSurfaceCapabilitiesKHR = undefined;
@@ -148,6 +155,8 @@ pub fn recreate(
     width: u32,
     height: u32,
 ) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     try check(c.vkDeviceWaitIdle(device.handle));
     c.vkDestroySwapchainKHR(device.handle, self.swapchain, null);
 
@@ -193,6 +202,8 @@ pub fn recreate(
 }
 
 fn getPresentMode(gpa: std.mem.Allocator, physical_device: PhysicalDevice, surface: Surface) !c.VkPresentModeKHR {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     var present_modes_count: u32 = undefined;
     try check(c.vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device.handle, surface.handle, &present_modes_count, null));
     const present_modes: []c.VkPresentModeKHR = try gpa.alloc(c.VkPresentModeKHR, present_modes_count);

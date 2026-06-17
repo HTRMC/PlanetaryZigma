@@ -1,5 +1,6 @@
 const std = @import("std");
 const shared = @import("shared");
+const tracy = @import("ztracy");
 const Client = shared.SteamNet.Client;
 const system = @import("../system.zig");
 const World = system.World;
@@ -30,6 +31,8 @@ pub fn init(
     net: *shared.SteamNet.Client,
     spawner: *Spawner,
 ) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     self.* = .{
         .gpa = gpa,
         .io = io,
@@ -39,16 +42,22 @@ pub fn init(
 }
 
 pub fn deinit(self: *@This()) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     _ = self;
 }
 
 fn sendConnect(self: *@This()) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const name = "lucas";
     const cmd: shared.net.Command = .{ .connect = .{ .name_len = name.len, .name = name } };
     try self.sendCommand(cmd, .reliable);
 }
 
 pub fn sendCommand(self: *@This(), command: shared.net.Command, flags: shared.SteamNet.SendFlags) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     if (self.server_conn == 0) return;
     var buf: [1024]u8 = undefined;
     var w: std.Io.Writer = .fixed(&buf);
@@ -58,6 +67,8 @@ pub fn sendCommand(self: *@This(), command: shared.net.Command, flags: shared.St
 }
 
 pub fn update(self: *@This(), info: *const Info) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     try self.steam_client.packet_mutex.lock(self.io);
 
     // 0. server list update.
@@ -116,6 +127,8 @@ pub fn update(self: *@This(), info: *const Info) !void {
 }
 
 fn handleCommand(self: *@This(), info: *const Info, command: shared.net.Command) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     switch (command) {
         .acknowledge => |acknowledge| {
             info.world.camera = .{ .transform = .{ .position = .{ 0, 0, 0 } } };

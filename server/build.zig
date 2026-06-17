@@ -12,13 +12,17 @@ pub fn build(b: *std.Build) void {
         },
     });
     const optimize = b.standardOptimizeOption(.{});
+    const tracy_enable = b.option(bool, "tracy", "Enable Tracy profiling") orelse false;
+    const ztracy_dep = b.dependency("ztracy", .{ .target = target, .optimize = optimize, .tracy = tracy_enable });
+    const ztracy = ztracy_dep.module("ztracy");
+
     const zphysics = b.dependency("zphysics", .{
         .use_double_precision = false,
         .enable_cross_platform_determinism = true,
         .shared = true,
     });
 
-    const shared = b.dependency("shared", .{ .target = target, .optimize = optimize }).module("shared");
+    const shared = b.dependency("shared", .{ .target = target, .optimize = optimize, .tracy = tracy_enable }).module("shared");
     const steam_dep = b.dependency("zig_steamworks", .{ .target = target, .optimize = optimize });
     const steam_module = steam_dep.module("steamworks");
 
@@ -30,6 +34,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "shared", .module = shared },
+                .{ .name = "ztracy", .module = ztracy },
 
                 .{ .name = "zphy", .module = zphysics.module("root") },
             },
@@ -52,6 +57,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "shared", .module = shared },
                 .{ .name = "system", .module = system.root_module },
                 .{ .name = "steamworks", .module = steam_module },
+                .{ .name = "ztracy", .module = ztracy },
             },
         }),
     });
@@ -60,6 +66,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addRPath(steam_dep.path("steamworks/redistributable_bin/linux64"));
 
     b.installArtifact(exe);
+    if (tracy_enable) b.installArtifact(ztracy_dep.artifact("tracy"));
 
     const run_step = b.step("run", "Run the server");
     const run_cmd = b.addRunArtifact(exe);

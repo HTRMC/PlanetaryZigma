@@ -1,4 +1,5 @@
 const std = @import("std");
+const tracy = @import("ztracy");
 
 gpa: std.mem.Allocator,
 io: std.Io,
@@ -15,6 +16,8 @@ pub const Metadata = struct {
     pub const Callback = *const fn (*anyopaque, gpa: std.mem.Allocator, io: std.Io, file: std.Io.File, file_path: []const u8) anyerror!void;
 
     pub fn init(gpa: std.mem.Allocator, io: std.Io, user_data: *anyopaque, file_path: []const u8, callback: Callback) !@This() {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         return .{
             .user_data = user_data,
             .mtime = .now(io, .real),
@@ -23,11 +26,15 @@ pub const Metadata = struct {
         };
     }
     pub fn deinit(self: *@This(), gpa: std.mem.Allocator) !void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         gpa.free(self.file_path);
     }
 };
 
 pub fn init(gpa: std.mem.Allocator, io: std.Io) !@This() {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const asset_paths: []const []const u8 = &.{
         "assets",
         "../assets",
@@ -53,6 +60,8 @@ pub fn init(gpa: std.mem.Allocator, io: std.Io) !@This() {
 }
 
 pub fn deinit(self: *@This()) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     self.dir.close(self.io);
     for (self.metadata.items) |*meta| {
         try meta.deinit(self.gpa);
@@ -62,6 +71,8 @@ pub fn deinit(self: *@This()) void {
 }
 
 pub fn update(self: *@This()) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     for (self.metadata.items) |*metadata| {
         const entry_stat = self.dir.statFile(self.io, metadata.file_path, .{}) catch |err| {
             if (err == error.FileNotFound) continue;
@@ -81,6 +92,8 @@ pub fn update(self: *@This()) !void {
 }
 
 pub fn loadAsset(self: *@This(), comptime UserData: type, user_data: *UserData, file_path: []const u8, callback: Metadata.Callback) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     var metadata_index: ?usize = null;
     for (self.metadata.items, 0..) |metadata, i| {
         if (std.mem.eql(u8, metadata.file_path, file_path) == true) {

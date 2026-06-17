@@ -9,6 +9,7 @@ const descriptor = @import("desrciptor.zig");
 const Mesh = @import("Mesh.zig");
 const Material = @import("Material.zig");
 const Image = @import("Image.zig");
+const tracy = @import("ztracy");
 
 const check = @import("utils.zig").check;
 
@@ -23,6 +24,8 @@ samplers: std.ArrayList(c.VkSampler),
 images: std.ArrayList(Image),
 
 pub fn init(gpa: std.mem.Allocator, vma: Vma, physical_device: PhysicalDevice, device: Device, layout: descriptor.Layout) !@This() {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const meshes: std.StringArrayHashMapUnmanaged(Mesh) = .empty;
     var materials: std.StringArrayHashMapUnmanaged(Material) = .empty;
     var samplers: std.ArrayList(c.VkSampler) = .empty;
@@ -84,6 +87,8 @@ pub fn init(gpa: std.mem.Allocator, vma: Vma, physical_device: PhysicalDevice, d
 }
 
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma, device: Device) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     {
         var it = self.materials.iterator();
         while (it.next()) |pair| {
@@ -112,13 +117,19 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma, device: Device) 
 }
 
 pub fn createMesh(self: *@This(), gpa: std.mem.Allocator, mesh: Mesh) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     try self.meshes.put(gpa, mesh.name, mesh);
 }
 pub fn createMaterial(self: *@This(), gpa: std.mem.Allocator, material: Material) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     try self.materials.put(gpa, material.name, material);
 }
 
 pub fn getMeshPtr(self: *@This(), name_id: ?[]const u8) !*Mesh {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     if (name_id) |name| {
         // std.log.debug("got mesh: {s}", .{name});
         if (self.meshes.getPtr(name)) |mesh| return mesh;
@@ -130,6 +141,8 @@ pub fn getMeshPtr(self: *@This(), name_id: ?[]const u8) !*Mesh {
     }
 }
 pub fn getMaterialPtr(self: *@This(), name_id: ?[]const u8) !*Material {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     if (name_id) |name| if (self.materials.getPtr(name)) |material| return material;
     if (self.materials.getPtr(default_material_name)) |default_material| return default_material else {
         return error.NoDefaultMaterialFound;

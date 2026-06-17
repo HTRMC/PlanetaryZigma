@@ -1,5 +1,6 @@
 const std = @import("std");
 const Entity = @import("root.zig").Entity;
+const tracy = @import("ztracy");
 
 pub const endian: std.builtin.Endian = .little;
 
@@ -7,6 +8,8 @@ pub const CommandQueue = struct {
     commands: std.ArrayList(Command) = .empty,
     mutex: std.Io.Mutex = .init,
     pub fn deinit(self: *@This(), gpa: std.mem.Allocator, io: std.Io) !void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         try self.mutex.lock(io);
         self.commands.deinit(gpa);
         self.mutex.unlock(io);
@@ -80,6 +83,8 @@ pub const Command = union(enum) {
     };
 
     pub fn write(self: *const @This(), writer: *std.Io.Writer) !void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         switch (self.*) {
             inline else => |payload, tag| {
                 try writer.writeInt(u16, @intFromEnum(tag), endian);
@@ -97,6 +102,8 @@ pub const Command = union(enum) {
     }
 
     pub fn parse(reader: *std.Io.Reader) !Parsed {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         const opcode: Opcode = @enumFromInt(try reader.takeInt(u16, endian));
         switch (opcode) {
             inline else => |tag| {
@@ -107,6 +114,8 @@ pub const Command = union(enum) {
     }
 
     fn parseFromOpcode(reader: *std.Io.Reader, comptime opcode: Opcode) !Command {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         const tag_name = @tagName(opcode);
         const T = @FieldType(Command, tag_name);
         const out = try unmarshal(null, reader, T, true);
@@ -114,6 +123,8 @@ pub const Command = union(enum) {
     }
 
     fn marshal(writer: *std.Io.Writer, value: anytype) !void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         const T: type = @TypeOf(value);
         switch (@typeInfo(T)) {
             .void => return,
@@ -149,6 +160,8 @@ pub const Command = union(enum) {
     }
 
     fn unmarshal(opt_allocator: ?std.mem.Allocator, reader: *std.Io.Reader, Out: type, deserialize_slices: bool) !Out {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         return switch (@typeInfo(Out)) {
             .void => return,
             .bool => try reader.takeByte() == 1,

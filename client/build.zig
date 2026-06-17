@@ -4,7 +4,11 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const shared = b.dependency("shared", .{ .target = target, .optimize = optimize }).module("shared");
+    const tracy_enable = b.option(bool, "tracy", "Enable Tracy profiling") orelse false;
+    const ztracy_dep = b.dependency("ztracy", .{ .target = target, .optimize = optimize, .tracy = tracy_enable });
+    const ztracy = ztracy_dep.module("ztracy");
+
+    const shared = b.dependency("shared", .{ .target = target, .optimize = optimize, .tracy = tracy_enable }).module("shared");
     const yes = b.dependency("yes", .{ .target = target, .optimize = optimize, .x_backend = .xlib }).module("yes");
 
     const steam_dep = b.dependency("zig_steamworks", .{ .target = target, .optimize = optimize });
@@ -39,6 +43,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "zgltf", .module = zgltf },
                 .{ .name = "stb_image", .module = stb_image.createModule() },
                 .{ .name = "stb_truetype", .module = stb_truetype.createModule() },
+                .{ .name = "ztracy", .module = ztracy },
             },
             .link_libc = true,
         }),
@@ -68,6 +73,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "system", .module = system.root_module },
                 .{ .name = "yes", .module = yes },
                 .{ .name = "steamworks", .module = steam_module },
+                .{ .name = "ztracy", .module = ztracy },
             },
             .link_libc = true,
         }),
@@ -134,6 +140,9 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(system);
     b.installArtifact(exe);
+
+    // Shared Tracy client dll must sit next to the binaries that link it.
+    if (tracy_enable) b.installArtifact(ztracy_dep.artifact("tracy"));
 
     if (target.result.os.tag == .windows) {
         const install_steam_dll = b.addInstallBinFile(steam_dep.path("steamworks/redistributable_bin/win64/steam_api64.dll"), "steam_api64.dll");

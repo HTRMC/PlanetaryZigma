@@ -1,13 +1,18 @@
 const std = @import("std");
 const shared = @import("shared");
 const system = @import("../system.zig");
+const tracy = @import("ztracy");
 const nz = shared.numz;
 
 pub fn init(self: *@This()) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     self.* = .{};
 }
 
 pub fn deinit(self: *@This()) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     _ = self;
 }
 
@@ -17,6 +22,8 @@ pub fn deinit(self: *@This()) void {
 /// rides the entity's position (plus a boom offset in camera-local space); in free mode
 /// camera.transform is treated as independent state and left alone.
 pub fn update(self: *@This(), info: *const system.Info) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     _ = self;
 
     for (info.world.entities.values()) |*entity| {

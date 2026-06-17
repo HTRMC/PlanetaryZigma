@@ -2,6 +2,7 @@ const std = @import("std");
 const system = @import("../system.zig");
 const shared = @import("shared");
 const Physics = @import("Physics.zig");
+const tracy = @import("ztracy");
 const Info = system.Info;
 const nz = shared.nz;
 
@@ -16,6 +17,8 @@ network_pending_despawn: std.ArrayList(u32) = .empty,
 pending_despawn: std.ArrayList(u32) = .empty,
 
 pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World, physics: *Physics) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     self.* = .{
         .gpa = gpa,
         .world = world,
@@ -24,12 +27,16 @@ pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World, physic
     };
 }
 pub fn deinit(self: *@This()) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     self.network_pending_despawn.deinit(self.gpa);
     self.network_pending_spawn.deinit(self.gpa);
     self.pending_despawn.deinit(self.gpa);
 }
 
 pub fn spawn(self: *@This(), entity_info: system.Entity) !*system.Entity {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     // std.log.debug("SIZE: {d}", .{self.world.entities.entries.len});
     const entity = try self.world.spawn();
     const id: u32 = entity.id;
@@ -43,11 +50,15 @@ pub fn spawn(self: *@This(), entity_info: system.Entity) !*system.Entity {
 }
 
 pub fn depspawn(self: *@This(), entity_id: u32) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     // std.log.debug("despawn ID: {d}", .{entity_id});
     self.pending_despawn.appendAssumeCapacity(entity_id);
 }
 
 pub fn update(self: *@This(), info: *const system.Info) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     _ = info;
     // for (info.world.entities.values()) |*entity| {
     //     if (entity.kind == .enemy) {

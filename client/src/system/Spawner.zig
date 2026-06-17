@@ -1,7 +1,7 @@
 const std = @import("std");
 const system = @import("../system.zig");
 const shared = @import("shared");
-const Renderer = @import("../Renderer/Vulkan.zig");
+const tracy = @import("ztracy");
 const Info = system.Info;
 const nz = shared.nz;
 
@@ -17,6 +17,8 @@ pending_spawn: std.ArrayList(SpawnInfo) = .empty,
 pending_despawn: std.ArrayList(u32) = .empty,
 
 pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     self.* = .{
         .gpa = gpa,
         .world = world,
@@ -25,20 +27,28 @@ pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World) !void 
     };
 }
 pub fn deinit(self: *@This()) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     self.pending_spawn.deinit(self.gpa);
     self.pending_despawn.deinit(self.gpa);
 }
 
 pub fn spawn(self: *@This(), entity_info: SpawnInfo) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     self.pending_spawn.appendAssumeCapacity(entity_info);
 }
 
 pub fn depspawn(self: *@This(), entity_id: u32) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     // std.log.debug("despawn ID: {d}", .{entity_id});
     self.pending_despawn.appendAssumeCapacity(entity_id);
 }
 
 pub fn update(self: *@This(), info: *const system.Info, system_context: *system.Context) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     _ = info;
     std.debug.assert(self.pending_despawn.items.len < system.World.max_entities);
     std.debug.assert(self.pending_spawn.items.len < system.World.max_entities);
@@ -66,7 +76,9 @@ pub fn update(self: *@This(), info: *const system.Info, system_context: *system.
                     std.log.debug("SPAWNED: Planet {d}", .{size});
                 },
                 .bullet => {
+                    std.log.info("spawned bullet", .{});
                     entity.transform.scale = @splat(0.1);
+                    std.log.info("spawned bullet-post", .{});
                 },
                 else => {},
             }
