@@ -20,8 +20,6 @@ pub const Info = struct {
 pub const Entity = struct {
     pub const Flags = packed struct {
         transform: bool = false,
-        screen_space: bool = false,
-        animated: bool = false,
     };
 
     id: u32 = 0,

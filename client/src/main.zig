@@ -90,6 +90,19 @@ pub fn main(init: std.process.Init) !void {
                 },
                 .key => |key| {
                     if (key.state == .released and key.sym == .escape) break :main_loop;
+                    if (key.state == .released) {
+                        // numpad 0-9 toggles to that ring slot's lib version (contiguous enum values)
+                        const np0 = @intFromEnum(yes.Window.Event.Key.Sym.numpad_0);
+                        const sym = @intFromEnum(key.sym);
+                        if (sym >= np0 and sym < np0 + 10) {
+                            if (watcher.version(sym - np0)) |lib| {
+                                system_table.systemContextReload(&system_context, true);
+                                system_table = try .load(lib);
+                                system_table.systemContextReload(&system_context, false);
+                                std.log.err("switched to version slot {d}", .{sym - np0});
+                            }
+                        }
+                    }
                 },
                 else => {},
             }
@@ -99,8 +112,6 @@ pub fn main(init: std.process.Init) !void {
         if (try watcher.reload(io)) {
             std.log.err("system table updated", .{});
             system_table.systemContextReload(&system_context, true);
-            watcher.old_dynlib.?.close();
-            watcher.old_dynlib = null;
             system_table = try .load(&watcher.dynlib.?);
             system_table.systemContextReload(&system_context, false);
         }

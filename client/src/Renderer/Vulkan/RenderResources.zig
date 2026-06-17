@@ -119,6 +119,7 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma, device: Device) 
 pub fn createMesh(self: *@This(), gpa: std.mem.Allocator, mesh: Mesh) !void {
     const tracy_scope = tracy.zone(@src());
     defer tracy_scope.end();
+    std.debug.assert(!self.meshes.contains(mesh.name));
     try self.meshes.put(gpa, mesh.name, mesh);
 }
 pub fn createMaterial(self: *@This(), gpa: std.mem.Allocator, material: Material) !void {

@@ -220,7 +220,7 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         _ = try createModelWithMesh(
             self,
             gpa,
-            RenderResources.default_mesh_name,
+            "Bullet",
             Mesh.box.verticies,
             Mesh.box.indicies,
             .bullet,
@@ -553,7 +553,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *FrameData,
     // std.debug.print("time: {d}\n", .{self.elapsed_time});
     const tmp: i32 = @intFromFloat(elapsed_time);
     // std.debug.print("fixed-time: {d}\n", .{tmp});
-    if (@mod(tmp, 2) == -1) {
+    if (true or @mod(tmp, 2) == -1) {
         ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_LINE);
         c.vkCmdSetLineWidth(cmd, 1);
         ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
