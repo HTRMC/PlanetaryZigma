@@ -13,8 +13,8 @@
             .hash = "zig_steamworks-0.0.0-QF-Y-5rWxgB893nUytb-BxR5B8XE8FS4CUA2YoaolUSB",
         },
         .ztracy = .{
-            .url = "git+https://github.com/HTRMC/ztracy?ref=v0.2.0#de6115570d79f96e47aa3291e54d350bae88289c",
-            .hash = "ztracy-0.2.0-q8LWRbsbAAB2Nrt_8RFByk_XNYfq5jR3HDDy9JXzPMr9",
+            .url = "git+https://github.com/HTRMC/ztracy?ref=v0.2.1#822b2eb73d18995fbc8d9c52fc9edf8d0e84fff2",
+            .hash = "ztracy-0.2.0-q8LWRV4dAACRTyehcC2WT4l1rGZvx3vppsbwDr8GoWlv",
         },
     },
     .paths = .{
