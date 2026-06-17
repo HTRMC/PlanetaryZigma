@@ -60,8 +60,6 @@ pub fn main(init: std.process.Init) !void {
         if (try watcher.reload(io)) {
             system_table.systemContextReload(&system_context, true);
             std.log.debug("system table updated", .{});
-            watcher.old_dynlib.?.close();
-            watcher.old_dynlib = null;
             system_table = try .load(&watcher.dynlib.?);
             system_table.systemContextReload(&system_context, false);
         }
