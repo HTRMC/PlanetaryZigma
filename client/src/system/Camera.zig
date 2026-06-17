@@ -17,7 +17,7 @@ was_rotating: bool = false,
 mouse_pos: [2]f64 = .{ 0, 0 },
 mouse_prev_pos: [2]f64 = .{ 0, 0 },
 
-input_map: shared.net.Command.Input = .{},
+input_map: shared.net.Input = .{},
 
 transform: nz.Transform3D(f32) = .{},
 

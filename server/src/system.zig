@@ -28,7 +28,7 @@ pub const Camera = struct {
 pub const Controller = struct {
     attack_cool_down: f32 = 0,
 
-    input: shared.net.Command.Input = .{},
+    input: shared.net.Input = .{},
 };
 
 pub const BulletData = struct {

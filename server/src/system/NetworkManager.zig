@@ -17,11 +17,11 @@ pub const Client = struct {
     name: []const u8 = "",
     entity_id: u32 = 0,
     needs_full_sync: bool = true,
-    command_queue: shared.net.CommandQueue = .{},
+    command_queue: shared.net.PacketQueue(shared.net.ClientPacket) = .{},
 
-    pub fn sendCommand(self: *@This(), writer: *std.Io.Writer, command: shared.net.Command, flags: shared.SteamNet.SendFlags) !void {
+    pub fn sendCommand(self: *@This(), writer: *std.Io.Writer, command: shared.net.ServerPacket, flags: shared.SteamNet.SendFlags) !void {
         writer.end = 0;
-        try command.write(writer);
+        try shared.net.write(shared.net.ServerPacket, command, writer);
         // std.log.debug("len: {d}", .{writer.buffered().len});
 
         try self.steam_server.packets.pushOutgoing(self.gpa, self.conn, writer.buffered(), flags);
@@ -90,11 +90,11 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
         const client = self.clients.getPtr(msg.conn) orelse continue;
         var msg_reader: std.Io.Reader = .fixed(&msg.bytes);
         const reader = &msg_reader;
-        const parsed = shared.net.Command.parse(reader) catch |err| {
-            std.log.err("parse command: {s}", .{@errorName(err)});
+        const parsed = shared.net.parse(shared.net.ClientPacket, reader) catch |err| {
+            std.log.err("parse packet: {s}", .{@errorName(err)});
             continue;
         };
-        try client.command_queue.commands.append(self.gpa, parsed.command);
+        try client.command_queue.commands.append(self.gpa, parsed);
     }
     self.steam_server.packets.incoming.clearRetainingCapacity();
 
@@ -141,7 +141,6 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
                         entity.controller.input = command.input;
                     }
                 },
-                else => std.log.err("Unhandled command {s}", .{@tagName(command)}),
             }
         }
         client.command_queue.commands.clearRetainingCapacity();
