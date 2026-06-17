@@ -19,6 +19,13 @@ pub const Entity = struct {
         planet,
         enemy,
         bullet,
+
+        pub fn expectsModel(kind: Kind) bool {
+            return switch (kind) {
+                .player, .planet, .enemy => true,
+                .unknown, .bullet => false,
+            };
+        }
     };
 
     pub const Spawn = struct {

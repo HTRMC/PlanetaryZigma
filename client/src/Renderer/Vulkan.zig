@@ -629,7 +629,10 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *FrameData,
     ext.vkCmdBeginRendering(cmd, &render_info);
     for (info.world.entities.values()) |*entity| {
         if (!entity.flags.transform) continue;
-        const model = self.models.get(entity.kind) orelse self.models.get(.unknown).?;
+        const model = self.models.get(entity.kind) orelse {
+            if (entity.kind.expectsModel()) std.debug.panic("no model registered for {s}", .{@tagName(entity.kind)});
+            continue; // bullet/unknown: intentionally modelless
+        };
         var transform = entity.transform;
 
         // if (entity.flags.screen_space) {
