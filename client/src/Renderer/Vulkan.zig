@@ -220,7 +220,7 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         _ = try createModelWithMesh(
             self,
             gpa,
-            "Bullet",
+            "bullet",
             Mesh.box.verticies,
             Mesh.box.indicies,
             .bullet,
@@ -629,7 +629,10 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *FrameData,
     ext.vkCmdBeginRendering(cmd, &render_info);
     for (info.world.entities.values()) |*entity| {
         if (!entity.flags.transform) continue;
-        const model = self.models.get(entity.kind) orelse self.models.get(.unknown).?;
+        const model = self.models.get(entity.kind) orelse {
+            if (entity.kind.expectsModel()) std.debug.panic("no model registered for {s}", .{@tagName(entity.kind)});
+            continue; // bullet/unknown: intentionally modelless
+        };
         var transform = entity.transform;
 
         // if (entity.flags.screen_space) {
@@ -831,7 +834,10 @@ pub fn createModelWithMesh(self: *@This(), gpa: std.mem.Allocator, name: []const
 }
 
 pub fn attachSkeleton(self: *@This(), gpa: std.mem.Allocator, entity_id: u32, entity_kind: shared.Entity.Kind) !void {
-    const model = self.models.get(entity_kind) orelse return;
+    const model = self.models.get(entity_kind) orelse {
+        if (entity_kind.expectsModel()) std.debug.panic("no model registered for {s}", .{@tagName(entity_kind)});
+        return; // bullet/unknown: no skeleton
+    };
     try self.skelentons.put(entity_id, try .init(gpa, self.vma, self.device, model));
     std.log.debug("added ID: {d}, kind {t}, capcity: {d}", .{ entity_id, entity_kind, self.skelentons.capacity() });
 }
