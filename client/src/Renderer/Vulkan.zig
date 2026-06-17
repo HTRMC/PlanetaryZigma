@@ -220,7 +220,7 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         _ = try createModelWithMesh(
             self,
             gpa,
-            RenderResources.default_mesh_name,
+            "bullet",
             Mesh.box.verticies,
             Mesh.box.indicies,
             .bullet,
