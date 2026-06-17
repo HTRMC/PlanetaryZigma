@@ -4,7 +4,6 @@ const shared = @import("shared");
 const system = @import("system");
 const World = system.World;
 const yes = @import("yes");
-const window_util = @import("window.zig");
 const tracy = @import("ztracy");
 
 pub fn main(init: std.process.Init) !void {
@@ -37,7 +36,6 @@ pub fn main(init: std.process.Init) !void {
     try window.open(platform, .{
         .title = "PlanetaryZigma",
         .size = window_size,
-        .position = window_util.centeredPosition(window_size),
         .resize_policy = .{ .specified = .{
             .min_size = .{ .width = 300, .height = 200 },
         } },
