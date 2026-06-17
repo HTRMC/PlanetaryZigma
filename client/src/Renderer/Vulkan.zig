@@ -249,10 +249,10 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         self.vma,
         self.device,
         asset_server,
-        "objects/Mousey.glb",
+        "objects/skeleton.glb",
         &self.render_resources,
         .{
-            .position = .{ 0, -1, 0 },
+            .position = .{ 0, -0.6, 0 },
             .rotation = nz.Quat(f32).angleAxis(std.math.pi, .{ 0, 1, 0 }),
         },
     );
@@ -377,6 +377,11 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     self.surface.deinit(self.instance);
     self.debug_messenger.deinit(self.instance);
     self.instance.deinit();
+}
+
+pub fn rebindProcs(self: *@This()) void {
+    procs.instance.load(self.instance.handle, null);
+    procs.device.load(self.device.handle, null);
 }
 
 pub fn update(self: *@This(), info: *const Info) !void {
@@ -712,7 +717,6 @@ pub fn draw(
     const node = if (skeleton) |skel| skel.nodes[node_id] else model.nodes.items[node_id];
     const node_matrix = top_matrix.mul(node.world_matrix);
     // std.log.debug("skelentons {d}", .{self.skelentons.capacity()});
-    if (skeleton != null) std.log.debug("found skeleton for id {d}", .{entity.id});
     // const node_matrix = top_matrix;
     // std.log.debug("top_pos: {any}", .{top_transform});
     // std.log.debug("\nworld: {any}", .{node.world_matrix});
@@ -726,7 +730,6 @@ pub fn draw(
     // if (true) @panic("LOLXD")
 
     if (node.mesh_id) |mesh_id| {
-        std.log.debug("mesh_id found", .{});
         const mesh = try self.render_resources.getMeshPtr(mesh_id);
 
         var push: Shader.AnimationPushConstant = .{
@@ -735,7 +738,6 @@ pub fn draw(
             .inverse_bind_matrices_addess = undefined,
         };
         if (node.skin_id > -1) {
-            std.log.debug("skin_id found", .{});
             if (skeleton) |skel| {
                 push.inverse_bind_matrices_addess = skel.buffers[@intCast(node.skin_id)].getGPUAddress();
             } else {
@@ -812,7 +814,7 @@ pub fn createModelWithMesh(self: *@This(), gpa: std.mem.Allocator, name: []const
         &.{.{
             .index_start = 0,
             .index_count = @intCast(indices.len),
-            .material_name = RenderResources.default_material_name,
+            .material_name = null,
         }},
     );
     try self.render_resources.createMesh(gpa, mesh);
@@ -832,6 +834,13 @@ pub fn attachSkeleton(self: *@This(), gpa: std.mem.Allocator, entity_id: u32, en
     const model = self.models.get(entity_kind) orelse return;
     try self.skelentons.put(entity_id, try .init(gpa, self.vma, self.device, model));
     std.log.debug("added ID: {d}, kind {t}, capcity: {d}", .{ entity_id, entity_kind, self.skelentons.capacity() });
+}
+
+pub fn removeSkeleton(self: *@This(), gpa: std.mem.Allocator, entity_id: u32) void {
+    if (self.skelentons.fetchRemove(entity_id)) |kv| {
+        var skeleton = kv.value;
+        skeleton.deinit(gpa, self.vma);
+    }
 }
 
 fn getViewMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {

@@ -102,8 +102,6 @@ pub fn main(init: std.process.Init) !void {
             watcher.old_dynlib.?.close();
             watcher.old_dynlib = null;
             system_table = try .load(&watcher.dynlib.?);
-            asset_server.deinit();
-            asset_server = try shared.AssetServer.init(gpa, init.io);
             system_table.systemContextReload(&system_context, false);
         }
 
