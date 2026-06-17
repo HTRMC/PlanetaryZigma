@@ -75,7 +75,9 @@ pub fn update(self: *@This(), info: *const system.Info, system_context: *system.
                     std.log.debug("SPAWNED: Planet {d}", .{size});
                 },
                 .bullet => {
+                    std.log.info("spawned bullet", .{});
                     entity.transform.scale = @splat(0.1);
+                    std.log.info("spawned bullet-post", .{});
                 },
                 else => {},
             }

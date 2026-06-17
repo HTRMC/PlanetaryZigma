@@ -57,16 +57,10 @@ fragment_shader: *Shader,
 ui_vertex_shader: *Shader,
 ui_fragment_shader: *Shader,
 ui_pipeline_layout: pipeline.Layout,
-layouts: DescriptorLayouts,
 scene_layout: descriptor.Layout,
 material_layout: descriptor.Layout,
 pipeline_layout: pipeline.Layout,
 font: *Font,
-
-const DescriptorLayouts = struct {
-    layouts: [2]descriptor.Layout,
-    vk_handles: [2]c.VkDescriptorSetLayout,
-};
 
 pub const InitOptions = struct {
     instance: struct {
@@ -157,10 +151,6 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
             .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT | c.VK_SHADER_STAGE_FRAGMENT_BIT,
         },
     }, c.VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
-    self.layouts = .{
-        .layouts = .{ self.scene_layout, self.material_layout },
-        .vk_handles = .{ self.scene_layout.handle, self.material_layout.handle },
-    };
     layout_zone.end();
 
     {
@@ -203,7 +193,7 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         self.pipeline_layout = try .init(
             self.device,
             Shader.AnimationPushConstant,
-            &self.layouts.vk_handles,
+            &.{ self.scene_layout.handle, self.material_layout.handle },
         );
 
         self.ui_pipeline_layout = try .init(
@@ -222,6 +212,18 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
             Mesh.box.verticies,
             Mesh.box.indicies,
             .unknown,
+        );
+        zone.end();
+    }
+    {
+        const zone = tracy.zoneNamed(@src(), "BulletMesh");
+        _ = try createModelWithMesh(
+            self,
+            gpa,
+            RenderResources.default_mesh_name,
+            Mesh.box.verticies,
+            Mesh.box.indicies,
+            .bullet,
         );
         zone.end();
     }
@@ -268,11 +270,11 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
                 .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
                 .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
                 .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-                .pSetLayouts = &self.layouts.vk_handles[0],
-                .setLayoutCount = @intCast(self.layouts.vk_handles.len),
                 .pushConstantRangeCount = 1,
                 .pName = "main",
             },
+
+            &.{ self.scene_layout.handle, self.material_layout.handle },
             "shaders/vertex.vert",
             Shader.AnimationPushConstant,
         );
@@ -288,11 +290,10 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
                 .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
                 .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
                 .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-                .pSetLayouts = &self.layouts.vk_handles[0],
-                .setLayoutCount = @intCast(self.layouts.vk_handles.len),
                 .pushConstantRangeCount = 1,
                 .pName = "main",
             },
+            &.{ self.scene_layout.handle, self.material_layout.handle },
             "shaders/fragment.frag",
             Shader.AnimationPushConstant,
         );
@@ -309,11 +310,10 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
                 .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
                 .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
                 .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-                .pSetLayouts = &self.layouts.vk_handles[1],
-                .setLayoutCount = 1,
                 .pushConstantRangeCount = 1,
                 .pName = "main",
             },
+            &.{self.material_layout.handle},
             "shaders/ui.vert",
             Shader.UiPushConstant,
         );
@@ -321,15 +321,21 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
     }
     {
         const zone = tracy.zoneNamed(@src(), "UiFragmentShader");
-        self.ui_fragment_shader = try .init(gpa, self.device, asset_server, .{
-            .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
-            .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
-            .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-            .pSetLayouts = &self.layouts.vk_handles[1],
-            .setLayoutCount = 1,
-            .pushConstantRangeCount = 1,
-            .pName = "main",
-        }, "shaders/ui.frag", Shader.UiPushConstant);
+        self.ui_fragment_shader = try .init(
+            gpa,
+            self.device,
+            asset_server,
+            .{
+                .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
+                .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+                .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
+                .pushConstantRangeCount = 1,
+                .pName = "main",
+            },
+            &.{self.material_layout.handle},
+            "shaders/ui.frag",
+            Shader.UiPushConstant,
+        );
         zone.end();
     }
     shader_zone.end();

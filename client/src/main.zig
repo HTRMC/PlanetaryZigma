@@ -16,7 +16,7 @@ pub fn main(init: std.process.Init) !void {
     defer {
         if (builtin.mode == .Debug) _ = gpa_impl.deinit();
     }
-    const gpa = gpa_impl.allocator();
+    const gpa = if (builtin.mode == .Debug) gpa_impl.allocator() else gpa_impl;
     const io = init.io;
 
     const steam_zone = tracy.zoneNamed(@src(), "SteamInit");

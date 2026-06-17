@@ -135,6 +135,7 @@ pub const Context = struct {
     pub fn update(self: *@This(), info: *const Info) !void {
         const tracy_scope = tracy.zone(@src());
         defer tracy_scope.end();
+        // tracy.frameMark();
         try info.world.camera.update(info, &self.network_manager, &self.renderer.inner.ui);
         try self.renderer.update(info);
         try self.animation.update(info, &self.renderer.inner.skelentons);
