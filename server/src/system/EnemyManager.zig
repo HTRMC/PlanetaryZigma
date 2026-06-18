@@ -7,11 +7,9 @@ const Spawner = @import("Spawner.zig");
 const Physics = @import("Physics.zig");
 const HealthManager = @import("HealthManager.zig");
 const Info = system.Info;
-const component = system.World.component;
 
 gpa: std.mem.Allocator,
 world: *system.World,
-cooldown: f32 = 0,
 
 pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World, spawner: *Spawner) !void {
     const tracy_scope = tracy.zone(@src());
@@ -48,7 +46,7 @@ pub fn deinit(self: *@This()) !void {
 pub fn update(self: *@This(), info: *const Info, physics: *const Physics, health_manager: *HealthManager) !void {
     const tracy_scope = tracy.zone(@src());
     defer tracy_scope.end();
-    self.cooldown += info.delta_time;
+    _ = self;
 
     // std.log.debug("\n\neneties: {d}\n\n", .{info.world.entities.entries.len});
     var player: *system.Entity = undefined;
@@ -93,9 +91,15 @@ pub fn update(self: *@This(), info: *const Info, physics: *const Physics, health
             body_interface.setRotation(body_id, rot.toVec(), .activate);
         }
 
-        if (self.cooldown >= 1) {
-            self.cooldown = 0;
-            if (!health_manager.addHealth(player, -1)) std.log.debug("did not take damage", .{});
+        if (distance < 4) {
+            if (entity.attack_cooldown >= 1) {
+                entity.attack_cooldown = 0;
+                if (!health_manager.removeHealth(player, entity.damage)) std.log.debug("did not take damage", .{});
+            } else {
+                entity.attack_cooldown += info.delta_time;
+            }
+        } else {
+            entity.attack_cooldown = 0;
         }
 
         if (distance < 10) continue;

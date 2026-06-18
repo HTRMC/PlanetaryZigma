@@ -69,6 +69,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
                     .transform = .{ .position = player.transform.position + nz.vec.scale(player_direction, 1.5), .rotation = player.transform.rotation },
                     .bullet = .{ .velocity = muzzle_velocity, .lifetime = 5 },
                     .flags = .{ .transform = true, .bullet = true },
+                    .damage = 5,
                 },
             );
         }

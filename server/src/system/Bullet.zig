@@ -75,7 +75,7 @@ pub fn update(
                 if (target_id == entity.owner_id) {
                     continue;
                 }
-                if (health_manager.addHealth(hit_entity, bullet.damage)) try spawner.depspawn(entity.id);
+                if (health_manager.removeHealth(hit_entity, entity.damage)) try spawner.depspawn(entity.id);
             }
         }
         entity.transform.position = p0 + segment;

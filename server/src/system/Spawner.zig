@@ -90,7 +90,7 @@ pub fn update(
         if (self.world.getPtr(entity_id)) |entity| {
             if (entity.flags.collider) {
                 if (entity.collider.body_id) |body_id| physics.destroyBody(body_id);
-                std.log.debug("DESTROY body_id={any} for entity id={d} kind={s}", .{
+                std.log.debug("DESTROYED body_id={any} for entity id={d} kind={s}", .{
                     entity.collider.body_id, entity.id, @tagName(entity.kind),
                 });
             }

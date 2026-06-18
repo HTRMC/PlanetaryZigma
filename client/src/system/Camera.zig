@@ -25,9 +25,9 @@ input_map: shared.net.Input = .{},
 transform: nz.Transform3D(f32) = .{},
 
 pub fn update(self: *@This(), info: *const Info, network_manager: *NetworkManager, ui: *Ui) !void {
+    _ = info;
     const tracy_scope = tracy.zone(@src());
     defer tracy_scope.end();
-    _ = info;
 
     self.input_map.mouse_delta[0] = self.mouse_pos[0] - self.mouse_prev_pos[0];
     self.input_map.mouse_delta[1] = self.mouse_pos[1] - self.mouse_prev_pos[1];
@@ -103,6 +103,7 @@ pub fn update(self: *@This(), info: *const Info, network_manager: *NetworkManage
     } else {
         const healthbar_width: f32 = 200 * self.health / 100;
         const healthbar_heigth: f32 = 30;
+
         ui.add(null, .{
             .position = .{
                 .fixed = .{

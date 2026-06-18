@@ -3,7 +3,7 @@ const shared = @import("shared");
 const NetworkManager = @import("system/NetworkManager.zig");
 const HealthManager = @import("system/HealthManager.zig");
 const Spawner = @import("system/Spawner.zig");
-const Game = @import("system/Game.zig");
+const EnemyManager = @import("system/EnemyManager.zig");
 const tracy = @import("ztracy");
 const nz = shared.numz;
 const Physics = @import("system/Physics.zig");
@@ -35,7 +35,6 @@ pub const Controller = struct {
 
 pub const BulletData = struct {
     velocity: nz.Vec3(f32) = .{ 0, 0, 0 },
-    damage: f32 = 1,
     lifetime: f32 = 5,
 };
 
@@ -52,6 +51,8 @@ pub const Entity = struct {
     planet: u32 = 0,
     bullet: BulletData = .{},
     health: HealthManager.Health = .{},
+    attack_cooldown: f32 = 0,
+    damage: f32 = 1,
 
     pub const Flags = packed struct {
         transform: bool = false,
@@ -140,7 +141,7 @@ pub const Context = struct {
     player_controller: PlayerController,
     camera_controller: CameraController,
     spawner: Spawner,
-    game: Game,
+    enemy_manager: EnemyManager,
     bullet: Bullet,
     request_exit: bool = false,
 
@@ -160,7 +161,7 @@ pub const Context = struct {
             .world = data.world,
             .steam_server = data.steam_server,
             .spawner = undefined,
-            .game = undefined,
+            .enemy_manager = undefined,
             .network_manager = undefined,
             .physics = undefined,
             .player_controller = undefined,
@@ -173,7 +174,7 @@ pub const Context = struct {
         try self.camera_controller.init();
         try self.spawner.init(data.gpa, data.world);
         try self.bullet.init(data.gpa, self.world, &self.physics);
-        try self.game.init(data.gpa, data.world, &self.spawner);
+        try self.enemy_manager.init(data.gpa, data.world, &self.spawner);
         try self.network_manager.init(data.gpa, data.io, data.steam_server);
         try self.health_manager.init(&self.network_manager, &self.spawner);
     }
@@ -182,7 +183,7 @@ pub const Context = struct {
         defer tracy_scope.end();
         self.physics.deinit();
         try self.network_manager.deinit();
-        try self.game.deinit();
+        try self.enemy_manager.deinit();
         self.bullet.deinit();
         self.spawner.deinit();
     }
@@ -192,7 +193,7 @@ pub const Context = struct {
         defer tracy_scope.end();
         try self.network_manager.update(info, &self.spawner);
         try self.player_controller.update(info);
-        try self.game.update(info, &self.physics, &self.health_manager);
+        try self.enemy_manager.update(info, &self.physics, &self.health_manager);
         try self.physics.update(info);
         try self.bullet.update(info, &self.health_manager, &self.spawner);
         try self.camera_controller.update(info);

@@ -20,6 +20,14 @@ pub fn init(self: *@This(), network_manager: *NetworkManager, spawner: *Spawner)
     };
 }
 
+pub fn removeHealth(
+    self: *@This(),
+    entity: *Entity,
+    amount: f32,
+) bool {
+    return self.addHealth(entity, -amount);
+}
+
 pub fn addHealth(
     self: *@This(),
     entity: *Entity,
@@ -31,6 +39,7 @@ pub fn addHealth(
     if (health.current <= 0) {
         try self.spawner.depspawn(entity.id);
     }
+    std.log.debug("took dmg {d}, current health {d}", .{ amount, entity.health.current });
     self.network_manager.pending_add_health.appendAssumeCapacity(.{ .id = entity.id, .amount = amount });
     return true;
 }
