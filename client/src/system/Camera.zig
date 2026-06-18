@@ -18,6 +18,8 @@ was_rotating: bool = false,
 mouse_pos: [2]f64 = .{ 0, 0 },
 mouse_prev_pos: [2]f64 = .{ 0, 0 },
 
+health: f32 = 100,
+
 input_map: shared.net.Input = .{},
 
 transform: nz.Transform3D(f32) = .{},
@@ -98,6 +100,19 @@ pub fn update(self: *@This(), info: *const Info, network_manager: *NetworkManage
             network_manager.server_list.refresh = true;
             std.log.debug("Pressed button, {d}", .{network_manager.server_list.count});
         }
+    } else {
+        const healthbar_width: f32 = 200 * self.health / 100;
+        const healthbar_heigth: f32 = 30;
+        ui.add(null, .{
+            .position = .{
+                .fixed = .{
+                    .top = ui.screen_heigth - healthbar_heigth - 10,
+                    .left = 10,
+                },
+            },
+            .size = .{ .fixed = .{ .heigth = healthbar_heigth, .width = healthbar_width } },
+            .color = .new(1, 0, 0, 1),
+        });
     }
 
     ui.end();

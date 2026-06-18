@@ -5,11 +5,6 @@ const Spawner = @import("Spawner.zig");
 const tracy = @import("ztracy");
 const Info = system.Info;
 
-gpa: std.mem.Allocator,
-io: std.Io,
-steam_server: *shared.SteamNet.Server,
-clients: std.AutoHashMap(shared.SteamNet.Conn, Client),
-
 pub const Client = struct {
     gpa: std.mem.Allocator,
     io: std.Io,
@@ -36,14 +31,24 @@ pub const Client = struct {
     }
 };
 
+gpa: std.mem.Allocator,
+io: std.Io,
+steam_server: *shared.SteamNet.Server,
+clients: std.AutoHashMap(shared.SteamNet.Conn, Client),
+pending_add_health: std.ArrayList(struct { id: u32, amount: f32 }) = .empty,
+pending_spawn: std.ArrayList(shared.Entity.Spawn) = .empty,
+pending_despawn: std.ArrayList(u32) = .empty,
+
 pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io, net: *shared.SteamNet.Server) !void {
     const tracy_scope = tracy.zone(@src());
     defer tracy_scope.end();
+
     self.* = .{
         .gpa = gpa,
         .io = io,
         .steam_server = net,
         .clients = .init(gpa),
+        .pending_add_health = try .initCapacity(gpa, 4096),
     };
 }
 
@@ -128,12 +133,14 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
                             .shape = .{ .primitive = .{ .box = .{ .size = 1 } } },
                             .motion_type = .dynamic,
                         },
+                        .health = .{ .current = 100, .max = 100 },
                         .camera = .{ .transform = .{ .position = .{ 0, 0, 100 } } },
                         .flags = .{
                             .transform = true,
                             .collider = true,
                             .controller = true,
                             .camera = true,
+                            .health = true,
                         },
                     });
                     client.entity_id = new_player_entity.id;
@@ -195,12 +202,12 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
             }
             client.needs_full_sync = false;
         } else {
-            for (spawner.network_pending_spawn.items) |entry| {
+            for (self.pending_spawn.items) |entry| {
                 try client.sendCommand(writer, .{ .spawn_entity = .{ .id = entry.id, .kind = entry.kind } }, .reliable);
             }
         }
         // despawns
-        for (spawner.network_pending_despawn.items) |id| {
+        for (self.pending_despawn.items) |id| {
             try client.sendCommand(
                 writer,
                 .{
@@ -210,6 +217,15 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
                 },
                 .reliable,
             );
+        }
+        // health
+        for (self.pending_add_health.items) |entry| {
+            try client.sendCommand(writer, .{
+                .add_health = .{
+                    .id = @intCast(entry.id),
+                    .amount = @floatCast(entry.amount),
+                },
+            }, .reliable);
         }
         // transforms
         for (world.entities.values()) |*entity| {
@@ -222,7 +238,8 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
         }
     }
     // std.log.debug("cmd size {d}", .{self.steam_server.packets.outgoing.items.len});
-    spawner.network_pending_despawn.clearRetainingCapacity();
-    spawner.network_pending_spawn.clearRetainingCapacity();
+    self.pending_despawn.clearRetainingCapacity();
+    self.pending_spawn.clearRetainingCapacity();
+    self.pending_add_health.clearRetainingCapacity();
     self.steam_server.packet_mutex.unlock(self.io);
 }

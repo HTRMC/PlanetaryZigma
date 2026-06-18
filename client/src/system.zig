@@ -43,7 +43,6 @@ pub const World = struct {
     entities: std.AutoArrayHashMapUnmanaged(u32, Entity) = .empty,
     next_id: u32 = 1,
     enitity_mapping: std.AutoHashMapUnmanaged(u32, u32) = .empty,
-    my_server_id: u32 = 0,
     camera: Camera = .{},
 
     pub fn init(gpa: std.mem.Allocator) !@This() {

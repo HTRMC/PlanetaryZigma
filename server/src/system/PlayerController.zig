@@ -60,12 +60,14 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         if (input.mouse_button_left and controller.attack_cool_down >= 0.1) {
             controller.attack_cool_down = 0;
             const muzzle_speed: f32 = 100;
-            const muzzle_velocity = nz.vec.scale(player.transform.forward(), muzzle_speed);
+            const player_direction = player.transform.forward();
+            const muzzle_velocity = nz.vec.scale(player_direction, muzzle_speed);
             _ = try self.spawner.spawn(
                 .{
                     .kind = .bullet,
-                    .transform = .{ .position = player.transform.position, .rotation = player.transform.rotation },
-                    .bullet = .{ .velocity = muzzle_velocity, .lifetime = 5, .owner_id = player.id },
+                    .owner_id = player.id,
+                    .transform = .{ .position = player.transform.position + nz.vec.scale(player_direction, 1.5), .rotation = player.transform.rotation },
+                    .bullet = .{ .velocity = muzzle_velocity, .lifetime = 5 },
                     .flags = .{ .transform = true, .bullet = true },
                 },
             );

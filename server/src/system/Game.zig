@@ -5,11 +5,13 @@ const nz = shared.numz;
 const system = @import("../system.zig");
 const Spawner = @import("Spawner.zig");
 const Physics = @import("Physics.zig");
+const HealthManager = @import("HealthManager.zig");
 const Info = system.Info;
 const component = system.World.component;
 
 gpa: std.mem.Allocator,
 world: *system.World,
+cooldown: f32 = 0,
 
 pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World, spawner: *Spawner) !void {
     const tracy_scope = tracy.zone(@src());
@@ -43,10 +45,11 @@ pub fn deinit(self: *@This()) !void {
     _ = self;
 }
 
-pub fn update(self: *@This(), info: *const Info, physics: *const Physics) !void {
+pub fn update(self: *@This(), info: *const Info, physics: *const Physics, health_manager: *HealthManager) !void {
     const tracy_scope = tracy.zone(@src());
     defer tracy_scope.end();
-    _ = self;
+    self.cooldown += info.delta_time;
+
     // std.log.debug("\n\neneties: {d}\n\n", .{info.world.entities.entries.len});
     var player: *system.Entity = undefined;
     for (info.world.entities.values()) |*entity| {
@@ -88,6 +91,11 @@ pub fn update(self: *@This(), info: *const Info, physics: *const Physics) !void 
             const forward = nz.vec.normalize(fwd_proj);
             const rot = nz.quat.Hamiltonian(f32).lookAt(forward, planet_up).normalize();
             body_interface.setRotation(body_id, rot.toVec(), .activate);
+        }
+
+        if (self.cooldown >= 1) {
+            self.cooldown = 0;
+            if (!health_manager.addHealth(player, -1)) std.log.debug("did not take damage", .{});
         }
 
         if (distance < 10) continue;
