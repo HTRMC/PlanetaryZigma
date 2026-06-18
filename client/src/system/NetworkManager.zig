@@ -51,17 +51,15 @@ fn sendConnect(self: *@This()) !void {
     const tracy_scope = tracy.zone(@src());
     defer tracy_scope.end();
     const name = "lucas";
-    const cmd: shared.net.Command = .{ .connect = .{ .name_len = name.len, .name = name } };
+    const cmd: shared.net.ClientPacket = .{ .connect = .{ .name_len = name.len, .name = name } };
     try self.sendCommand(cmd, .reliable);
 }
 
-pub fn sendCommand(self: *@This(), command: shared.net.Command, flags: shared.SteamNet.SendFlags) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
+pub fn sendCommand(self: *@This(), command: shared.net.ClientPacket, flags: shared.SteamNet.SendFlags) !void {
     if (self.server_conn == 0) return;
     var buf: [1024]u8 = undefined;
     var w: std.Io.Writer = .fixed(&buf);
-    try command.write(&w);
+    try shared.net.write(shared.net.ClientPacket, command, &w);
     // std.log.debug("len: {d}", .{w.buffered().len});
     try self.steam_client.packets.pushOutgoing(self.gpa, self.server_conn, w.buffered(), flags);
 }
@@ -116,19 +114,17 @@ pub fn update(self: *@This(), info: *const Info) !void {
     for (self.steam_client.packets.incoming.items) |*msg| {
         var msg_reader: std.Io.Reader = .fixed(&msg.bytes);
         const reader = &msg_reader;
-        const parsed = shared.net.Command.parse(reader) catch |err| {
-            std.log.err("parse command: {s}", .{@errorName(err)});
+        const parsed = shared.net.parse(shared.net.ServerPacket, reader) catch |err| {
+            std.log.err("parse packet: {s}", .{@errorName(err)});
             continue;
         };
-        try self.handleCommand(info, parsed.command);
+        try self.handleCommand(info, parsed);
     }
     self.steam_client.packets.incoming.clearRetainingCapacity();
     self.steam_client.packet_mutex.unlock(self.io);
 }
 
-fn handleCommand(self: *@This(), info: *const Info, command: shared.net.Command) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
+fn handleCommand(self: *@This(), info: *const Info, command: shared.net.ServerPacket) !void {
     switch (command) {
         .acknowledge => |acknowledge| {
             info.world.camera = .{ .transform = .{ .position = .{ 0, 0, 0 } } };
@@ -197,6 +193,5 @@ fn handleCommand(self: *@This(), info: *const Info, command: shared.net.Command)
             info.world.camera.transform.rotation = .fromVec(rotation_command.rotation);
             info.world.camera.transform.position = rotation_command.position;
         },
-        else => std.log.err("Unhandled command {s}", .{@tagName(command)}),
     }
 }
