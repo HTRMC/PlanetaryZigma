@@ -2,6 +2,7 @@ const std = @import("std");
 const shared = @import("shared");
 const system = @import("../system.zig");
 const Spawner = @import("Spawner.zig");
+const tracy = @import("ztracy");
 const Info = system.Info;
 
 gpa: std.mem.Allocator,
@@ -28,12 +29,16 @@ pub const Client = struct {
     }
 
     pub fn deinit(self: *@This()) !void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         if (self.name.len != 0) self.gpa.free(self.name);
         try self.command_queue.deinit(self.gpa, self.io);
     }
 };
 
 pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io, net: *shared.SteamNet.Server) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     self.* = .{
         .gpa = gpa,
         .io = io,
@@ -43,12 +48,16 @@ pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io, net: *shared.Ste
 }
 
 pub fn deinit(self: *@This()) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     var it = self.clients.iterator();
     while (it.next()) |pair| try pair.value_ptr.deinit();
     self.clients.deinit();
 }
 
 pub fn reload(self: *@This(), pre_reload: bool) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     _ = self;
     _ = pre_reload;
     // Steam connection state lives in main.zig and survives reload; nothing to
@@ -56,6 +65,8 @@ pub fn reload(self: *@This(), pre_reload: bool) !void {
 }
 
 pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const world = info.world;
 
     try self.steam_server.packet_mutex.lock(self.io);

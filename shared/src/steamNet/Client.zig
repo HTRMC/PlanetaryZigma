@@ -1,6 +1,7 @@
 const std = @import("std");
 const steam = @import("steamworks");
 const Packets = @import("../SteamNet.zig").Packets;
+const tracy = @import("ztracy");
 const ServerListResponse = steam.ISteamMatchmakingServerListResponse;
 
 pub const ServerInfo = extern struct {
@@ -36,17 +37,23 @@ const Browser = extern struct {
     request: steam.HServerListRequest = 0,
 
     fn responded(_: *Browser, request: steam.HServerListRequest, server_index: i32) callconv(.c) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         const server = steam.SteamMatchmakingServers().GetServerDetails(request, server_index);
         std.log.info("Server[{d}] steamID={d} name=\"{s}\"", .{
             server_index, server.*.m_steamID, std.mem.sliceTo(server.*.m_szServerName[0..], 0),
         });
     }
     fn failed(_: *Browser, _: steam.HServerListRequest, server_index: i32) callconv(.c) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         std.log.info("Server[{d}] Failed to respond", .{
             server_index,
         });
     }
     fn complete(self: *Browser, request: steam.HServerListRequest, response: steam.EMatchMakingServerResponse) callconv(.c) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         std.log.info("server list refresh compele: {s}", .{@tagName(response)});
         const servers = steam.SteamMatchmakingServers();
         const server_count = servers.GetServerCount(request);
@@ -79,7 +86,12 @@ pipe: steam.HSteamPipe,
 browser: Browser,
 
 pub fn init(gpa: std.mem.Allocator, io: std.Io) !@This() {
-    if (!steam.SteamAPI_Init()) return error.InitSteamworks;
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
+    if (!steam.SteamAPI_Init()) {
+        std.log.err("SteamAPI_Init failed. Check: Steam is running, you are logged in, and steam_appid.txt exists in the working directory with a valid app id.", .{});
+        return error.InitSteamworks;
+    }
     steam.SteamAPI_ManualDispatch_Init();
     const steam_pipe = steam.SteamAPI_GetHSteamPipe();
 
@@ -94,6 +106,8 @@ pub fn init(gpa: std.mem.Allocator, io: std.Io) !@This() {
 }
 
 pub fn deinit(self: *@This()) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     self.handle_packets_future.cancel(self.io) catch {};
 
     const servers = steam.SteamMatchmakingServers();
@@ -102,12 +116,30 @@ pub fn deinit(self: *@This()) void {
         servers.ReleaseRequest(self.browser.request);
         self.browser.request = 0;
     }
-    self.closeConnection();
 
     //NOTE: drain or SteamAPI_Shutdown segfaults when a conn + server-list query both existed.
+    const sockets = steam.SteamNetworkingSockets_SteamAPI();
+    const conn = self.server_conn;
+    if (conn != 0) {
+        // linger=true: flush pending data and send a clean close so the server
+        // drops us immediately instead of timing out.
+        _ = sockets.CloseConnection(conn, 0, "client-shutdown", true);
+        self.server_conn = 0;
+    }
+
+    // Pump until the connection is fully torn down -- GetConnectionInfo goes
+    // false (handle recycled) or reports None -- so the low-level SDR/ICE
+    // sockets are released before SteamAPI_Shutdown. Skipping this races the
+    // P2P teardown: shutting down with sockets still open kills the
+    // SocketThread mid-flight (exit 5). Cap at ~1s so a stuck relay can't hang.
     var drained: u32 = 0;
-    while (drained < 200) : (drained += 1) {
+    while (drained < 500) : (drained += 1) {
         self.steamPump() catch {};
+        if (conn != 0) {
+            var info: steam.SteamNetConnectionInfo_t = undefined;
+            const alive = sockets.GetConnectionInfo(conn, &info);
+            if (!alive or info.m_eState == .k_ESteamNetworkingConnectionState_None) break;
+        }
         self.io.sleep(.fromMilliseconds(2), .real) catch {};
     }
 
@@ -116,6 +148,8 @@ pub fn deinit(self: *@This()) void {
 }
 
 pub fn handlePackets(self: *@This()) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     while (true) {
         try self.io.checkCancel();
         try self.packet_mutex.lock(self.io);
@@ -135,6 +169,8 @@ pub fn handlePackets(self: *@This()) !void {
 }
 
 fn steamPump(self: *@This()) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     steam.SteamAPI_ManualDispatch_RunFrame(self.pipe);
     if (self.browser.list.refresh_state == .done and self.browser.request != 0) {
         const servers = steam.SteamMatchmakingServers();
@@ -171,6 +207,8 @@ fn steamPump(self: *@This()) !void {
 }
 
 pub fn recievePackets(self: *@This()) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const sockets = steam.SteamNetworkingSockets_SteamAPI();
 
     // var status: steam.SteamNetConnectionRealTimeStatus_t = std.mem.zeroes(steam.SteamNetConnectionRealTimeStatus_t);
@@ -196,6 +234,8 @@ pub fn recievePackets(self: *@This()) !void {
 }
 
 pub fn sendPackets(self: *@This()) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     if (self.packets.outgoing.items.len == 0) return;
     const sockets = steam.SteamNetworkingSockets_SteamAPI();
     for (self.packets.outgoing.items) |*message| {
@@ -206,6 +246,8 @@ pub fn sendPackets(self: *@This()) !void {
 }
 
 pub fn connectToServer(self: *@This(), steam_id: u64) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     var identity: steam.SteamNetworkingIdentity = undefined;
     identity.Clear();
     identity.SetSteamID64(steam_id);
@@ -218,8 +260,3 @@ pub fn connectToServer(self: *@This(), steam_id: u64) !void {
     std.log.info("ConnectP2P({d}) -> {d}", .{ steam_id, conn });
 }
 
-pub fn closeConnection(self: *@This()) void {
-    if (self.server_conn == 0) return;
-    _ = steam.SteamNetworkingSockets_SteamAPI().CloseConnection(self.server_conn, 0, "client-shutdown", false);
-    self.server_conn = 0;
-}

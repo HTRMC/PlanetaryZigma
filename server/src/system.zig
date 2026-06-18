@@ -3,6 +3,7 @@ const shared = @import("shared");
 const NetworkManager = @import("system/NetworkManager.zig");
 const Spawner = @import("system/Spawner.zig");
 const Game = @import("system/Game.zig");
+const tracy = @import("ztracy");
 const nz = shared.numz;
 const Physics = @import("system/Physics.zig");
 const PlayerController = @import("system/PlayerController.zig");
@@ -68,6 +69,8 @@ pub const Entity = struct {
     };
 
     pub fn deinit(self: *Entity, gpa: std.mem.Allocator) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         if (self.flags.collider) {
             switch (self.collider.shape) {
                 .mesh => |*mesh| {
@@ -87,6 +90,8 @@ pub const World = struct {
     next_id: u32 = 1,
 
     pub fn init(gpa: std.mem.Allocator) !@This() {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         var entities: std.AutoArrayHashMapUnmanaged(u32, Entity) = .empty;
         try entities.ensureTotalCapacity(gpa, max_entities);
 
@@ -96,6 +101,8 @@ pub const World = struct {
         };
     }
     pub fn deinit(self: *@This()) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         for (self.entities.values()) |*entity| {
             entity.deinit(self.gpa);
         }
@@ -103,6 +110,8 @@ pub const World = struct {
     }
 
     pub fn spawn(self: *@This()) !*Entity {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         std.debug.assert(self.entities.entries.len < max_entities);
         const id = self.next_id;
         self.next_id += 1;
@@ -111,10 +120,14 @@ pub const World = struct {
     }
 
     pub fn getPtr(self: *@This(), id: u32) ?*Entity {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         return self.entities.getPtr(id);
     }
 
     pub fn despawn(self: *@This(), id: u32) bool {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         if (self.entities.getPtr(id)) |entity| entity.deinit(self.gpa);
         return self.entities.swapRemove(id);
     }
@@ -142,6 +155,8 @@ pub const Context = struct {
     };
 
     pub fn init(self: *@This(), data: *const Data) !void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         self.* = .{
             .gpa = data.gpa,
             .io = data.io,
@@ -164,6 +179,8 @@ pub const Context = struct {
         try self.network_manager.init(data.gpa, data.io, data.steam_server);
     }
     pub fn deinit(self: *@This()) !void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         self.physics.deinit();
         try self.network_manager.deinit();
         try self.game.deinit();
@@ -172,6 +189,8 @@ pub const Context = struct {
     }
 
     pub fn update(self: *@This(), info: *const Info) !void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         try self.network_manager.update(info, &self.spawner);
         try self.player_controller.update(info);
         try self.game.update(info, &self.physics);
@@ -183,6 +202,8 @@ pub const Context = struct {
         // if (info.elapsed_time > 1) self.request_exit = true;
     }
     fn reload(self: *@This(), pre_reload: bool) !void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         std.log.debug("before-1", .{});
         try self.physics.reload(pre_reload, self.world);
         try self.network_manager.reload(pre_reload);
@@ -202,6 +223,8 @@ pub const ffi = struct {
         systemContextReload: *const fn (*Context, pre_reload: bool) callconv(.c) void,
 
         pub fn load(dynlib: *shared.DynLib) !@This() {
+            const tracy_scope = tracy.zone(@src());
+            defer tracy_scope.end();
             var self: @This() = undefined;
             inline for (@typeInfo(@This()).@"struct".fields) |field| {
                 std.log.debug("Looking up symbol: {s}", .{field.name});
@@ -218,6 +241,8 @@ pub const ffi = struct {
     };
 
     pub export fn systemContextInit(context: *Context, data: *const Context.Data) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         std.log.debug("system context init", .{});
         context.init(data) catch |err| {
             if (@errorReturnTrace()) |trace| std.debug.dumpErrorReturnTrace(trace);
@@ -227,6 +252,8 @@ pub const ffi = struct {
     }
 
     pub export fn systemContextDeinit(context: *Context) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         std.log.debug("system context deinit", .{});
         context.deinit() catch |err| {
             if (@errorReturnTrace()) |trace| std.debug.dumpErrorReturnTrace(trace);
@@ -237,6 +264,8 @@ pub const ffi = struct {
     }
 
     pub export fn systemContextUpdate(context: *Context, info: *const Info) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         const result = context.update(info);
         result catch |err| {
             if (@errorReturnTrace()) |trace| std.debug.dumpErrorReturnTrace(trace);
@@ -245,6 +274,8 @@ pub const ffi = struct {
         };
     }
     pub export fn systemContextReload(context: *Context, pre_reload: bool) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         const result = context.reload(pre_reload);
         result catch |err| {
             if (@errorReturnTrace()) |trace| std.debug.dumpErrorReturnTrace(trace);

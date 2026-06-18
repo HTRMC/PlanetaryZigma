@@ -2,6 +2,7 @@ const std = @import("std");
 const nz = @import("shared").numz;
 const system = @import("../system.zig");
 const shared = @import("shared");
+const tracy = @import("ztracy");
 const Info = system.Info;
 const yes = @import("yes");
 const Ui = @import("../Renderer/Vulkan/Ui.zig");
@@ -22,6 +23,8 @@ input_map: shared.net.Input = .{},
 transform: nz.Transform3D(f32) = .{},
 
 pub fn update(self: *@This(), info: *const Info, network_manager: *NetworkManager, ui: *Ui) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     _ = info;
 
     self.input_map.mouse_delta[0] = self.mouse_pos[0] - self.mouse_prev_pos[0];
@@ -101,6 +104,8 @@ pub fn update(self: *@This(), info: *const Info, network_manager: *NetworkManage
 }
 
 pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.Event) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     _ = info;
 
     switch (event.*) {

@@ -4,17 +4,24 @@ const shared = @import("shared");
 const system = @import("system");
 const World = system.World;
 const yes = @import("yes");
+const tracy = @import("ztracy");
 
 pub fn main(init: std.process.Init) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
+    tracy.setThreadName("main");
+    const startup_zone = tracy.zoneNamed(@src(), "Startup");
     var gpa_impl = if (builtin.mode == .Debug) std.heap.DebugAllocator(.{ .stack_trace_frames = 16, .verbose_log = false }).init else init.gpa;
     defer {
         if (builtin.mode == .Debug) _ = gpa_impl.deinit();
     }
-    const gpa = gpa_impl.allocator();
+    const gpa = if (builtin.mode == .Debug) gpa_impl.allocator() else gpa_impl;
     const io = init.io;
 
+    const steam_zone = tracy.zoneNamed(@src(), "SteamInit");
     var steam_client: shared.SteamNet.Client = try .init(gpa, io);
     steam_client.handle_packets_future = try io.concurrent(shared.SteamNet.Client.handlePackets, .{&steam_client});
+    steam_zone.end();
 
     defer steam_client.deinit();
 
@@ -24,14 +31,17 @@ pub fn main(init: std.process.Init) !void {
 
     var cross_window: yes.Platform.Cross.Window = .empty(platform);
     const window = cross_window.interface(platform);
+    const window_size: yes.Window.Size = .{ .width = 854, .height = 480 };
+    const window_zone = tracy.zoneNamed(@src(), "WindowOpen");
     try window.open(platform, .{
         .title = "PlanetaryZigma",
-        .size = .{ .width = 600, .height = 400 },
+        .size = window_size,
         .resize_policy = .{ .specified = .{
             .min_size = .{ .width = 300, .height = 200 },
         } },
         .surface_type = .vulkan,
     });
+    window_zone.end();
     defer window.close(platform);
 
     var asset_server = try shared.AssetServer.init(gpa, init.io);
@@ -47,6 +57,7 @@ pub fn main(init: std.process.Init) !void {
     var system_context: system.Context = undefined;
     var system_table: system.ffi.Table = try .load(&watcher.dynlib.?);
 
+    const ctx_zone = tracy.zoneNamed(@src(), "SystemContextInit");
     system_table.systemContextInit(&system_context, &system.Context.Data{
         .gpa = gpa,
         .asset_server = &asset_server,
@@ -56,12 +67,15 @@ pub fn main(init: std.process.Init) !void {
         .world = &world,
         .steam_client = &steam_client,
     });
+    ctx_zone.end();
     defer system_table.systemContextDeinit(&system_context);
 
     var elapsed_time: f32 = 0;
     var accumlated_time: f32 = 0;
     const time_step: f32 = 0.0167;
+    startup_zone.end();
     main_loop: while (true) {
+        tracy.frameMark();
         accumlated_time += getDeltaTime(io);
         if (accumlated_time < time_step) continue;
         accumlated_time -= time_step;
@@ -74,6 +88,19 @@ pub fn main(init: std.process.Init) !void {
                 },
                 .key => |key| {
                     if (key.state == .released and key.sym == .escape) break :main_loop;
+                    if (key.state == .released) {
+                        // numpad 0-9 toggles to that ring slot's lib version (contiguous enum values)
+                        const np0 = @intFromEnum(yes.Window.Event.Key.Sym.numpad_0);
+                        const sym = @intFromEnum(key.sym);
+                        if (sym >= np0 and sym < np0 + 10) {
+                            if (watcher.version(sym - np0)) |lib| {
+                                system_table.systemContextReload(&system_context, true);
+                                system_table = try .load(lib);
+                                system_table.systemContextReload(&system_context, false);
+                                std.log.err("switched to version slot {d}", .{sym - np0});
+                            }
+                        }
+                    }
                 },
                 else => {},
             }
@@ -83,11 +110,7 @@ pub fn main(init: std.process.Init) !void {
         if (try watcher.reload(io)) {
             std.log.err("system table updated", .{});
             system_table.systemContextReload(&system_context, true);
-            watcher.old_dynlib.?.close();
-            watcher.old_dynlib = null;
             system_table = try .load(&watcher.dynlib.?);
-            asset_server.deinit();
-            asset_server = try shared.AssetServer.init(gpa, init.io);
             system_table.systemContextReload(&system_context, false);
         }
 
@@ -96,6 +119,8 @@ pub fn main(init: std.process.Init) !void {
 }
 
 pub fn getDeltaTime(io: std.Io) f32 {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const static = struct {
         var previous: ?std.Io.Timestamp = null;
     };

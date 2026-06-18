@@ -1,7 +1,9 @@
 const std = @import("std");
 const Entity = @import("root.zig").Entity;
+const tracy = @import("ztracy");
 
 pub const endian: std.builtin.Endian = .little;
+
 
 /// Queue of packets of one direction. Server holds a ClientPacket queue per client.
 pub fn PacketQueue(comptime Packet: type) type {
@@ -15,6 +17,7 @@ pub fn PacketQueue(comptime Packet: type) type {
         }
     };
 }
+
 
 // ── Packets, split by direction ─────────────────────────────────────────────
 // Each side only ever receives one direction, so its switch over the packet is
@@ -86,7 +89,6 @@ pub const UpdateCameraRotation = struct {
 };
 
 // ── Wire format (generic over packet direction) ─────────────────────────────
-
 pub fn write(comptime Packet: type, self: Packet, writer: *std.Io.Writer) !void {
     switch (self) {
         inline else => |payload, tag| {

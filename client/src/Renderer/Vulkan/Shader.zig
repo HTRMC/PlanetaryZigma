@@ -4,11 +4,14 @@ const shaderc = @import("shaderc");
 const AssetServer = @import("shared").AssetServer;
 const Device = @import("device.zig").Logical;
 const ext = @import("procs.zig").device.ProcTable;
+const tracy = @import("ztracy");
 pub const check = @import("utils.zig").check;
 
 handle: c.VkShaderEXT = null,
 device: Device,
 shader_create_info: c.VkShaderCreateInfoEXT,
+descriptor_set_layouts: [5]c.VkDescriptorSetLayout,
+descriptor_set_count: u32,
 shader_name: []const u8,
 push_constant_size: u32,
 
@@ -27,9 +30,12 @@ pub fn init(
     device: Device,
     asset_server: *AssetServer,
     shader_create_info: c.VkShaderCreateInfoEXT,
+    descriptor_set_layouts: []const c.VkDescriptorSetLayout,
     shader_name: []const u8,
     push_constant_type: type,
 ) !*@This() {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const self = try gpa.create(@This());
     self.* = .{
         .device = device,
@@ -37,17 +43,27 @@ pub fn init(
         .shader_name = shader_name,
         .handle = null,
         .push_constant_size = @sizeOf(push_constant_type),
+        .descriptor_set_count = @intCast(descriptor_set_layouts.len),
+        .descriptor_set_layouts = undefined,
     };
+    std.debug.assert(descriptor_set_layouts.len <= self.descriptor_set_layouts.len);
+    @memcpy(self.descriptor_set_layouts[0..self.descriptor_set_count], descriptor_set_layouts);
+    self.shader_create_info.pSetLayouts = &self.descriptor_set_layouts;
+    self.shader_create_info.setLayoutCount = self.descriptor_set_count;
     try asset_server.loadAsset(@This(), self, shader_name, loadShader);
     return self;
 }
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     ext.vkDestroyShaderEXT(self.device.handle, self.handle, null);
     // self.* = undefined;
     gpa.destroy(self);
 }
 
 fn loadShader(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: std.Io.File, file_path: []const u8) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     _ = file_path;
     const self: *@This() = @ptrCast(@alignCast(user_data));
     var buffer: [4096]u8 = undefined;

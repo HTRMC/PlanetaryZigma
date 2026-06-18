@@ -3,6 +3,7 @@ const nz = @import("shared").numz;
 const Node = @import("Node.zig");
 const Interpolation = @import("zgltf").Interpolation;
 const AnimationPathCore = @import("zgltf").AnimationPathCore;
+const tracy = @import("ztracy");
 
 const Sampler = struct {
     interpolation: Interpolation,
@@ -10,6 +11,8 @@ const Sampler = struct {
     outputs: std.ArrayList(nz.Vec4(f32)) = .empty,
 
     pub fn init(gpa: std.mem.Allocator, interpolation: Interpolation, num_inputs: usize, num_outputs: usize) !@This() {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         return .{
             .interpolation = interpolation,
             .inputs = try .initCapacity(gpa, num_inputs),
@@ -17,6 +20,8 @@ const Sampler = struct {
         };
     }
     pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
+        const tracy_scope = tracy.zone(@src());
+        defer tracy_scope.end();
         self.inputs.deinit(gpa);
         self.outputs.deinit(gpa);
     }
@@ -35,6 +40,8 @@ start: f32 = std.math.floatMax(f32),
 end: f32 = std.math.floatMin(f32),
 
 pub fn init(gpa: std.mem.Allocator, name: []const u8, num_samplers: usize, num_channels: usize) !@This() {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     return .{
         .name = try gpa.dupe(u8, name),
         .channels = try .initCapacity(gpa, num_channels),
@@ -43,6 +50,8 @@ pub fn init(gpa: std.mem.Allocator, name: []const u8, num_samplers: usize, num_c
 }
 
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     gpa.free(self.name);
     self.channels.deinit(gpa);
     for (self.samplers.items) |*sampler| sampler.deinit(gpa);

@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const DynLib = @import("DynLib.zig").DynLib;
+const tracy = @import("ztracy");
 
 const is_windows = builtin.os.tag == .windows;
 
@@ -10,8 +11,13 @@ dir_path: []const u8,
 source_name: []const u8,
 mtime: std.Io.Timestamp,
 copy_id: u64,
+// ring of the last 10 loaded libs, kept mapped (never closed mid-run) so old versions stay callable
+versions: [25]?DynLib,
+version_count: u64,
 
 pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const source_name = if (is_windows) library_name ++ ".dll" else "lib" ++ library_name ++ ".so";
     const search_paths: []const [:0]const u8 = &.{
         "../lib/",
@@ -41,16 +47,21 @@ pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
         .source_name = source_name,
         .mtime = .zero,
         .copy_id = 0,
+        .versions = @splat(null),
+        .version_count = 0,
     };
 }
 
 pub fn deinit(self: *@This(), io: std.Io) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     _ = io;
-    if (self.dynlib) |*dynlib| dynlib.close();
-    if (self.old_dynlib) |*dynlib| dynlib.close();
+    for (&self.versions) |*slot| if (slot.*) |*dynlib| dynlib.close();
 }
 
 pub fn load(self: *@This(), io: std.Io) !void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     var source_buf: [std.fs.max_path_bytes]u8 = undefined;
     const source_path = try std.fmt.bufPrint(&source_buf, "{s}{s}", .{ self.dir_path, self.source_name });
 
@@ -80,9 +91,20 @@ pub fn load(self: *@This(), io: std.Io) !void {
 
     self.dynlib = dynlib;
     self.mtime = stat.mtime;
+    self.versions[self.version_count % self.versions.len] = dynlib;
+    self.version_count += 1;
+}
+
+// the DynLib in ring slot n (0..9), or null if nothing loaded there yet
+pub fn version(self: *@This(), n: usize) ?*DynLib {
+    if (n >= self.versions.len) return null;
+    if (self.versions[n]) |*lib| return lib;
+    return null;
 }
 
 pub fn reload(self: *@This(), io: std.Io) !bool {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     var source_buf: [std.fs.max_path_bytes]u8 = undefined;
     const source_path = std.fmt.bufPrint(&source_buf, "{s}{s}", .{ self.dir_path, self.source_name }) catch return false;
 
@@ -96,12 +118,15 @@ pub fn reload(self: *@This(), io: std.Io) !bool {
         self.old_dynlib = null;
         return false;
     };
+    self.old_dynlib = null; // ring retains the old lib; never close it mid-run
 
-    std.log.debug("Reloaded dynamic lib: {s}", .{self.source_name});
+    std.log.debug("Reloaded dynamic lib: {s} (ring slot {d})", .{ self.source_name, (self.version_count - 1) % self.versions.len });
     return true;
 }
 
 pub inline fn lookup(self: *@This(), comptime T: type, name: [:0]const u8) !T {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     const function_pointer = self.dynlib.?.lookup(T, name);
     if (function_pointer == null) return error.DynlibLookup;
     return function_pointer.?;

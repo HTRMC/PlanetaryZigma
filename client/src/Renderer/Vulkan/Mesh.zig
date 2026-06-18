@@ -5,6 +5,7 @@ const nz = @import("shared").numz;
 const Device = @import("device.zig").Logical;
 const Buffer = @import("Buffer.zig");
 const Vma = @import("Vma.zig");
+const tracy = @import("ztracy");
 
 pub const box = @import("Meshes/box.zig");
 
@@ -18,7 +19,7 @@ pub const Vertex = shared.Planet(.renderable).Vertex;
 pub const GeoSurface = struct {
     index_start: u32,
     index_count: u32,
-    material_name: []const u8,
+    material_name: ?[]const u8,
 };
 
 pub fn init(
@@ -31,6 +32,8 @@ pub fn init(
     indices: []const u32,
     surfaces: []const GeoSurface,
 ) !@This() {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     var vertex_buffer: Buffer = try .init(
         device,
         vma,
@@ -69,6 +72,8 @@ pub fn init(
 }
 
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     self.index_buffer.deinit(vma);
     self.vertex_buffer.deinit(vma);
     gpa.free(self.name);

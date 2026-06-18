@@ -3,6 +3,7 @@ const c = @import("vulkan");
 const Instance = @import("Instance.zig");
 const check = @import("utils.zig").check;
 const ext = @import("procs.zig").instance.ProcTable;
+const tracy = @import("ztracy");
 
 handle: c.VkDebugUtilsMessengerEXT,
 
@@ -16,6 +17,8 @@ pub const Config = struct {
 };
 
 pub fn init(instance: Instance, config: Config) !@This() {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     var message_severity: u32 = 0;
     if (config.severities.verbose) message_severity |= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
     if (config.severities.warning) message_severity |= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
@@ -43,10 +46,14 @@ pub fn init(instance: Instance, config: Config) !@This() {
 }
 
 pub fn deinit(self: @This(), instance: Instance) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     ext.vkDestroyDebugUtilsMessengerEXT(instance.handle, self.handle, null);
 }
 
 fn callback(severity: c.VkDebugUtilsMessageSeverityFlagBitsEXT, _: c.VkDebugUtilsMessageTypeFlagsEXT, callback_data: [*c]const c.VkDebugUtilsMessengerCallbackDataEXT, _: ?*anyopaque) callconv(.c) c.VkBool32 {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
     _ = switch (severity) {
         c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT => _ = std.c.printf("VK:  %s\n", callback_data.*.pMessage),
         c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT => _ = std.c.printf("VK:  %s\n", callback_data.*.pMessage),
