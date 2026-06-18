@@ -6,6 +6,9 @@ const nz = shared.numz;
 
 pub const zphy = @import("zphy");
 
+pub const body_mass: f32 = 1;
+pub const gravity_accel: f32 = 100;
+
 gpa: std.mem.Allocator,
 io: std.Io,
 global_state_reload: zphy.GlobalState,
@@ -341,7 +344,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         const up_len = nz.vec.length(entity.transform.position);
         if (up_len < 0.0001) continue;
         const up = nz.vec.scale(entity.transform.position, 1.0 / up_len);
-        body_interface.addForce(body_id, nz.vec.scale(-up, 1000000));
+        body_interface.addForce(body_id, nz.vec.scale(-up, body_mass * gravity_accel));
     }
 
     self.physics_system.update(info.delta_time, .{}) catch unreachable;
@@ -444,7 +447,7 @@ pub fn createBody(self: *@This(), entity: *system.Entity) !void {
         .angular_velocity = .{ 0.0, 0.0, 0.0, 0 },
         .allowed_DOFs = translation_only,
         .override_mass_properties = .calc_inertia,
-        .mass_properties_override = .{ .mass = 10000 },
+        .mass_properties_override = .{ .mass = body_mass },
         .max_linear_velocity = 10000,
         .allow_sleeping = false,
     }, .activate);
@@ -456,4 +459,26 @@ pub fn destroyBody(self: *@This(), body_id: zphy.BodyId) void {
     defer tracy_scope.end();
     const body_interface = self.physics_system.getBodyInterfaceMut();
     body_interface.removeAndDestroyBody(body_id);
+}
+
+pub fn moveOnPlanet(
+    body_interface: *zphy.BodyInterface,
+    body_id: zphy.BodyId,
+    planet_up: nz.Vec3(f32),
+    dir: nz.Vec3(f32),
+    speed: f32,
+    vertical: f32,
+) void {
+    const tracy_scope = tracy.zone(@src());
+    defer tracy_scope.end();
+    const walk: nz.Vec3(f32) = if (nz.vec.length(dir) > 0.0001)
+        nz.vec.scale(nz.vec.normalize(dir), speed)
+    else
+        nz.Vec3(f32){ 0, 0, 0 };
+    const v: nz.Vec3(f32) = body_interface.getLinearVelocity(body_id);
+    const radial: nz.Vec3(f32) = if (vertical != 0)
+        nz.vec.scale(planet_up, vertical)
+    else
+        nz.vec.scale(planet_up, nz.vec.dot(v, planet_up));
+    body_interface.setLinearVelocity(body_id, radial + walk);
 }

@@ -133,13 +133,13 @@ pub fn deinit(self: *@This()) void {
     // P2P teardown: shutting down with sockets still open kills the
     // SocketThread mid-flight (exit 5). Cap at ~1s so a stuck relay can't hang.
     var drained: u32 = 0;
-    while (drained < 500) : (drained += 1) {
+    while (drained < 400) : (drained += 1) {
         self.steamPump() catch {};
-        if (conn != 0) {
-            var info: steam.SteamNetConnectionInfo_t = undefined;
-            const alive = sockets.GetConnectionInfo(conn, &info);
-            if (!alive or info.m_eState == .k_ESteamNetworkingConnectionState_None) break;
-        }
+        // if (conn != 0) {
+        //     var info: steam.SteamNetConnectionInfo_t = undefined;
+        //     const alive = sockets.GetConnectionInfo(conn, &info);
+        //     if (!alive or info.m_eState == .k_ESteamNetworkingConnectionState_None) break;
+        // }
         self.io.sleep(.fromMilliseconds(2), .real) catch {};
     }
 
@@ -259,4 +259,3 @@ pub fn connectToServer(self: *@This(), steam_id: u64) !void {
     self.server_conn = conn;
     std.log.info("ConnectP2P({d}) -> {d}", .{ steam_id, conn });
 }
-

@@ -5,8 +5,8 @@ const nz = shared.numz;
 const system = @import("../system.zig");
 const Spawner = @import("Spawner.zig");
 const Physics = @import("Physics.zig");
+const HealthManager = @import("HealthManager.zig");
 const Info = system.Info;
-const component = system.World.component;
 
 gpa: std.mem.Allocator,
 world: *system.World,
@@ -43,10 +43,11 @@ pub fn deinit(self: *@This()) !void {
     _ = self;
 }
 
-pub fn update(self: *@This(), info: *const Info, physics: *const Physics) !void {
+pub fn update(self: *@This(), info: *const Info, physics: *const Physics, health_manager: *HealthManager) !void {
     const tracy_scope = tracy.zone(@src());
     defer tracy_scope.end();
     _ = self;
+
     // std.log.debug("\n\neneties: {d}\n\n", .{info.world.entities.entries.len});
     var player: *system.Entity = undefined;
     for (info.world.entities.values()) |*entity| {
@@ -90,11 +91,19 @@ pub fn update(self: *@This(), info: *const Info, physics: *const Physics) !void 
             body_interface.setRotation(body_id, rot.toVec(), .activate);
         }
 
+        if (distance < 4) {
+            if (entity.attack_cooldown >= 1) {
+                entity.attack_cooldown = 0;
+                if (!health_manager.removeHealth(player, entity.damage)) std.log.debug("did not take damage", .{});
+            } else {
+                entity.attack_cooldown += info.delta_time;
+            }
+        } else {
+            entity.attack_cooldown = 0;
+        }
+
         if (distance < 10) continue;
-        const power: u32 = 1000000;
-        const force = nz.vec.scale(nz.vec.normalize(entity.transform.forward()), power);
-        // body_interface.addImpulse(body_id, force);
-        body_interface.addForce(body_id, force);
-        // body_interface.setPosition(body_id, player.transform.position, .activate);
+        const speed: f32 = 5;
+        Physics.moveOnPlanet(body_interface, body_id, planet_up, entity.transform.forward(), speed, 0);
     }
 }

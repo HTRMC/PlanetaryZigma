@@ -2,6 +2,7 @@ const std = @import("std");
 const shared = @import("shared");
 const system = @import("../system.zig");
 const Physics = @import("Physics.zig");
+const HealthManager = @import("HealthManager.zig");
 const Spawner = @import("Spawner.zig");
 const tracy = @import("ztracy");
 const nz = shared.numz;
@@ -10,17 +11,15 @@ const gravity_acceleration: f32 = 100;
 
 gpa: std.mem.Allocator,
 physics: *Physics,
-spawner: *Spawner,
 world: *system.World,
 to_despawn: std.ArrayList(u32) = .empty,
 
-pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World, physics: *Physics, spawner: *Spawner) !void {
+pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World, physics: *Physics) !void {
     const tracy_scope = tracy.zone(@src());
     defer tracy_scope.end();
     self.* = .{
         .gpa = gpa,
         .physics = physics,
-        .spawner = spawner,
         .world = world,
     };
 }
@@ -31,7 +30,12 @@ pub fn deinit(self: *@This()) void {
     self.to_despawn.deinit(self.gpa);
 }
 
-pub fn update(self: *@This(), info: *const system.Info) !void {
+pub fn update(
+    self: *@This(),
+    info: *const system.Info,
+    health_manager: *HealthManager,
+    spawner: *Spawner,
+) !void {
     const tracy_scope = tracy.zone(@src());
     defer tracy_scope.end();
     const query = self.physics.physics_system.getNarrowPhaseQuery();
@@ -45,7 +49,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
 
         bullet.lifetime -= dt;
         if (bullet.lifetime <= 0) {
-            try self.to_despawn.append(self.gpa, entity.id);
+            try spawner.depspawn(entity.id);
             continue;
         }
 
@@ -68,22 +72,12 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
             if (read_lock.body) |hit_body| {
                 const target_id: u32 = @intCast(hit_body.user_data);
                 const hit_entity = self.world.getPtr(target_id) orelse continue;
-                if (hit_entity.flags.health) {
-                    if (target_id == bullet.owner_id) {
-                        continue;
-                    }
-                    hit_entity.health.current -= bullet.damage;
-                    if (hit_entity.health.current <= 0) {
-                        try self.to_despawn.append(self.gpa, target_id);
-                    }
-                    try self.to_despawn.append(self.gpa, entity.id);
+                if (target_id == entity.owner_id) {
+                    continue;
                 }
+                if (health_manager.removeHealth(hit_entity, entity.damage)) try spawner.depspawn(entity.id);
             }
         }
         entity.transform.position = p0 + segment;
-    }
-
-    for (self.to_despawn.items) |id| {
-        try self.spawner.depspawn(id);
     }
 }

@@ -20,6 +20,7 @@ spawner: *Spawner,
 /// Active connection to the server (0 = not yet connected). Filled in from
 /// SteamNet.events on the first .connected event.
 server_conn: shared.SteamNet.Conn = 0,
+my_server_id: u32 = 0,
 /// Whether we've sent the "connect" handshake on the current server_conn.
 sent_connect: bool = false,
 server_list: ServerList = .{},
@@ -129,7 +130,7 @@ fn handleCommand(self: *@This(), info: *const Info, command: shared.net.ServerPa
         .acknowledge => |acknowledge| {
             info.world.camera = .{ .transform = .{ .position = .{ 0, 0, 0 } } };
             self.spawner.spawn(.{ .kind = .player, .server_id = acknowledge.id });
-            info.world.my_server_id = acknowledge.id;
+            self.my_server_id = acknowledge.id;
             std.log.debug("ack entities: {d}", .{info.world.next_id});
         },
         .spawn_entity => |spawn_entity| {
@@ -142,18 +143,6 @@ fn handleCommand(self: *@This(), info: *const Info, command: shared.net.ServerPa
                 },
                 .planet => {
                     self.spawner.spawn(.{ .kind = .planet, .server_id = server_id, .data = spawn_entity.data });
-                    // const size: u32 = @intCast(spawn_entity.data[0]);
-                    // const planet: shared.Planet(.renderable) = try .init(self.gpa, size);
-                    // system_context.planet = planet;
-                    // try system_context.renderer.inner.createModelWithMesh(
-                    //     self.gpa,
-                    //     "planet",
-                    //     planet.vertices,
-                    //     planet.indices,
-                    //     .planet,
-                    // );
-                    // std.log.debug("SPAWNED: Planet {d}", .{size});
-                    // new_entity.kind = .planet;
                 },
                 .enemy => {
                     self.spawner.spawn(.{ .kind = .enemy, .server_id = server_id });
@@ -192,6 +181,11 @@ fn handleCommand(self: *@This(), info: *const Info, command: shared.net.ServerPa
             // const entity = info.world.getPtr(id) orelse return;
             info.world.camera.transform.rotation = .fromVec(rotation_command.rotation);
             info.world.camera.transform.position = rotation_command.position;
+        },
+        .add_health => |health_command| {
+            if (self.my_server_id == health_command.id) {
+                info.world.camera.health += health_command.amount;
+            }
         },
     }
 }

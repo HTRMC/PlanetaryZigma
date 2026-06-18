@@ -1,7 +1,9 @@
 const std = @import("std");
 const system = @import("../system.zig");
+const Entity = system.Entity;
 const shared = @import("shared");
 const Physics = @import("Physics.zig");
+const NetworkManager = @import("NetworkManager.zig");
 const tracy = @import("ztracy");
 const Info = system.Info;
 const nz = shared.nz;
@@ -10,27 +12,22 @@ const max_despawn_count: u32 = 1000;
 
 gpa: std.mem.Allocator,
 world: *system.World,
-physics: *Physics,
-network_pending_spawn: std.ArrayList(shared.Entity.Spawn) = .empty,
-network_pending_despawn: std.ArrayList(u32) = .empty,
 
+pending_spawn: std.ArrayList(u32) = .empty,
 pending_despawn: std.ArrayList(u32) = .empty,
 
-pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World, physics: *Physics) !void {
+pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World) !void {
     const tracy_scope = tracy.zone(@src());
     defer tracy_scope.end();
     self.* = .{
         .gpa = gpa,
         .world = world,
-        .physics = physics,
         .pending_despawn = try .initCapacity(gpa, max_despawn_count),
     };
 }
 pub fn deinit(self: *@This()) void {
     const tracy_scope = tracy.zone(@src());
     defer tracy_scope.end();
-    self.network_pending_despawn.deinit(self.gpa);
-    self.network_pending_spawn.deinit(self.gpa);
     self.pending_despawn.deinit(self.gpa);
 }
 
@@ -42,10 +39,7 @@ pub fn spawn(self: *@This(), entity_info: system.Entity) !*system.Entity {
     const id: u32 = entity.id;
     entity.* = entity_info;
     entity.id = id;
-    if (entity.flags.collider) {
-        try self.physics.createBody(entity);
-    }
-    try self.network_pending_spawn.append(self.gpa, .{ .id = entity.id, .kind = entity.kind });
+    try self.pending_spawn.append(self.gpa, id);
     return entity;
 }
 
@@ -56,10 +50,14 @@ pub fn depspawn(self: *@This(), entity_id: u32) !void {
     self.pending_despawn.appendAssumeCapacity(entity_id);
 }
 
-pub fn update(self: *@This(), info: *const system.Info) !void {
+pub fn update(
+    self: *@This(),
+    info: *const system.Info,
+    physics: *Physics,
+    network_manager: *NetworkManager,
+) !void {
     const tracy_scope = tracy.zone(@src());
     defer tracy_scope.end();
-    _ = info;
     // for (info.world.entities.values()) |*entity| {
     //     if (entity.kind == .enemy) {
     //         try self.depspawn(entity.id);
@@ -77,17 +75,27 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
     //         .flags = .{ .transform = true, .collider = true, .align_to_planet = true, .health = true },
     //     });
     // }
+
+    for (self.pending_spawn.items) |entity_id| {
+        const entity = info.world.entities.getPtr(entity_id) orelse @panic(" this can only happen if we remove enteties from other places than trough spawner,");
+        if (entity.flags.collider) {
+            try physics.createBody(entity);
+        }
+        try network_manager.pending_spawn.append(self.gpa, .{ .id = entity.id, .kind = entity.kind });
+    }
+    self.pending_spawn.clearRetainingCapacity();
+
     std.debug.assert(self.pending_despawn.items.len < max_despawn_count);
     for (self.pending_despawn.items) |entity_id| {
         if (self.world.getPtr(entity_id)) |entity| {
             if (entity.flags.collider) {
-                if (entity.collider.body_id) |body_id| self.physics.destroyBody(body_id);
-                std.log.debug("DESTROY body_id={any} for entity id={d} kind={s}", .{
+                if (entity.collider.body_id) |body_id| physics.destroyBody(body_id);
+                std.log.debug("DESTROYED body_id={any} for entity id={d} kind={s}", .{
                     entity.collider.body_id, entity.id, @tagName(entity.kind),
                 });
             }
             if (!self.world.despawn(entity_id)) @panic("fack");
-            try self.network_pending_despawn.append(self.gpa, entity_id);
+            try network_manager.pending_despawn.append(self.gpa, entity_id);
         }
     }
     self.pending_despawn.clearRetainingCapacity();

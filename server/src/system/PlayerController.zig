@@ -60,13 +60,16 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         if (input.mouse_button_left and controller.attack_cool_down >= 0.1) {
             controller.attack_cool_down = 0;
             const muzzle_speed: f32 = 100;
-            const muzzle_velocity = nz.vec.scale(player.transform.forward(), muzzle_speed);
+            const player_direction = player.transform.forward();
+            const muzzle_velocity = nz.vec.scale(player_direction, muzzle_speed);
             _ = try self.spawner.spawn(
                 .{
                     .kind = .bullet,
-                    .transform = .{ .position = player.transform.position, .rotation = player.transform.rotation },
-                    .bullet = .{ .velocity = muzzle_velocity, .lifetime = 5, .owner_id = player.id },
+                    .owner_id = player.id,
+                    .transform = .{ .position = player.transform.position + nz.vec.scale(player_direction, 1.5), .rotation = player.transform.rotation },
+                    .bullet = .{ .velocity = muzzle_velocity, .lifetime = 5 },
                     .flags = .{ .transform = true, .bullet = true },
+                    .damage = 5,
                 },
             );
         }
@@ -112,19 +115,18 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
 
         // --- Apply to body ---
         if (player.collider.body_id) |id| {
-            var move: nz.Vec3(f32) = .{ 0, 0, 0 };
-            const velocity: f32 = 1000;
-            // if (input.forward) std.log.debug("pressed forward, old pos {any}", .{body_interface.getPosition(id)});
+            const speed: f32 = 10;
+            var dir: nz.Vec3(f32) = .{ 0, 0, 0 };
+            if (input.forward) dir += move_fwd;
+            if (input.backward) dir -= move_fwd;
+            if (input.right) dir += move_right;
+            if (input.left) dir -= move_right;
 
-            if (input.forward) move += nz.vec.scale(move_fwd, velocity);
-            if (input.backward) move -= nz.vec.scale(move_fwd, velocity);
-            if (input.right) move += nz.vec.scale(move_right, velocity);
-            if (input.left) move -= nz.vec.scale(move_right, velocity);
-            if (input.up) move += nz.vec.scale(planet_up, velocity);
-            if (input.down) move -= nz.vec.scale(planet_up, velocity);
+            var vertical: f32 = 0;
+            if (input.up) vertical += speed;
+            if (input.down) vertical -= speed;
 
-            // std.log.debug("add the force pos {any}", .{transform.position});
-            body_interface.setLinearVelocity(id, nz.vec.scale(move, info.delta_time));
+            Physics.moveOnPlanet(body_interface, id, planet_up, dir, speed, vertical);
 
             // Body yaw tracks camera yaw (pitch stays on the camera only).
             body_interface.setRotation(id, camera.yaw_rotation.toVec(), .activate);

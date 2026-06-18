@@ -4,7 +4,6 @@ const tracy = @import("ztracy");
 
 pub const endian: std.builtin.Endian = .little;
 
-
 /// Queue of packets of one direction. Server holds a ClientPacket queue per client.
 pub fn PacketQueue(comptime Packet: type) type {
     return struct {
@@ -17,7 +16,6 @@ pub fn PacketQueue(comptime Packet: type) type {
         }
     };
 }
-
 
 // ── Packets, split by direction ─────────────────────────────────────────────
 // Each side only ever receives one direction, so its switch over the packet is
@@ -38,6 +36,7 @@ pub const ServerPacket = union(enum) {
     despawn_entity: DespawnEntity,
     update_transform: UpdateTransform,
     update_camera_rotation: UpdateCameraRotation,
+    add_health: AddHealth,
 };
 
 // ── Payloads ────────────────────────────────────────────────────────────────
@@ -86,6 +85,11 @@ pub const UpdateCameraRotation = struct {
     id: u32,
     position: @Vector(3, f32),
     rotation: @Vector(4, f32),
+};
+
+pub const AddHealth = struct {
+    id: u16,
+    amount: f16,
 };
 
 // ── Wire format (generic over packet direction) ─────────────────────────────

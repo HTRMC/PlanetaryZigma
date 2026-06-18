@@ -50,8 +50,6 @@ pub fn update(self: *@This(), info: *const system.Info, system_context: *system.
     const tracy_scope = tracy.zone(@src());
     defer tracy_scope.end();
     _ = info;
-    std.debug.assert(self.pending_despawn.items.len < system.World.max_entities);
-    std.debug.assert(self.pending_spawn.items.len < system.World.max_entities);
 
     for (self.pending_spawn.items) |entity_info| {
         if (self.world.getPtr(entity_info.server_id) == null) {
@@ -77,7 +75,7 @@ pub fn update(self: *@This(), info: *const system.Info, system_context: *system.
                 },
                 .bullet => {
                     std.log.info("spawned bullet", .{});
-                    entity.transform.scale = @splat(0.1);
+                    entity.transform.scale = @splat(0.3);
                     std.log.info("spawned bullet-post", .{});
                 },
                 else => {},
