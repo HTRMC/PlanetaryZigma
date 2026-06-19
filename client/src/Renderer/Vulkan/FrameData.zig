@@ -6,7 +6,6 @@ const Device = @import("device.zig").Logical;
 const Buffer = @import("Buffer.zig");
 const Ui = @import("Ui.zig");
 const check = @import("utils.zig").check;
-const tracy = @import("ztracy");
 
 swapchain_semaphore: c.VkSemaphore,
 render_fence: c.VkFence,
@@ -21,8 +20,6 @@ pub const GPUScene = extern struct {
 };
 
 pub fn init(vma: Vma, device: Device) !@This() {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     var alloc_info: c.VkCommandBufferAllocateInfo = .{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = device.command_pool.handle,
@@ -77,8 +74,6 @@ pub fn init(vma: Vma, device: Device) !@This() {
 }
 
 pub fn deinit(self: *@This(), vma: Vma, device: Device) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     c.vkDestroySemaphore(device.handle, self.swapchain_semaphore, null);
     c.vkDestroyFence(device.handle, self.render_fence, null);
     c.vkFreeCommandBuffers(device.handle, device.command_pool.handle, 1, &self.command_buffer);

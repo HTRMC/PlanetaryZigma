@@ -1,13 +1,10 @@
 const std = @import("std");
 const c = @import("vulkan");
 const check = @import("utils.zig").check;
-const tracy = @import("ztracy");
 
 handle: c.VkInstance,
 
 pub fn init(gpa: std.mem.Allocator, required_extensions: []const [*:0]const u8, layers: []const [*:0]const u8) !@This() {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     var version: u32 = undefined;
     try check(c.vkEnumerateInstanceVersion(&version));
     if (c.VK_API_VERSION_MAJOR(version) < 1 or c.VK_API_VERSION_MINOR(version) < 3) return error.DynamicRenderingUnsupported;
@@ -56,7 +53,5 @@ pub fn init(gpa: std.mem.Allocator, required_extensions: []const [*:0]const u8, 
 }
 
 pub fn deinit(self: @This()) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     c.vkDestroyInstance(self.handle, null);
 }

@@ -16,7 +16,6 @@ const Buffer = @import("Buffer.zig");
 const RenderResources = @import("RenderResources.zig");
 const check = @import("utils.zig").check;
 const Info = @import("../Vulkan.zig").Info;
-const tracy = @import("ztracy");
 
 const DecodeError = error{
     DataNotSupported,
@@ -70,7 +69,6 @@ fn decodeImages(gpa: std.mem.Allocator, tasks: []ImageDecodeTask) !void {
 }
 
 fn decodeImageWorker(tasks: []ImageDecodeTask, worker_index: usize, worker_count: usize) void {
-    tracy.setThreadName("image decode");
     var image_index = worker_index;
     while (image_index < tasks.len) : (image_index += worker_count) {
         decodeImageTask(&tasks[image_index]);
@@ -78,8 +76,6 @@ fn decodeImageWorker(tasks: []ImageDecodeTask, worker_index: usize, worker_count
 }
 
 fn decodeImageTask(task: *ImageDecodeTask) void {
-    const decode_zone = tracy.zoneNamed(@src(), "ImageDecodeTask");
-    defer decode_zone.end();
 
     var width: i32 = 0;
     var height: i32 = 0;
@@ -124,8 +120,6 @@ pub fn init(
     render_resources: *RenderResources,
     offset: nz.Transform3D(f32),
 ) !*@This() {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     const self = try gpa.create(@This());
     self.* = .{
         .vma = vma,
@@ -143,8 +137,6 @@ pub fn init(
     return self;
 }
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     for (self.nodes.items) |*node| node.deinit(gpa);
     self.nodes.deinit(gpa);
     for (self.animations.items) |*animation| animation.deinit(gpa);
@@ -158,15 +150,9 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
 }
 
 fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: std.Io.File, file_path: []const u8) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     _ = file_path;
-    const load_zone = tracy.zoneNamed(@src(), "LoadModel");
-    defer load_zone.end();
     const self: *@This() = @ptrCast(@alignCast(user_data));
     const content = blk: {
-        const zone = tracy.zoneNamed(@src(), "ReadGlbFile");
-        defer zone.end();
         var read_buffer: [4096]u8 = undefined;
         var reader = file.reader(io, &read_buffer);
         break :blk try reader.interface.allocRemaining(gpa, .unlimited);
@@ -175,8 +161,6 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
     std.debug.print("size:  {d}\n", .{content.len});
 
     var loaded = blk: {
-        const parse_zone = tracy.zoneNamed(@src(), "ParseGlbSlice");
-        defer parse_zone.end();
         break :blk try zgltf.parseGlbSlice(gpa, content);
     };
     defer loaded.deinit();
@@ -187,8 +171,6 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
 
     const original_sample_count = self.render_resources.samplers.items.len;
     {
-        const zone = tracy.zoneNamed(@src(), "SamplerSetup");
-        defer zone.end();
         if (gltf_loaded.samplers) |samplers| {
             std.log.info("Sampler count was {d}", .{samplers.len});
             for (samplers) |sampler| {
@@ -227,8 +209,6 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
 
     const original_image_count = self.render_resources.images.items.len;
     {
-        const zone = tracy.zoneNamed(@src(), "ImageSetup");
-        defer zone.end();
         if (gltf_loaded.images) |images| {
             std.log.info("image count was {d}", .{images.len});
             var decoded_images = try gpa.alloc(DecodedImage, images.len);
@@ -262,8 +242,6 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
             }
 
             {
-                const decode_zone = tracy.zoneNamed(@src(), "ImageDecode");
-                defer decode_zone.end();
                 try decodeImages(gpa, decode_tasks);
             }
 
@@ -274,8 +252,6 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
             }
             const upload_cmd = try self.device.beginImmediateCommand();
             for (decoded_images) |*decoded_image| {
-                const image_zone = tracy.zoneNamed(@src(), "Image");
-                defer image_zone.end();
                 if (decoded_image.err) |err| return err;
                 try if (decoded_image.pixels == null) error.LoadingStbi;
                 var new_image: Image = try .init(
@@ -288,8 +264,6 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                     true,
                 );
                 {
-                    const upload_zone = tracy.zoneNamed(@src(), "ImageUpload");
-                    defer upload_zone.end();
                     try new_image.recordUploadDataToImage(gpa, self.vma, self.device, upload_cmd, decoded_image.pixels, 4, &upload_buffers);
                 }
                 decoded_image.deinit();
@@ -302,11 +276,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
     }
 
     {
-        const mesh_setup_zone = tracy.zoneNamed(@src(), "MeshSetup");
-        defer mesh_setup_zone.end();
         if (gltf_loaded.meshes) |meshes| for (meshes) |mesh| {
-            const mesh_zone = tracy.zoneNamed(@src(), "Mesh");
-            defer mesh_zone.end();
             var surfaces: std.ArrayList(Mesh.GeoSurface) = try .initCapacity(gpa, mesh.primitives.len);
             defer surfaces.deinit(gpa);
             var vertices: std.ArrayList(Mesh.Vertex) = .empty;
@@ -316,13 +286,9 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
 
             std.log.debug("MESH primitives: {d}\n", .{mesh.primitives.len});
             for (mesh.primitives) |primitive| {
-                const primitive_zone = tracy.zoneNamed(@src(), "Primitive");
-                defer primitive_zone.end();
                 var indices_start: u32 = 0;
                 var indices_count: u32 = 0;
                 {
-                    const index_zone = tracy.zoneNamed(@src(), "IndexBuild");
-                    defer index_zone.end();
                     indices_start = @intCast(indices.items.len);
 
                     const acc_idx = primitive.indices.?;
@@ -428,8 +394,6 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                 );
 
                 if (gltf_loaded.animations != null) {
-                    const vertex_zone = tracy.zoneNamed(@src(), "SkinnedVertexBuild");
-                    defer vertex_zone.end();
                     const joint_accessor_idx = primitive.attributes.map.get("JOINTS_0") orelse return error.NoJoints;
                     const joint_accessor = gltf_loaded.accessors.?[joint_accessor_idx];
                     std.debug.assert(joint_accessor.componentType == @intFromEnum(zgltf.ComponentType.unsigned_byte));
@@ -472,8 +436,6 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                         };
                     }
                 } else {
-                    const vertex_zone = tracy.zoneNamed(@src(), "VertexBuild");
-                    defer vertex_zone.end();
                     var dst = try vertices.addManyAsSlice(gpa, pos_accessor.count);
                     for (0..pos_accessor.count) |i| {
                         dst[i] = .{
@@ -488,8 +450,6 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
             }
 
             if (mesh.name != null and !self.render_resources.meshes.contains(mesh.name.?)) {
-                const mesh_upload_zone = tracy.zoneNamed(@src(), "MeshGpuUpload");
-                defer mesh_upload_zone.end();
                 const new_mesh: Mesh = try .init(
                     gpa,
                     self.vma,

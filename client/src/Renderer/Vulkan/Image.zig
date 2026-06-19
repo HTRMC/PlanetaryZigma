@@ -4,7 +4,6 @@ const Vma = @import("Vma.zig");
 const Device = @import("device.zig").Logical;
 const Buffer = @import("Buffer.zig");
 const check = @import("utils.zig").check;
-const tracy = @import("ztracy");
 
 vk_image: c.VkImage = undefined,
 vk_imageview: c.VkImageView = undefined,
@@ -22,8 +21,6 @@ pub fn init(
     image_view_mask: c.VkImageAspectFlags,
     mip_mapped: bool,
 ) !@This() {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     var image_info: c.VkImageCreateInfo = .{
         .sType = c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .pNext = null,
@@ -86,15 +83,11 @@ pub fn init(
 }
 
 pub fn deinit(self: *@This(), vulkan_mem_alloc: Vma, device: Device) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     c.vkDestroyImageView(device.handle, self.vk_imageview, null);
     Vma.c.vmaDestroyImage(vulkan_mem_alloc.handle, @ptrCast(self.vk_image), self.vma_allocation);
 }
 
 pub fn uploadDataToImage(self: *@This(), vma: Vma, device: Device, data: anytype, bytes_per_pixel: u32) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     var upload_buffers: std.ArrayList(Buffer) = .empty;
     defer {
         for (upload_buffers.items) |*upload_buffer| upload_buffer.deinit(vma);
@@ -116,8 +109,6 @@ pub fn recordUploadDataToImage(
     bytes_per_pixel: u32,
     upload_buffers: *std.ArrayList(Buffer),
 ) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     const data_size: u32 = self.extent.depth * self.extent.width * self.extent.height * bytes_per_pixel;
 
     var upload_buffer: Buffer = try .init(
@@ -181,8 +172,6 @@ pub fn recordUploadDataToImage(
 }
 
 fn generateMipmaps(self: *@This(), cmd_buffer: c.VkCommandBuffer, image_size: c.VkExtent3D) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     var size = image_size;
     const mip_levels: usize = @as(usize, @intFromFloat(@floor(@log2(@as(f32, @floatFromInt(@max(size.width, size.height))))))) + 1;
 
@@ -276,8 +265,6 @@ pub fn copyOntoImage(
     cmd: c.VkCommandBuffer,
     dest_image: @This(),
 ) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     var blit_region: c.VkImageBlit2 = .{
         .sType = c.VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
         .pNext = null,
@@ -334,8 +321,6 @@ pub const Barrier = struct {
         image: c.VkImage,
         aspect_mask: c.VkImageAspectFlags,
     ) @This() {
-        const tracy_scope = tracy.zone(@src());
-        defer tracy_scope.end();
         return .{
             .cmd = cmd,
             .image = image,
@@ -344,8 +329,6 @@ pub const Barrier = struct {
     }
 
     pub fn transition(self: *@This(), layout: c.VkImageLayout, stage: c.VkPipelineStageFlags, access: c.VkAccessFlags) void {
-        const tracy_scope = tracy.zone(@src());
-        defer tracy_scope.end();
         var new: c.VkImageMemoryBarrier = .{
             .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
             // .srcStageMask = src_stage,
@@ -380,8 +363,6 @@ pub const Barrier = struct {
         base_mip_level: u32,
         layer_count: u32,
     ) void {
-        const tracy_scope = tracy.zone(@src());
-        defer tracy_scope.end();
         var new: c.VkImageMemoryBarrier2 = .{
             .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
             .srcStageMask = self.src_stage,

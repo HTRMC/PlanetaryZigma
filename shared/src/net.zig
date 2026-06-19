@@ -1,6 +1,5 @@
 const std = @import("std");
 const Entity = @import("root.zig").Entity;
-const tracy = @import("ztracy");
 
 pub const endian: std.builtin.Endian = .little;
 

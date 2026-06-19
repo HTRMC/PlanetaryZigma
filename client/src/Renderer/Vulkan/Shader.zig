@@ -4,7 +4,6 @@ const shaderc = @import("shaderc");
 const AssetServer = @import("shared").AssetServer;
 const Device = @import("device.zig").Logical;
 const ext = @import("procs.zig").device.ProcTable;
-const tracy = @import("ztracy");
 pub const check = @import("utils.zig").check;
 
 handle: c.VkShaderEXT = null,
@@ -34,8 +33,6 @@ pub fn init(
     shader_name: []const u8,
     push_constant_type: type,
 ) !*@This() {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     const self = try gpa.create(@This());
     self.* = .{
         .device = device,
@@ -54,16 +51,12 @@ pub fn init(
     return self;
 }
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     ext.vkDestroyShaderEXT(self.device.handle, self.handle, null);
     // self.* = undefined;
     gpa.destroy(self);
 }
 
 fn loadShader(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: std.Io.File, file_path: []const u8) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     _ = file_path;
     const self: *@This() = @ptrCast(@alignCast(user_data));
     var buffer: [4096]u8 = undefined;
