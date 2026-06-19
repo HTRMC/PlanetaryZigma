@@ -1,5 +1,4 @@
 const std = @import("std");
-const tracy = @import("ztracy");
 pub const c = @import("vulkan");
 // const vulkanC = @import("vulkan");
 const Instance = @import("Instance.zig");
@@ -14,8 +13,6 @@ pub const AllocationInfo = c.VmaAllocationInfo;
 handle: c.VmaAllocator = undefined,
 
 pub fn init(instance: Instance, physical_device: PhysicalDevice, device: Device) !@This() {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     var vma_info: c.VmaAllocatorCreateInfo = .{
         .physicalDevice = @ptrCast(physical_device.handle),
         .device = @ptrCast(device.handle),
@@ -33,7 +30,5 @@ pub fn init(instance: Instance, physical_device: PhysicalDevice, device: Device)
 }
 
 pub fn deinit(self: @This()) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     c.vmaDestroyAllocator(self.handle);
 }

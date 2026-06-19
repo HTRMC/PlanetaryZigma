@@ -32,8 +32,6 @@ pub fn init(
     net: *shared.SteamNet.Client,
     spawner: *Spawner,
 ) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     self.* = .{
         .gpa = gpa,
         .io = io,
@@ -43,14 +41,10 @@ pub fn init(
 }
 
 pub fn deinit(self: *@This()) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     _ = self;
 }
 
 fn sendConnect(self: *@This()) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     const name = "lucas";
     const cmd: shared.net.ClientPacket = .{ .connect = .{ .name_len = name.len, .name = name } };
     try self.sendCommand(cmd, .reliable);

@@ -10,14 +10,10 @@ physics: *Physics,
 spawner: *Spawner,
 
 pub fn init(self: *@This(), physics: *Physics, spawner: *Spawner) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     self.* = .{ .physics = physics, .spawner = spawner };
 }
 
 pub fn deinit(self: *@This()) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     _ = self;
 }
 

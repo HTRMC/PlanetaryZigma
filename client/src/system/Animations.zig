@@ -12,8 +12,6 @@ const SkeletonAnimation = @import("../Renderer/Vulkan/SkeletonAnimation.zig");
 gpa: std.mem.Allocator,
 
 pub fn init(self: *@This(), gpa: std.mem.Allocator) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     self.* = .{ .gpa = gpa };
 }
 
@@ -88,8 +86,6 @@ pub fn update(
 }
 
 fn updateJoints(node_index: usize, skeleton_animation: *SkeletonAnimation, model: *Model) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     const node = &skeleton_animation.nodes[node_index];
     if (node.skin_id > -1) {
         const skin = &model.skins.items[@intCast(node.skin_id)];

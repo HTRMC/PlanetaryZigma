@@ -3,19 +3,14 @@ const Instance = @import("Instance.zig");
 const device = @import("device.zig");
 const c = @import("vulkan");
 const check = @import("utils.zig").check;
-const tracy = @import("ztracy");
 
 handle: c.VkSurfaceKHR,
 
 pub fn deinit(self: @This(), instance: Instance) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     c.vkDestroySurfaceKHR(instance.handle, self.handle, null);
 }
 
 pub fn getFormat(self: @This(), gpa: std.mem.Allocator, physical_device: device.Physical) !c.VkSurfaceFormatKHR {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     var format_count: u32 = 0;
     try check(c.vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device.handle, self.handle, &format_count, null));
 
@@ -34,8 +29,6 @@ pub fn getFormat(self: @This(), gpa: std.mem.Allocator, physical_device: device.
 }
 
 pub fn getExtent(self: @This(), physical_device: device.Physical, width: u32, height: u32) !c.VkExtent2D {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     var capabilities: c.VkSurfaceCapabilitiesKHR = undefined;
     try check(c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device.handle, self.handle, &capabilities));
 

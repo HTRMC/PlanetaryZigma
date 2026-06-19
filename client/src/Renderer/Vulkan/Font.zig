@@ -8,7 +8,6 @@ const stbTruetype = @import("stb_truetype");
 const AssetServer = @import("shared").AssetServer;
 const RenderResources = @import("RenderResources.zig");
 const check = @import("utils.zig").check;
-const tracy = @import("ztracy");
 
 material: Material,
 image: Image,
@@ -29,8 +28,6 @@ pub fn init(
     asset_server: *AssetServer,
     render_resources: *RenderResources,
 ) !*@This() {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     const self = try gpa.create(@This());
     self.* = .{
         .device = device,
@@ -48,8 +45,6 @@ pub fn init(
 }
 
 fn loadFont(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: std.Io.File, file_path: []const u8) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     _ = file_path;
     const self: *@This() = @ptrCast(@alignCast(user_data));
     var read_buffer: [4096]u8 = undefined;
@@ -104,8 +99,6 @@ fn loadFont(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: std
 }
 
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma, device: Device) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     self.image.deinit(vma, device);
     self.material.deinit(gpa, vma);
     c.vkDestroySampler(device.handle, self.sampler, null);

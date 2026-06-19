@@ -12,8 +12,6 @@ gpa: std.mem.Allocator,
 world: *system.World,
 
 pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World, spawner: *Spawner) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     self.* = .{
         .gpa = gpa,
         .world = world,
@@ -38,8 +36,6 @@ pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World, spawne
 }
 
 pub fn deinit(self: *@This()) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     _ = self;
 }
 

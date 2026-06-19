@@ -1,7 +1,6 @@
 const std = @import("std");
 const steam = @import("steamworks");
 const Packets = @import("../SteamNet.zig").Packets;
-const tracy = @import("ztracy");
 
 pub const max_connections: usize = 32;
 connections: [max_connections]steam.HSteamNetConnection = @splat(0),
@@ -17,8 +16,6 @@ socket: steam.ISteamNetworkingSockets,
 packets: Packets,
 
 pub fn init(gpa: std.mem.Allocator, io: std.Io) !@This() {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     if (!steam.Server.SteamInternal_GameServer_Init(
         0,
         27016,
@@ -73,15 +70,11 @@ pub fn init(gpa: std.mem.Allocator, io: std.Io) !@This() {
 }
 
 pub fn deinit(self: *@This()) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     steam.Server.SteamGameServer_Shutdown();
     self.packets.deinit(self.gpa);
 }
 
 pub fn handlePackets(self: *@This()) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     while (true) {
         try self.io.checkCancel();
         try self.packet_mutex.lock(self.io);
@@ -94,8 +87,6 @@ pub fn handlePackets(self: *@This()) !void {
 }
 
 pub fn recievePackets(self: *@This()) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     var msgs: [16][*c]steam.SteamNetworkingMessage_t = undefined;
     for (self.connections) |conn| {
         if (conn == 0) continue;
@@ -126,8 +117,6 @@ pub fn recievePackets(self: *@This()) !void {
 }
 
 pub fn sendPackets(self: *@This()) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     if (self.packets.outgoing.items.len == 0) return;
     for (self.packets.outgoing.items) |*msg| {
         var msg_num: i64 = 0;
@@ -142,8 +131,6 @@ fn steamCallback(
     pipe: steam.HSteamPipe,
     sock: ?steam.ISteamNetworkingSockets,
 ) !i32 {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     steam.SteamAPI_ManualDispatch_RunFrame(pipe);
     var msg: steam.CallbackMsg_t = undefined;
     while (steam.SteamAPI_ManualDispatch_GetNextCallback(pipe, &msg)) {
@@ -183,8 +170,6 @@ fn steamCallback(
 }
 
 fn addConnection(self: *@This(), conn: steam.HSteamNetConnection) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     for (&self.connections) |*slot| {
         if (slot.* == 0) {
             slot.* = conn;
@@ -195,8 +180,6 @@ fn addConnection(self: *@This(), conn: steam.HSteamNetConnection) void {
 }
 
 fn removeConnection(self: *@This(), conn: steam.HSteamNetConnection) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     for (&self.connections) |*slot| {
         if (slot.* == conn) {
             slot.* = 0;

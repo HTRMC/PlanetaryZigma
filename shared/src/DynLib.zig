@@ -11,21 +11,15 @@ pub const DynLib = struct {
     backend: Backend,
 
     pub fn open(path: []const u8) !@This() {
-        const tracy_scope = tracy.zone(@src());
-        defer tracy_scope.end();
         return .{ .backend = try Backend.open(path) };
     }
 
     pub fn close(self: *@This()) void {
-        const tracy_scope = tracy.zone(@src());
-        defer tracy_scope.end();
         if (tracy.enabled) return;
         self.backend.close();
     }
 
     pub fn lookup(self: *@This(), comptime T: type, name: [:0]const u8) ?T {
-        const tracy_scope = tracy.zone(@src());
-        defer tracy_scope.end();
         return self.backend.lookup(T, name);
     }
 };
@@ -38,8 +32,6 @@ const WindowsDynLib = struct {
     extern "kernel32" fn FreeLibrary(module: std.os.windows.HMODULE) callconv(.winapi) std.os.windows.BOOL;
 
     fn open(path: []const u8) !WindowsDynLib {
-        const tracy_scope = tracy.zone(@src());
-        defer tracy_scope.end();
         var buf: [std.fs.max_path_bytes]u16 = undefined;
         const len = try std.unicode.utf8ToUtf16Le(buf[0 .. buf.len - 1], path);
         buf[len] = 0;
@@ -48,15 +40,11 @@ const WindowsDynLib = struct {
     }
 
     fn close(self: *WindowsDynLib) void {
-        const tracy_scope = tracy.zone(@src());
-        defer tracy_scope.end();
         _ = FreeLibrary(self.handle);
         self.* = undefined;
     }
 
     fn lookup(self: *WindowsDynLib, comptime T: type, name: [:0]const u8) ?T {
-        const tracy_scope = tracy.zone(@src());
-        defer tracy_scope.end();
         return @ptrCast(GetProcAddress(self.handle, name.ptr) orelse return null);
     }
 };

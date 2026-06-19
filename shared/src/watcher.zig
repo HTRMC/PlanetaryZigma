@@ -1,7 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const DynLib = @import("DynLib.zig").DynLib;
-const tracy = @import("ztracy");
 
 const is_windows = builtin.os.tag == .windows;
 
@@ -16,8 +15,6 @@ versions: [25]?DynLib,
 version_count: u64,
 
 pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     const source_name = if (is_windows) library_name ++ ".dll" else "lib" ++ library_name ++ ".so";
     const search_paths: []const [:0]const u8 = &.{
         "../lib/",
@@ -53,15 +50,11 @@ pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
 }
 
 pub fn deinit(self: *@This(), io: std.Io) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     _ = io;
     for (&self.versions) |*slot| if (slot.*) |*dynlib| dynlib.close();
 }
 
 pub fn load(self: *@This(), io: std.Io) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     var source_buf: [std.fs.max_path_bytes]u8 = undefined;
     const source_path = try std.fmt.bufPrint(&source_buf, "{s}{s}", .{ self.dir_path, self.source_name });
 
@@ -103,8 +96,6 @@ pub fn version(self: *@This(), n: usize) ?*DynLib {
 }
 
 pub fn reload(self: *@This(), io: std.Io) !bool {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     var source_buf: [std.fs.max_path_bytes]u8 = undefined;
     const source_path = std.fmt.bufPrint(&source_buf, "{s}{s}", .{ self.dir_path, self.source_name }) catch return false;
 
@@ -125,8 +116,6 @@ pub fn reload(self: *@This(), io: std.Io) !bool {
 }
 
 pub inline fn lookup(self: *@This(), comptime T: type, name: [:0]const u8) !T {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     const function_pointer = self.dynlib.?.lookup(T, name);
     if (function_pointer == null) return error.DynlibLookup;
     return function_pointer.?;

@@ -6,7 +6,6 @@ const Vma = @import("Vma.zig");
 const Device = @import("device.zig").Logical;
 const Font = @import("Font.zig");
 const stbTruetype = @import("stb_truetype");
-const tracy = @import("ztracy");
 
 pub const max_ui_quads: usize = 1024;
 
@@ -96,8 +95,6 @@ pub fn init(
     screen_heigth: u32,
     default_font: *Font,
 ) !@This() {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     const ui_index_buffer: Buffer = try .init(
         device,
         vma,
@@ -128,8 +125,6 @@ pub fn init(
 }
 
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     self.index_buffer.deinit(vma);
     self.quads.deinit(gpa);
     self.nodes.deinit(gpa);
@@ -137,8 +132,6 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma) void {
 }
 
 pub fn start(self: *@This(), mouse_state: MouseState) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     self.hotUpdate();
     // self.activeUpdate();
     self.left_click_prev = mouse_state.left_click;
@@ -149,15 +142,11 @@ pub fn start(self: *@This(), mouse_state: MouseState) void {
 }
 
 pub fn add(self: *@This(), parent: ?[]const u8, layout: Layout) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     const parent_id: ?u32 = if (parent) |name| (self.names.get(name) orelse return) else null;
     self.addNode(parent_id, layout);
 }
 
 fn addNode(self: *@This(), parent_id: ?u32, layout: Layout) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     const handle: u32 = @intCast(self.nodes.items.len);
     self.nodes.appendAssumeCapacity(.{
         .id = handle,
@@ -172,15 +161,11 @@ fn addNode(self: *@This(), parent_id: ?u32, layout: Layout) void {
 }
 
 pub fn end(self: *@This()) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     self.resolveLayout();
     self.pushQuads();
 }
 
 fn resolveLayout(self: *@This()) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     for (self.nodes.items) |*node| {
         const parent_node = if (node.parent_id) |parent_id| &self.nodes.items[parent_id] else null;
         const origin: Rect = if (parent_node) |parent| parent.rect else .{
@@ -227,8 +212,6 @@ fn resolveLayout(self: *@This()) void {
 }
 
 fn pushQuads(self: *@This()) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     for (self.nodes.items) |node| {
         const rect = node.rect;
         const colors: [4]f32 = node.layout.color.toVec();
@@ -273,20 +256,14 @@ fn pushQuads(self: *@This()) void {
 // }
 
 pub fn isHot(self: *@This(), name: []const u8) bool {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     return eqlName(name, self.hot_item);
 }
 
 pub fn isActive(self: *@This(), name: []const u8) bool {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     return (eqlName(name, self.hot_item) and self.mouse_state.left_click);
 }
 
 fn hotUpdate(self: *@This()) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     self.hot_item = null;
     var i = self.nodes.items.len;
     while (i > 0) {
@@ -310,8 +287,6 @@ fn hotUpdate(self: *@This()) void {
 // }
 
 fn eqlName(a: ?[]const u8, b: ?[]const u8) bool {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     if (a == null or b == null)
         return false;
     return std.mem.eql(u8, a.?, b.?);

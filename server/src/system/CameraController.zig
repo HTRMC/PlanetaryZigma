@@ -5,14 +5,10 @@ const tracy = @import("ztracy");
 const nz = shared.numz;
 
 pub fn init(self: *@This()) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     self.* = .{};
 }
 
 pub fn deinit(self: *@This()) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     _ = self;
 }
 

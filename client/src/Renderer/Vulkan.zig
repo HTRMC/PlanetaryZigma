@@ -81,14 +81,10 @@ pub const InitOptions = struct {
 };
 
 pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOptions) !*@This() {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     const self = try gpa.create(@This());
     self.skelentons = .init(gpa);
 
-    const device_zone = tracy.zoneNamed(@src(), "DeviceSetup");
     {
-        const zone = tracy.zoneNamed(@src(), "Instance");
         self.instance = try .init(gpa, options.instance.extensions, options.instance.layers);
         procs.instance.load(self.instance.handle, null);
         self.debug_messenger = try .init(self.instance, .{
@@ -102,38 +98,26 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         self.surface = if (options.surface.init != null and options.surface.data != null) .{
             .handle = @ptrCast(try options.surface.init.?(self.instance.handle, options.surface.data.?)),
         } else return error.configSurface;
-        zone.end();
     }
     {
-        const zone = tracy.zoneNamed(@src(), "Device");
         self.physical_device = try .pick(self.instance, self.surface.handle);
         self.device = try .init(self.physical_device, options.device.extensions);
         procs.device.load(self.device.handle, null);
-        zone.end();
     }
     {
-        const zone = tracy.zoneNamed(@src(), "Vma");
         self.vma = try .init(self.instance, self.physical_device, self.device);
-        zone.end();
     }
-    device_zone.end();
 
-    const swapchain_zone = tracy.zoneNamed(@src(), "SwapchainResources");
     {
-        const zone = tracy.zoneNamed(@src(), "Swapchain");
         self.swapchain = try .init(gpa, self.vma, self.physical_device, self.device, self.surface, options.swapchain.width, options.swapchain.heigth);
-        zone.end();
     }
     {
-        const zone = tracy.zoneNamed(@src(), "Frames");
         for (&self.frames) |*frame| {
             frame.* = try .init(self.vma, self.device);
             // std.debug.print("PTR: {*}\n", .{&frame.gpu_scene.buffer});
         }
-        zone.end();
     }
 
-    const layout_zone = tracy.zoneNamed(@src(), "DescriptorLayouts");
     self.scene_layout = try .init(self.device, &.{
         .{
             .binding = 0,
@@ -151,18 +135,12 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
             .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT | c.VK_SHADER_STAGE_FRAGMENT_BIT,
         },
     }, c.VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
-    layout_zone.end();
 
     {
-        const zone = tracy.zoneNamed(@src(), "RenderResources");
         self.render_resources = try .init(gpa, self.vma, self.physical_device, self.device, self.material_layout);
-        zone.end();
     }
-    swapchain_zone.end();
 
-    const font_zone = tracy.zoneNamed(@src(), "FontAndUi");
     {
-        const zone = tracy.zoneNamed(@src(), "Font");
         self.font = try .init(
             gpa,
             self.vma,
@@ -171,10 +149,8 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
             asset_server,
             &self.render_resources,
         );
-        zone.end();
     }
     {
-        const zone = tracy.zoneNamed(@src(), "Ui");
         self.ui = try .init(
             gpa,
             self.vma,
@@ -183,13 +159,9 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
             self.swapchain.extent.height,
             self.font,
         );
-        zone.end();
     }
-    font_zone.end();
 
-    const pipeline_zone = tracy.zoneNamed(@src(), "PipelinesAndMesh");
     {
-        const zone = tracy.zoneNamed(@src(), "PipelineLayouts");
         self.pipeline_layout = try .init(
             self.device,
             Shader.AnimationPushConstant,
@@ -201,10 +173,8 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
             Shader.UiPushConstant,
             &.{self.material_layout.handle},
         );
-        zone.end();
     }
     {
-        const zone = tracy.zoneNamed(@src(), "BoxMesh");
         _ = try createModelWithMesh(
             self,
             gpa,
@@ -213,10 +183,8 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
             Mesh.box.indicies,
             .unknown,
         );
-        zone.end();
     }
     {
-        const zone = tracy.zoneNamed(@src(), "BulletMesh");
         _ = try createModelWithMesh(
             self,
             gpa,
@@ -225,12 +193,8 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
             Mesh.box.indicies,
             .bullet,
         );
-        zone.end();
     }
-    pipeline_zone.end();
 
-    const glb_zone = tracy.zoneNamed(@src(), "GltfModelInit");
-    defer glb_zone.end();
     const player_model: *GltfModel = try .init(
         gpa,
         self.vma,
@@ -258,9 +222,7 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
     );
     self.models.put(.enemy, enemy_model);
 
-    const shader_zone = tracy.zoneNamed(@src(), "ShaderCompile");
     {
-        const zone = tracy.zoneNamed(@src(), "VertexShader");
         self.vertex_shader = try .init(
             gpa,
             self.device,
@@ -278,10 +240,8 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
             "shaders/vertex.vert",
             Shader.AnimationPushConstant,
         );
-        zone.end();
     }
     {
-        const zone = tracy.zoneNamed(@src(), "FragmentShader");
         self.fragment_shader = try .init(
             gpa,
             self.device,
@@ -297,10 +257,8 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
             "shaders/fragment.frag",
             Shader.AnimationPushConstant,
         );
-        zone.end();
     }
     {
-        const zone = tracy.zoneNamed(@src(), "UiVertexShader");
         self.ui_vertex_shader = try .init(
             gpa,
             self.device,
@@ -317,10 +275,8 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
             "shaders/ui.vert",
             Shader.UiPushConstant,
         );
-        zone.end();
     }
     {
-        const zone = tracy.zoneNamed(@src(), "UiFragmentShader");
         self.ui_fragment_shader = try .init(
             gpa,
             self.device,
@@ -336,16 +292,12 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
             "shaders/ui.frag",
             Shader.UiPushConstant,
         );
-        zone.end();
     }
-    shader_zone.end();
 
     return self;
 }
 
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     check(c.vkDeviceWaitIdle(self.device.handle)) catch {};
 
     self.render_resources.deinit(gpa, self.vma, self.device);
@@ -477,8 +429,6 @@ pub fn update(self: *@This(), info: *const Info) !void {
 }
 
 pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *FrameData, info: *const Info) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     const elapsed_time = info.elapsed_time;
     var draw_image_barrier: Image.Barrier = .init(cmd, self.swapchain.draw_image.vk_image, c.VK_IMAGE_ASPECT_COLOR_BIT);
 
@@ -712,8 +662,6 @@ pub fn draw(
     node_id: usize,
     top_matrix: nz.Mat4x4(f32),
 ) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     // const node_transform: nz.Transform3D(f32) = .fromMat4x4(top_transform.toMat4x4().mul(node.world_transform.toMat4x4()));
     // TODO: World tansform incorrect?
     const skeleton = self.skelentons.get(entity.id);
@@ -788,8 +736,6 @@ pub fn draw(
 }
 
 pub fn resize(self: *@This(), gpa: std.mem.Allocator, width: u32, height: u32) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     try self.swapchain.recreate(
         gpa,
         self.vma,
@@ -804,8 +750,6 @@ pub fn resize(self: *@This(), gpa: std.mem.Allocator, width: u32, height: u32) !
 }
 
 pub fn createModelWithMesh(self: *@This(), gpa: std.mem.Allocator, name: []const u8, verices: []const Mesh.Vertex, indices: []const u32, kind: shared.Entity.Kind) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     const mesh = try Mesh.init(
         gpa,
         self.vma,
@@ -850,8 +794,6 @@ pub fn removeSkeleton(self: *@This(), gpa: std.mem.Allocator, entity_id: u32) vo
 }
 
 fn getViewMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     const inv_rotation = transform.rotation.conjugate().toMat4x4();
     const inv_translation = nz.Mat4x4(f32).translate(-transform.position);
 
@@ -859,8 +801,6 @@ fn getViewMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {
 }
 
 fn perspective(fovy_rad: f32, aspect: f32, near: f32, far: f32) nz.Mat4x4(f32) {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     const f = 1.0 / std.math.tan(fovy_rad / 2.0);
     return .new(.{
         f / aspect, 0, 0, 0,
@@ -871,8 +811,6 @@ fn perspective(fovy_rad: f32, aspect: f32, near: f32, far: f32) nz.Mat4x4(f32) {
 }
 
 fn orthographic(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) nz.Mat4x4(f32) {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     return .new(.{
         2.0 / (right - left),             0.0,                              0.0,                          0.0,
         0.0,                              2.0 / (top - bottom),             0.0,                          0.0,

@@ -15,8 +15,6 @@ world: *system.World,
 to_despawn: std.ArrayList(u32) = .empty,
 
 pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World, physics: *Physics) !void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     self.* = .{
         .gpa = gpa,
         .physics = physics,
@@ -25,8 +23,6 @@ pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World, physic
 }
 
 pub fn deinit(self: *@This()) void {
-    const tracy_scope = tracy.zone(@src());
-    defer tracy_scope.end();
     self.to_despawn.deinit(self.gpa);
 }
 
