@@ -76,7 +76,6 @@ fn decodeImageWorker(tasks: []ImageDecodeTask, worker_index: usize, worker_count
 }
 
 fn decodeImageTask(task: *ImageDecodeTask) void {
-
     var width: i32 = 0;
     var height: i32 = 0;
     var nr_channel: i32 = 0;
@@ -110,6 +109,7 @@ animations: std.ArrayList(Animation) = .empty,
 active_animation: usize = 0,
 skins: std.ArrayList(Skin) = .empty,
 offset: nz.Transform3D(f32) = .{},
+READY_RELOAD_DELETE_THIS: bool = false,
 
 pub fn init(
     gpa: std.mem.Allocator,
@@ -151,7 +151,21 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
 
 fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: std.Io.File, file_path: []const u8) !void {
     _ = file_path;
+
     const self: *@This() = @ptrCast(@alignCast(user_data));
+
+    if (self.READY_RELOAD_DELETE_THIS) {
+        for (self.nodes.items) |*node| node.deinit(gpa);
+        self.nodes.clearAndFree(gpa);
+        for (self.animations.items) |*animation| animation.deinit(gpa);
+        self.animations.clearAndFree(gpa);
+        for (self.skins.items) |*skin| skin.deinit(gpa, self.vma);
+        self.skins.clearAndFree(gpa);
+        self.top_nodes.clearAndFree(gpa);
+    } else {
+        self.READY_RELOAD_DELETE_THIS = true;
+    }
+
     const content = blk: {
         var read_buffer: [4096]u8 = undefined;
         var reader = file.reader(io, &read_buffer);
@@ -160,6 +174,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
     defer gpa.free(content);
     std.debug.print("size:  {d}\n", .{content.len});
 
+    std.debug.print("MODEL- Reload 0\n", .{});
     var loaded = blk: {
         break :blk try zgltf.parseGlbSlice(gpa, content);
     };
@@ -169,6 +184,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
 
     // self.clear(gpa);
 
+    std.debug.print("MODEL- Reload 1\n", .{});
     const original_sample_count = self.render_resources.samplers.items.len;
     {
         if (gltf_loaded.samplers) |samplers| {
@@ -207,6 +223,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
         }
     }
 
+    std.debug.print("MODEL- Reload 2\n", .{});
     const original_image_count = self.render_resources.images.items.len;
     {
         if (gltf_loaded.images) |images| {
@@ -241,10 +258,12 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
                 }
             }
 
+            std.debug.print("MODEL- Reload 3\n", .{});
             {
                 try decodeImages(gpa, decode_tasks);
             }
 
+            std.debug.print("MODEL- Reload 4\n", .{});
             var upload_buffers: std.ArrayList(Buffer) = .empty;
             defer {
                 for (upload_buffers.items) |*upload_buffer| upload_buffer.deinit(self.vma);
@@ -275,6 +294,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
         }
     }
 
+    std.debug.print("MODEL- Reload 5\n", .{});
     {
         if (gltf_loaded.meshes) |meshes| for (meshes) |mesh| {
             var surfaces: std.ArrayList(Mesh.GeoSurface) = try .initCapacity(gpa, mesh.primitives.len);
@@ -465,6 +485,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
         };
     }
 
+    std.debug.print("MODEL- Reload 6\n", .{});
     if (gltf_loaded.nodes) |nodes| {
         _ = try self.nodes.addManyAsSlice(gpa, nodes.len);
         for (nodes, self.nodes.items, 0..) |gltf_node, *scene_node, scene_node_id| {
@@ -493,6 +514,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
             }
         }
     }
+    std.debug.print("MODEL- Reload 7\n", .{});
     for (self.nodes.items, 0..) |*node, i| {
         if (node.parent == null) {
             try self.top_nodes.append(gpa, i);
@@ -501,6 +523,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
         }
     }
 
+    std.debug.print("MODEL- Reload 8\n", .{});
     if (gltf_loaded.skins) |skins| {
         const model_skins = try self.skins.addManyAsSlice(gpa, skins.len);
         for (skins, model_skins) |skin, *model_skin| {
@@ -528,6 +551,7 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
         }
     }
 
+    std.debug.print("MODEL- Reload 9\n", .{});
     if (gltf_loaded.animations) |animations| {
         const model_animations = try self.animations.addManyAsSlice(gpa, animations.len);
         for (animations, model_animations) |gltf_animation, *model_animation| {
@@ -585,4 +609,6 @@ fn loadModel(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: st
             }
         }
     }
+
+    std.debug.print("MODEL- Reload 10\n", .{});
 }

@@ -28,6 +28,7 @@ pub fn update(
     for (info.world.entities.values()) |*entity| {
         const skeleton_animation = skeletons.getPtr(entity.id) orelse continue;
         const model = skeleton_animation.model;
+        if (entity.kind == .enemy) model.active_animation = 0;
         if (model.animations.items.len == 0) continue;
         const animation = model.animations.items[model.active_animation];
         skeleton_animation.curremt_time += info.delta_time;
