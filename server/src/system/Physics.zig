@@ -7,7 +7,7 @@ const nz = shared.numz;
 pub const zphy = @import("zphy");
 
 pub const body_mass: f32 = 1;
-pub const gravity_accel: f32 = 1000;
+pub const gravity_accel: f32 = 50;
 
 gpa: std.mem.Allocator,
 io: std.Io,
@@ -312,7 +312,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         const distance_from_center = nz.vec.length(entity.transform.position);
         if (distance_from_center < 0.0001) continue;
         const planet_up = nz.vec.scale(entity.transform.position, 1.0 / distance_from_center);
-        if (!self.isOnSurface(entity, planet_up)) {
+        if (!self.isGrounded(entity, planet_up)) {
             body_interface.addForce(body_id, nz.vec.scale(-planet_up, body_mass * gravity_accel));
         }
 
@@ -355,17 +355,35 @@ fn colliderGroundExtent(collider: Collider) f32 {
     };
 }
 
-// Grounded test: cast a short ray straight down (toward the planet center). Jolt ignores
-// back faces, so the body never detects itself — only solid ground within reach counts.
-fn isOnSurface(self: *@This(), entity: *const system.Entity, planet_up: nz.Vec3(f32)) bool {
+// The grounded ray starts at the body center, inside its own convex collider, so a plain
+// castRay returns a fraction-0 self-hit. Exclude the own body via this filter.
+const ExcludeBodyFilter = extern struct {
+    body_filter: zphy.BodyFilter = .init(@This()),
+    exclude: zphy.BodyId,
+
+    fn self(filter: *const zphy.BodyFilter) *const ExcludeBodyFilter {
+        return @alignCast(@fieldParentPtr("body_filter", filter));
+    }
+    pub fn shouldCollide(filter: *const zphy.BodyFilter, body_id: *const zphy.BodyId) callconv(.c) bool {
+        return body_id.* != self(filter).exclude;
+    }
+    pub fn shouldCollideLocked(filter: *const zphy.BodyFilter, body: *const zphy.Body) callconv(.c) bool {
+        return body.id != self(filter).exclude;
+    }
+};
+
+// Grounded test: cast a short ray straight down (toward the planet center), excluding the
+// body's own collider — only solid ground within reach counts.
+fn isGrounded(self: *@This(), entity: *const system.Entity, planet_up: nz.Vec3(f32)) bool {
     const ground_check_skin: f32 = 0.2;
     const ground_reach = colliderGroundExtent(entity.collider) + ground_check_skin;
     const position = entity.transform.position;
     const ray_direction = nz.vec.scale(planet_up, -ground_reach);
+    var filter: ExcludeBodyFilter = .{ .exclude = entity.collider.body_id.? };
     const cast_result = self.physics_system.getNarrowPhaseQuery().castRay(.{
         .origin = .{ position[0], position[1], position[2], 1 },
         .direction = .{ ray_direction[0], ray_direction[1], ray_direction[2], 0 },
-    }, .{});
+    }, .{ .body_filter = &filter.body_filter });
     return cast_result.has_hit;
 }
 
