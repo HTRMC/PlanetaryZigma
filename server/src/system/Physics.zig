@@ -355,8 +355,6 @@ fn colliderGroundExtent(collider: Collider) f32 {
     };
 }
 
-// The grounded ray starts at the body center, inside its own convex collider, so a plain
-// castRay returns a fraction-0 self-hit. Exclude the own body via this filter.
 const ExcludeBodyFilter = extern struct {
     body_filter: zphy.BodyFilter = .init(@This()),
     exclude: zphy.BodyId,
@@ -372,8 +370,6 @@ const ExcludeBodyFilter = extern struct {
     }
 };
 
-// Grounded test: cast a short ray straight down (toward the planet center), excluding the
-// body's own collider — only solid ground within reach counts.
 fn isGrounded(self: *@This(), entity: *const system.Entity, planet_up: nz.Vec3(f32)) bool {
     const ground_check_skin: f32 = 0.2;
     const ground_reach = colliderGroundExtent(entity.collider) + ground_check_skin;

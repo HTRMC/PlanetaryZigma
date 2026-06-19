@@ -213,7 +213,7 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         self.vma,
         self.device,
         asset_server,
-        "objects/skeleton.glb",
+        "objects/Skelly.glb",
         &self.render_resources,
         .{
             .position = .{ 0, -0.6, 0 },
