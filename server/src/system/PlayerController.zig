@@ -79,7 +79,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
                     .motion_type = .dynamic,
                 },
                 .health = .{ .current = 5, .max = 5 },
-                .flags = .{ .transform = true, .collider = true, .align_to_planet = true, .health = true },
+                .flags = .{ .transform = true, .collider = true, .health = true },
             });
         }
 

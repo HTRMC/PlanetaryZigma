@@ -60,7 +60,6 @@ pub const Entity = struct {
         controller: bool = false,
         camera: bool = false,
         planet: bool = false,
-        align_to_planet: bool = false, //TODO: if not aligned jolt needs DOF awareness for later
         bullet: bool = false,
         health: bool = false,
     };
