@@ -7,7 +7,7 @@ const nz = shared.numz;
 pub const zphy = @import("zphy");
 
 pub const body_mass: f32 = 1;
-pub const gravity_accel: f32 = 100;
+pub const gravity_accel: f32 = 1000;
 
 gpa: std.mem.Allocator,
 io: std.Io,
@@ -303,16 +303,31 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
     defer tracy_scope.end();
     const body_interface = self.physics_system.getBodyInterfaceMut();
 
-    // 1. Apply custom gravity per dynamic entity.
+    // 1. Planet pull per dynamic body: gravity down + keep upright.
     for (info.world.entities.values()) |*entity| {
         if (!entity.flags.collider or !entity.flags.transform) continue;
         const body_id = entity.collider.body_id orelse continue;
         if (entity.collider.motion_type != .dynamic) continue;
 
-        const up_len = nz.vec.length(entity.transform.position);
-        if (up_len < 0.0001) continue;
-        const up = nz.vec.scale(entity.transform.position, 1.0 / up_len);
-        body_interface.addForce(body_id, nz.vec.scale(-up, body_mass * gravity_accel));
+        const distance_from_center = nz.vec.length(entity.transform.position);
+        if (distance_from_center < 0.0001) continue;
+        const planet_up = nz.vec.scale(entity.transform.position, 1.0 / distance_from_center);
+        if (!self.isOnSurface(entity, planet_up)) {
+            body_interface.addForce(body_id, nz.vec.scale(-planet_up, body_mass * gravity_accel));
+        }
+
+        const body_up = entity.transform.up();
+        const up_alignment_dot = std.math.clamp(nz.vec.dot(body_up, planet_up), -1.0, 1.0);
+        if (up_alignment_dot < 0.9999) {
+            const rotation_axis: nz.Vec3(f32) = if (up_alignment_dot > -0.9999)
+                nz.vec.normalize(nz.vec.cross(body_up, planet_up))
+            else
+                nz.vec.normalize(nz.vec.cross(body_up, entity.transform.forward()));
+            const upright_angle = std.math.acos(up_alignment_dot);
+            const upright_rotation: nz.quat.Hamiltonian(f32) = .angleAxis(upright_angle, rotation_axis);
+            entity.transform.rotation = upright_rotation.mul(entity.transform.rotation).normalize();
+            body_interface.setRotation(body_id, entity.transform.rotation.toVec(), .activate);
+        }
     }
 
     self.physics_system.update(info.delta_time, .{}) catch unreachable;
@@ -327,35 +342,31 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         };
         entity.transform.rotation = .fromVec(body_interface.getRotation(body_id));
     }
-
-    self.alignToPlanet(info); //TODO: before physics? or do indivual per entity movement?
 }
 
-fn alignToPlanet(self: *@This(), info: *const system.Info) void {
-    const body_interface = self.physics_system.getBodyInterfaceMut();
+fn colliderGroundExtent(collider: Collider) f32 {
+    return switch (collider.shape) {
+        .primitive => |primitive| switch (primitive) {
+            .box => |box| box.size,
+            .sphere => 1,
+            .capsule => 2,
+        },
+        .mesh => 0,
+    };
+}
 
-    for (info.world.entities.values()) |*entity| {
-        if (!entity.flags.align_to_planet or !entity.flags.transform or !entity.flags.collider) continue;
-        const transform = &entity.transform;
-
-        const desired_up: nz.Vec3(f32) = nz.vec.normalize(transform.position);
-        const current_up: nz.Vec3(f32) = transform.up();
-
-        const d = std.math.clamp(nz.vec.dot(current_up, desired_up), -1.0, 1.0);
-        if (d >= 0.9999) continue;
-
-        const axis: nz.Vec3(f32) = if (d > -0.9999)
-            nz.vec.normalize(nz.vec.cross(current_up, desired_up))
-        else
-            nz.vec.normalize(nz.vec.cross(current_up, transform.forward()));
-        const angle = std.math.acos(d);
-        const align_quat: nz.quat.Hamiltonian(f32) = .angleAxis(angle, axis);
-        transform.rotation = align_quat.mul(transform.rotation).normalize();
-
-        if (entity.collider.body_id) |id| {
-            body_interface.setRotation(id, transform.rotation.toVec(), .activate);
-        }
-    }
+// Grounded test: cast a short ray straight down (toward the planet center). Jolt ignores
+// back faces, so the body never detects itself — only solid ground within reach counts.
+fn isOnSurface(self: *@This(), entity: *const system.Entity, planet_up: nz.Vec3(f32)) bool {
+    const ground_check_skin: f32 = 0.2;
+    const ground_reach = colliderGroundExtent(entity.collider) + ground_check_skin;
+    const position = entity.transform.position;
+    const ray_direction = nz.vec.scale(planet_up, -ground_reach);
+    const cast_result = self.physics_system.getNarrowPhaseQuery().castRay(.{
+        .origin = .{ position[0], position[1], position[2], 1 },
+        .direction = .{ ray_direction[0], ray_direction[1], ray_direction[2], 0 },
+    }, .{});
+    return cast_result.has_hit;
 }
 
 pub fn createBody(self: *@This(), entity: *system.Entity) !void {
