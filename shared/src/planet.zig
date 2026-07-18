@@ -28,42 +28,40 @@ pub fn Planet(kind: PlanetKind) type {
 
             var vertices: std.ArrayList(Vertex) = .empty;
             var indices: std.ArrayList(u32) = .empty;
-            var node_map: std.AutoArrayHashMapUnmanaged(nz.Vec3(i32), nz.Vec3(f32)) = .empty;
+            var node_map: std.AutoArrayHashMapUnmanaged(nz.Vec3(i32), CellData) = .empty;
             defer node_map.deinit(gpa);
             const bound: f32 = @ceil(radius_float + noise_amplitude + cell_margin);
             try buildNodeMap(gpa, &node_map, radius_float, bound);
 
             if (kind == .logical) {
-                for (node_map.values()) |centroid|
-                    try vertices.append(gpa, .{ centroid[0], centroid[1], centroid[2], 1 });
+                for (node_map.values()) |data|
+                    try vertices.append(gpa, .{ data.centroid[0], data.centroid[1], data.centroid[2], 1 });
             }
 
-            const quad_axes = [3]struct { edge_axis: nz.Vec3(i32), perp_b: nz.Vec3(i32), perp_c: nz.Vec3(i32) }{
-                .{ .edge_axis = .{ 1, 0, 0 }, .perp_b = .{ 0, 1, 0 }, .perp_c = .{ 0, 0, 1 } },
-                .{ .edge_axis = .{ 0, 1, 0 }, .perp_b = .{ 0, 0, 1 }, .perp_c = .{ 1, 0, 0 } },
-                .{ .edge_axis = .{ 0, 0, 1 }, .perp_b = .{ 1, 0, 0 }, .perp_c = .{ 0, 1, 0 } },
+            const quad_axes = [3]struct { perp_b: nz.Vec3(i32), perp_c: nz.Vec3(i32), end_corner_bit: u8 }{
+                .{ .perp_b = .{ 0, 1, 0 }, .perp_c = .{ 0, 0, 1 }, .end_corner_bit = 1 << 1 },
+                .{ .perp_b = .{ 0, 0, 1 }, .perp_c = .{ 1, 0, 0 }, .end_corner_bit = 1 << 2 },
+                .{ .perp_b = .{ 1, 0, 0 }, .perp_c = .{ 0, 1, 0 }, .end_corner_bit = 1 << 4 },
             };
-            for (node_map.keys()) |cell| {
-                const edge_start: nz.Vec3(f32) = @floatFromInt(cell);
-                const edge_start_solid = sdf(edge_start, radius_float) < 0;
+            for (node_map.keys(), node_map.values(), 0..) |cell, data, cell_index| {
+                const edge_start_solid = data.corner_mask & 1 != 0;
                 for (quad_axes) |quad_axis| {
-                    const edge_end: nz.Vec3(f32) = edge_start + @as(nz.Vec3(f32), @floatFromInt(quad_axis.edge_axis));
-                    const edge_end_solid = sdf(edge_end, radius_float) < 0;
+                    const edge_end_solid = data.corner_mask & quad_axis.end_corner_bit != 0;
                     if (edge_start_solid == edge_end_solid) continue;
 
-                    const index_at_cell: u32 = @intCast(node_map.getIndex(cell) orelse continue);
+                    const index_at_cell: u32 = @intCast(cell_index);
                     const index_minus_b: u32 = @intCast(node_map.getIndex(cell - quad_axis.perp_b) orelse continue);
                     const index_minus_c: u32 = @intCast(node_map.getIndex(cell - quad_axis.perp_c) orelse continue);
                     const index_minus_bc: u32 = @intCast(node_map.getIndex(cell - quad_axis.perp_b - quad_axis.perp_c) orelse continue);
 
                     switch (kind) {
                         .renderable => {
-                            const centroids = node_map.values();
+                            const cell_data = node_map.values();
                             const base_vertex_index: u32 = @intCast(vertices.items.len);
-                            try vertices.append(gpa, makeVertex(centroids[index_at_cell], .{ 0, 0 }, radius_float));
-                            try vertices.append(gpa, makeVertex(centroids[index_minus_b], .{ 1, 0 }, radius_float));
-                            try vertices.append(gpa, makeVertex(centroids[index_minus_c], .{ 0, 1 }, radius_float));
-                            try vertices.append(gpa, makeVertex(centroids[index_minus_bc], .{ 1, 1 }, radius_float));
+                            try vertices.append(gpa, makeVertex(cell_data[index_at_cell].centroid, .{ 0, 0 }, radius_float));
+                            try vertices.append(gpa, makeVertex(cell_data[index_minus_b].centroid, .{ 1, 0 }, radius_float));
+                            try vertices.append(gpa, makeVertex(cell_data[index_minus_c].centroid, .{ 0, 1 }, radius_float));
+                            try vertices.append(gpa, makeVertex(cell_data[index_minus_bc].centroid, .{ 1, 1 }, radius_float));
 
                             //NOTE: Later for video:
                             // const centroids = node_map.values();
@@ -123,9 +121,14 @@ pub fn Planet(kind: PlanetKind) type {
     };
 }
 
+const CellData = struct {
+    centroid: nz.Vec3(f32),
+    corner_mask: u8,
+};
+
 const CellNode = struct {
     cell: nz.Vec3(i32),
-    centroid: nz.Vec3(f32),
+    data: CellData,
 };
 
 const SliceTask = struct {
@@ -138,7 +141,7 @@ const SliceTask = struct {
     err: ?std.mem.Allocator.Error,
 };
 
-fn buildNodeMap(gpa: std.mem.Allocator, node_map: *std.AutoArrayHashMapUnmanaged(nz.Vec3(i32), nz.Vec3(f32)), radius: f32, bound: f32) !void {
+fn buildNodeMap(gpa: std.mem.Allocator, node_map: *std.AutoArrayHashMapUnmanaged(nz.Vec3(i32), CellData), radius: f32, bound: f32) !void {
     const total_steps: usize = @intFromFloat(@ceil(2 * bound));
     const cpu_count = std.Thread.getCpuCount() catch 1;
     const worker_count = @max(1, @min(total_steps, cpu_count));
@@ -183,7 +186,7 @@ fn buildNodeMap(gpa: std.mem.Allocator, node_map: *std.AutoArrayHashMapUnmanaged
     }
     try node_map.ensureUnusedCapacity(gpa, @intCast(total_nodes));
     for (tasks) |*task|
-        for (task.nodes.items) |node| node_map.putAssumeCapacity(node.cell, node.centroid);
+        for (task.nodes.items) |node| node_map.putAssumeCapacity(node.cell, node.data);
 }
 
 fn buildCellSlice(task: *SliceTask) void {
@@ -230,11 +233,11 @@ fn scanColumn(task: *SliceTask, x: f32, y: f32, z_min: f32, z_max: f32) void {
         prev_top = corner_sdf[4..8].*;
         prev_top_valid = true;
 
-        var checksum: u8 = 0;
+        var corner_mask: u8 = 0;
         for (0..8) |i| {
-            if (corner_sdf[i] < 0) checksum += 1;
+            if (corner_sdf[i] < 0) corner_mask |= @as(u8, 1) << @intCast(i);
         }
-        if (checksum == 0 or checksum == 8) continue;
+        if (corner_mask == 0 or corner_mask == 0xff) continue;
 
         var crossing_count: f32 = 0;
         var crossing_sum: nz.Vec3(f32) = @splat(0);
@@ -253,7 +256,7 @@ fn scanColumn(task: *SliceTask, x: f32, y: f32, z_min: f32, z_max: f32) void {
         }
         const centroid = nz.vec.scale(crossing_sum, 1 / crossing_count);
         const cell: nz.Vec3(i32) = .{ @intFromFloat(x), @intFromFloat(y), @intFromFloat(z) };
-        task.nodes.append(task.gpa, .{ .cell = cell, .centroid = centroid }) catch |err| {
+        task.nodes.append(task.gpa, .{ .cell = cell, .data = .{ .centroid = centroid, .corner_mask = corner_mask } }) catch |err| {
             task.err = err;
             return;
         };
