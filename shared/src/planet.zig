@@ -33,10 +33,9 @@ pub fn Planet(kind: PlanetKind) type {
             const bound: f32 = @ceil(radius_float + noise_amplitude + cell_margin);
             try buildNodeMap(gpa, &node_map, radius_float, bound);
 
-            if (kind == .logical) {
-                for (node_map.values()) |data|
-                    try vertices.append(gpa, .{ data.centroid[0], data.centroid[1], data.centroid[2], 1 });
-            }
+            try vertices.ensureTotalCapacity(gpa, node_map.count());
+            for (node_map.values()) |data|
+                vertices.appendAssumeCapacity(makeVertex(data.centroid, radius_float));
 
             const quad_axes = [3]struct { perp_b: nz.Vec3(i32), perp_c: nz.Vec3(i32), end_corner_bit: u8 }{
                 .{ .perp_b = .{ 0, 1, 0 }, .perp_c = .{ 0, 0, 1 }, .end_corner_bit = 1 << 1 },
@@ -54,36 +53,10 @@ pub fn Planet(kind: PlanetKind) type {
                     const index_minus_c: u32 = @intCast(node_map.getIndex(cell - quad_axis.perp_c) orelse continue);
                     const index_minus_bc: u32 = @intCast(node_map.getIndex(cell - quad_axis.perp_b - quad_axis.perp_c) orelse continue);
 
-                    switch (kind) {
-                        .renderable => {
-                            const cell_data = node_map.values();
-                            const base_vertex_index: u32 = @intCast(vertices.items.len);
-                            try vertices.append(gpa, makeVertex(cell_data[index_at_cell].centroid, .{ 0, 0 }, radius_float));
-                            try vertices.append(gpa, makeVertex(cell_data[index_minus_b].centroid, .{ 1, 0 }, radius_float));
-                            try vertices.append(gpa, makeVertex(cell_data[index_minus_c].centroid, .{ 0, 1 }, radius_float));
-                            try vertices.append(gpa, makeVertex(cell_data[index_minus_bc].centroid, .{ 1, 1 }, radius_float));
-
-                            //NOTE: Later for video:
-                            // const centroids = node_map.values();
-                            // const base_vertex_index: u32 = @intCast(vertices.items.len);
-                            // try vertices.append(gpa, makeVertex(@floatFromInt(cell), .{ 0, 0 }, radius_float));
-                            // try vertices.append(gpa, makeVertex(@floatFromInt(cell - quad_axis.perp_b), .{ 1, 0 }, radius_float));
-                            // try vertices.append(gpa, makeVertex(@floatFromInt(cell - quad_axis.perp_c), .{ 0, 1 }, radius_float));
-                            // try vertices.append(gpa, makeVertex(@floatFromInt(cell - quad_axis.perp_b - quad_axis.perp_c), .{ 1, 1 }, radius_float));
-
-                            if (edge_start_solid) {
-                                try indices.appendSlice(gpa, &.{ base_vertex_index + 0, base_vertex_index + 1, base_vertex_index + 3, base_vertex_index + 0, base_vertex_index + 3, base_vertex_index + 2 });
-                            } else {
-                                try indices.appendSlice(gpa, &.{ base_vertex_index + 0, base_vertex_index + 3, base_vertex_index + 1, base_vertex_index + 0, base_vertex_index + 2, base_vertex_index + 3 });
-                            }
-                        },
-                        .logical => {
-                            if (edge_start_solid)
-                                try indices.appendSlice(gpa, &.{ index_at_cell, index_minus_b, index_minus_bc, index_at_cell, index_minus_bc, index_minus_c })
-                            else
-                                try indices.appendSlice(gpa, &.{ index_at_cell, index_minus_bc, index_minus_b, index_at_cell, index_minus_c, index_minus_bc });
-                        },
-                    }
+                    if (edge_start_solid)
+                        try indices.appendSlice(gpa, &.{ index_at_cell, index_minus_b, index_minus_bc, index_at_cell, index_minus_bc, index_minus_c })
+                    else
+                        try indices.appendSlice(gpa, &.{ index_at_cell, index_minus_bc, index_minus_b, index_at_cell, index_minus_c, index_minus_bc });
                 }
             }
 
@@ -98,7 +71,7 @@ pub fn Planet(kind: PlanetKind) type {
             gpa.free(self.indices);
         }
 
-        fn makeVertex(position: nz.Vec3(f32), uv: [2]f32, radius: f32) Vertex {
+        fn makeVertex(position: nz.Vec3(f32), radius: f32) Vertex {
             //logical planet: build navmesh nodes from node_map (reuse the cells + neighbours), don't generate triangles like renderable
             return switch (kind) {
                 .logical => .{ position[0], position[1], position[2], 1 },
@@ -112,8 +85,8 @@ pub fn Planet(kind: PlanetKind) type {
                         .position = position,
                         .normal = nz.vec.normalize(position),
                         .color = .{ color[0], color[1], color[2], 1 },
-                        .uv_x = uv[0],
-                        .uv_y = uv[1],
+                        .uv_x = 0,
+                        .uv_y = 0,
                     };
                 },
             };
