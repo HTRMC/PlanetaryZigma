@@ -4,6 +4,7 @@ const nz = @import("numz");
 const noise_frequency = 0.04;
 const noise_amplitude = 2;
 const cell_margin = 1;
+const shell_half_width = noise_amplitude + 1.0;
 
 pub const min_radius: u32 = 8;
 
@@ -186,49 +187,67 @@ fn buildNodeMap(gpa: std.mem.Allocator, node_map: *std.AutoArrayHashMapUnmanaged
 }
 
 fn buildCellSlice(task: *SliceTask) void {
+    const outer = task.radius + shell_half_width;
+    const inner = task.radius - shell_half_width;
     var x = task.x_start;
     while (x < task.x_end) : (x += 1) {
         var y = -task.bound;
         while (y < task.bound) : (y += 1) {
-            var z = -task.bound;
-            while (z < task.bound) : (z += 1) {
-                const cell_position: nz.Vec3(f32) = .{ x, y, z };
-                const cell_center: nz.Vec3(f32) = cell_position + @as(nz.Vec3(f32), @splat(0.5));
-                const shell_half_width = noise_amplitude + 1.0;
-                if (@abs(nz.vec.length(cell_center) - task.radius) > shell_half_width) continue;
-                var checksum: u8 = 0;
-                var corners: [8]nz.Vec3(f32) = undefined;
-                var corner_sdf: [8]f32 = undefined;
-                for (0..8) |i| {
-                    corners[i] = cube_corners[i] + cell_position;
-                    corner_sdf[i] = sdf(corners[i], task.radius);
-                    if (corner_sdf[i] < 0) checksum += 1;
-                }
-                if (checksum == 0 or checksum == 8) continue;
+            const center_x = x + 0.5;
+            const center_y = y + 0.5;
+            const rho2 = center_x * center_x + center_y * center_y;
+            if (rho2 > outer * outer) continue;
+            const z_outer = @sqrt(outer * outer - rho2);
+            const z_inner = if (inner > 0 and rho2 < inner * inner) @sqrt(inner * inner - rho2) else 0;
+            if (z_inner > 1) {
+                scanColumn(task, x, y, -z_outer - 1, -z_inner + 1);
+                scanColumn(task, x, y, z_inner - 1, z_outer + 1);
+            } else {
+                scanColumn(task, x, y, -z_outer - 1, z_outer + 1);
+            }
+            if (task.err != null) return;
+        }
+    }
+}
 
-                var crossing_count: f32 = 0;
-                var crossing_sum: nz.Vec3(f32) = @splat(0);
-                for (cube_edges) |edge| {
-                    const start_distance = corner_sdf[edge[0]];
-                    const end_distance = corner_sdf[edge[1]];
-                    if ((start_distance < 0.0) != (end_distance < 0.0)) {
-                        crossing_count += 1;
-                        const crossing_fraction: f32 = start_distance / (start_distance - end_distance);
-                        const start_weight: f32 = 1.0 - crossing_fraction;
-                        const end_weight: f32 = crossing_fraction;
-                        const start_corner = corners[edge[0]];
-                        const end_corner = corners[edge[1]];
-                        crossing_sum += nz.vec.scale(start_corner, start_weight) + nz.vec.scale(end_corner, end_weight);
-                    }
-                }
-                const centroid = nz.vec.scale(crossing_sum, 1 / crossing_count);
-                const cell: nz.Vec3(i32) = .{ @intFromFloat(x), @intFromFloat(y), @intFromFloat(z) };
-                task.nodes.append(task.gpa, .{ .cell = cell, .centroid = centroid }) catch |err| {
-                    task.err = err;
-                    return;
-                };
+fn scanColumn(task: *SliceTask, x: f32, y: f32, z_min: f32, z_max: f32) void {
+    var z = @max(@floor(z_min), -task.bound);
+    const z_end = @min(z_max, task.bound - 1);
+    while (z <= z_end) : (z += 1) {
+        const cell_position: nz.Vec3(f32) = .{ x, y, z };
+        const cell_center: nz.Vec3(f32) = cell_position + @as(nz.Vec3(f32), @splat(0.5));
+        if (@abs(nz.vec.length(cell_center) - task.radius) > shell_half_width) continue;
+        var checksum: u8 = 0;
+        var corners: [8]nz.Vec3(f32) = undefined;
+        var corner_sdf: [8]f32 = undefined;
+        for (0..8) |i| {
+            corners[i] = cube_corners[i] + cell_position;
+            corner_sdf[i] = sdf(corners[i], task.radius);
+            if (corner_sdf[i] < 0) checksum += 1;
+        }
+        if (checksum == 0 or checksum == 8) continue;
+
+        var crossing_count: f32 = 0;
+        var crossing_sum: nz.Vec3(f32) = @splat(0);
+        for (cube_edges) |edge| {
+            const start_distance = corner_sdf[edge[0]];
+            const end_distance = corner_sdf[edge[1]];
+            if ((start_distance < 0.0) != (end_distance < 0.0)) {
+                crossing_count += 1;
+                const crossing_fraction: f32 = start_distance / (start_distance - end_distance);
+                const start_weight: f32 = 1.0 - crossing_fraction;
+                const end_weight: f32 = crossing_fraction;
+                const start_corner = corners[edge[0]];
+                const end_corner = corners[edge[1]];
+                crossing_sum += nz.vec.scale(start_corner, start_weight) + nz.vec.scale(end_corner, end_weight);
             }
         }
+        const centroid = nz.vec.scale(crossing_sum, 1 / crossing_count);
+        const cell: nz.Vec3(i32) = .{ @intFromFloat(x), @intFromFloat(y), @intFromFloat(z) };
+        task.nodes.append(task.gpa, .{ .cell = cell, .centroid = centroid }) catch |err| {
+            task.err = err;
+            return;
+        };
     }
 }
 
