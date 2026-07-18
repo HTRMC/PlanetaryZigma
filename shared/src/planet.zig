@@ -175,10 +175,14 @@ fn buildNodeMap(gpa: std.mem.Allocator, node_map: *std.AutoArrayHashMapUnmanaged
         for (threads) |thread| thread.join();
     }
 
+    var total_nodes: usize = 0;
     for (tasks) |*task| {
         if (task.err) |err| return err;
-        for (task.nodes.items) |node| try node_map.put(gpa, node.cell, node.centroid);
+        total_nodes += task.nodes.items.len;
     }
+    try node_map.ensureUnusedCapacity(gpa, @intCast(total_nodes));
+    for (tasks) |*task|
+        for (task.nodes.items) |node| node_map.putAssumeCapacity(node.cell, node.centroid);
 }
 
 fn buildCellSlice(task: *SliceTask) void {
