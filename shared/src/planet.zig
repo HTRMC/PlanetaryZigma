@@ -213,16 +213,25 @@ fn buildCellSlice(task: *SliceTask) void {
 fn scanColumn(task: *SliceTask, x: f32, y: f32, z_min: f32, z_max: f32) void {
     var z = @max(@floor(z_min), -task.bound);
     const z_end = @min(z_max, task.bound - 1);
+    var prev_top: [4]f32 = undefined;
+    var prev_top_valid = false;
     while (z <= z_end) : (z += 1) {
         const cell_position: nz.Vec3(f32) = .{ x, y, z };
         const cell_center: nz.Vec3(f32) = cell_position + @as(nz.Vec3(f32), @splat(0.5));
-        if (@abs(nz.vec.length(cell_center) - task.radius) > shell_half_width) continue;
-        var checksum: u8 = 0;
+        if (@abs(nz.vec.length(cell_center) - task.radius) > shell_half_width) {
+            prev_top_valid = false;
+            continue;
+        }
         var corners: [8]nz.Vec3(f32) = undefined;
         var corner_sdf: [8]f32 = undefined;
+        for (0..8) |i| corners[i] = cube_corners[i] + cell_position;
+        for (0..4) |i| corner_sdf[i] = if (prev_top_valid) prev_top[i] else sdf(corners[i], task.radius);
+        for (4..8) |i| corner_sdf[i] = sdf(corners[i], task.radius);
+        prev_top = corner_sdf[4..8].*;
+        prev_top_valid = true;
+
+        var checksum: u8 = 0;
         for (0..8) |i| {
-            corners[i] = cube_corners[i] + cell_position;
-            corner_sdf[i] = sdf(corners[i], task.radius);
             if (corner_sdf[i] < 0) checksum += 1;
         }
         if (checksum == 0 or checksum == 8) continue;
