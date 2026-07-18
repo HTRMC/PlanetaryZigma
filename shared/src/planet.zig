@@ -44,9 +44,9 @@ pub fn Planet(kind: PlanetKind) type {
             };
             for (node_map.keys()) |cell| {
                 const edge_start: nz.Vec3(f32) = @floatFromInt(cell);
+                const edge_start_solid = sdf(edge_start, radius_float) < 0;
                 for (quad_axes) |quad_axis| {
                     const edge_end: nz.Vec3(f32) = edge_start + @as(nz.Vec3(f32), @floatFromInt(quad_axis.edge_axis));
-                    const edge_start_solid = sdf(edge_start, radius_float) < 0;
                     const edge_end_solid = sdf(edge_end, radius_float) < 0;
                     if (edge_start_solid == edge_end_solid) continue;
 
