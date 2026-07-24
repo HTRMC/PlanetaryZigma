@@ -22,6 +22,16 @@ pub const RenderCommand = union(enum) {
     entity_despawned: shared.entity.Id,
 };
 
+pub const AudioCommand = enum {
+    boss_death,
+    bullet_shoot,
+    enemy_death,
+    item_pickup,
+    lightning_attack,
+    lootbox_open,
+    teleported_charged,
+};
+
 mutex: std.Io.Mutex = .init,
 gpa: std.mem.Allocator,
 entities: std.AutoArrayHashMapUnmanaged(shared.entity.Id, Entity) = .empty,
@@ -33,6 +43,7 @@ pending_inventory: std.ArrayList(shared.net.UpdateInventory) = .empty,
 pending_player_names: std.ArrayList(shared.net.PlayerNameUpdate) = .empty,
 attack_events: std.ArrayList(shared.entity.Id) = .empty,
 render_outbox: std.ArrayList(RenderCommand) = .empty,
+audio_outbox: std.ArrayList(AudioCommand) = .empty,
 emitters: std.ArrayList(Emitter) = .empty,
 damage_events: std.ArrayList(DamageEvent) = .empty,
 camera: Camera = .{},
@@ -90,6 +101,7 @@ pub fn init(gpa: std.mem.Allocator) !World {
         .pending_player_names = try .initCapacity(gpa, shared.max_entities),
         .attack_events = try .initCapacity(gpa, shared.max_entities),
         .render_outbox = try .initCapacity(gpa, shared.max_entities * 2 + 8),
+        .audio_outbox = try .initCapacity(gpa, 128),
         .emitters = try .initCapacity(gpa, 256),
         .damage_events = try .initCapacity(gpa, 128),
         .prng = .init(0x5EED_BA11),
@@ -110,6 +122,7 @@ pub fn deinit(self: *World) void {
     self.pending_player_names.deinit(self.gpa);
     self.attack_events.deinit(self.gpa);
     self.render_outbox.deinit(self.gpa);
+    self.audio_outbox.deinit(self.gpa);
     self.emitters.deinit(self.gpa);
     self.damage_events.deinit(self.gpa);
 }
@@ -127,6 +140,7 @@ pub fn clearSession(self: *World) void {
     self.pending_inventory.clearRetainingCapacity();
     clearPendingPlayerNames(self);
     self.attack_events.clearRetainingCapacity();
+    self.audio_outbox.clearRetainingCapacity();
     self.damage_events.clearRetainingCapacity();
 
     self.camera = .{};
@@ -191,7 +205,10 @@ pub fn flush(self: *World, delta_time: f32, instances: *std.AutoHashMap(shared.e
                 self.planet_radius = @floatFromInt(radius);
                 std.log.debug("SPAWNED: Planet {d}", .{radius});
             },
-            .projectile_cube => entity.transform.scale = @splat(0.3),
+            .projectile_cube => {
+                entity.transform.scale = @splat(0.3);
+                self.queueAudio(.bullet_shoot);
+            },
             .projectile_rocket => entity.transform.scale = @splat(0.9),
             .teleporter => self.teleporter_id = entity.id,
             .enemy => {
@@ -226,8 +243,12 @@ pub fn flush(self: *World, delta_time: f32, instances: *std.AutoHashMap(shared.e
     while (despawn_index < self.pending_despawn.items.len) {
         const id = self.pending_despawn.items[despawn_index];
         if (self.getPtr(id)) |entity| {
+            const started_dying = !entity.flags.is_dying;
             entity.motion.update = null;
             entity.flags.is_dying = true;
+            if (started_dying and entity.kind == .enemy) {
+                self.queueAudio(if (self.isTeleporterBoss(id)) .boss_death else .enemy_death);
+            }
             if (instances.getPtr(id)) |instance| {
                 if (instance.deathDuration() > 0) {
                     instance.death_time += delta_time;
@@ -247,6 +268,15 @@ pub fn flush(self: *World, delta_time: f32, instances: *std.AutoHashMap(shared.e
         self.render_outbox.appendAssumeCapacity(.{ .entity_despawned = id });
         _ = self.despawn(id);
     }
+}
+
+fn isTeleporterBoss(self: *const World, id: shared.entity.Id) bool {
+    return std.mem.indexOfScalar(shared.entity.Id, self.teleporter_bosses.items, id) != null;
+}
+
+pub fn queueAudio(self: *World, command: AudioCommand) void {
+    if (self.audio_outbox.items.len >= self.audio_outbox.capacity) return;
+    self.audio_outbox.appendAssumeCapacity(command);
 }
 
 pub fn applySpawnData(self: *World, entity: *Entity, entity_info: shared.net.SpawnEntity) !void {

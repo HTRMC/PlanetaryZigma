@@ -228,6 +228,8 @@ pub const Event = union(enum) {
     teleporter_charge: f16,
     new_stage: u32,
     attack: entity.Id,
+    item_pickup: entity.Id,
+    lootbox_open: entity.Id,
     interact: Interact,
     effect: Effect,
 };

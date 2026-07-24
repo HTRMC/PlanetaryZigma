@@ -353,7 +353,11 @@ fn handleCommand(
                     entity.teleporter.state = .active;
                 },
                 .teleporter_charge => |charged| if (info.world.getPtr(info.world.teleporter_id)) |entity| {
+                    const was_fully_charged = entity.teleporter.charged >= entity.teleporter.max_charge;
                     entity.teleporter.charged = charged;
+                    if (!was_fully_charged and entity.teleporter.charged >= entity.teleporter.max_charge) {
+                        info.world.queueAudio(.teleported_charged);
+                    }
                 },
                 .new_stage => |new_stage| {
                     info.world.teleporter_id = .none;
@@ -362,13 +366,20 @@ fn handleCommand(
                 .attack => |id| {
                     info.world.attack_events.appendAssumeCapacity(id);
                 },
+                .item_pickup => |id| {
+                    if (id == info.world.player_id) info.world.queueAudio(.item_pickup);
+                },
+                .lootbox_open => info.world.queueAudio(.lootbox_open),
                 .effect => |effect| switch (effect) {
                     .rocket_impact => |position| {
                         Emitter.spawnRocketExplosion(&info.world.emitters, position, info.elapsed_time);
                     },
-                    .lightning => |bolt| for (bolt.targets) |id| {
-                        const target = info.world.getPtr(id) orelse continue;
-                        Emitter.spawnLightningArc(&info.world.emitters, bolt.start_position, target.transform.position, info.elapsed_time);
+                    .lightning => |bolt| {
+                        info.world.queueAudio(.lightning_attack);
+                        for (bolt.targets) |id| {
+                            const target = info.world.getPtr(id) orelse continue;
+                            Emitter.spawnLightningArc(&info.world.emitters, bolt.start_position, target.transform.position, info.elapsed_time);
+                        }
                     },
                 },
                 .interact => |interact| if (info.world.getPtr(interact.interactor)) |entity| {

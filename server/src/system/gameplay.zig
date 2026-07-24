@@ -290,6 +290,7 @@ pub fn updateItems(info: *const Info) !void {
             if (nz.vec.length(length) >= 2) continue;
 
             const item_count = info.world.giveItem(player, item_kind, 1) orelse continue;
+            info.world.client_updates.appendAssumeCapacity(.{ .event = .{ .item_pickup = player_id } });
             info.world.queueDespawn(entity.id);
             std.log.debug("item {t}, count: {d}", .{ item_kind, item_count });
         }

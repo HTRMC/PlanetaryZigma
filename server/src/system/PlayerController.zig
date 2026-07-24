@@ -111,6 +111,7 @@ pub fn update(info: *const system.Info, physics: *Physics) !void {
                 switch (entity.kind) {
                     .lootbox => {
                         if (player.currency >= entity.currency) {
+                            info.world.client_updates.appendAssumeCapacity(.{ .event = .{ .lootbox_open = entity.id } });
                             info.world.queueDespawn(entity.id);
 
                             const random = info.world.prng.random();

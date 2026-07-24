@@ -7,6 +7,26 @@ const yes = @import("yes");
 const tracy = @import("ztracy");
 const miniaudio = @import("miniaudio");
 
+// Sound asset peak targets:
+// UI click / inventory: -24 to -18 dBFS; footsteps / cloth: -20 to -14 dBFS.
+// Regular weapon / magic zap: -14 to -9 dBFS; heavy attack / explosion: -10 to -6 dBFS.
+// Boss roar / death growl: -7 to -3 dBFS; master output peak: around -1 dBFS.
+const master_output_gain_db: f32 = -1.0;
+const boss_death_sound = "sounds/boss/death_growl.ogg";
+const bullet_shoot_sound = "sounds/weapons/bullet_shoot.ogg";
+const enemy_death_sound = "sounds/enemy/death_flesh.ogg";
+const item_pickup_sound = "sounds/items/pickup_item.ogg";
+const lootbox_open_sound = "sounds/lootbox/open.ogg";
+const teleported_charged_sound = "sounds/monolith/teleported_charged.ogg";
+const lightning_attack_sounds = [_][]const u8{
+    "sounds/lightning/combo_01.ogg",
+    "sounds/lightning/combo_02.ogg",
+    "sounds/lightning/combo_03.ogg",
+    "sounds/lightning/combo_04.ogg",
+    "sounds/lightning/combo_05.ogg",
+    "sounds/lightning/combo_06.ogg",
+};
+
 pub fn main(init: std.process.Init) !void {
     const tracy_scope = tracy.zone(@src());
     defer tracy_scope.end();
@@ -22,8 +42,8 @@ pub fn main(init: std.process.Init) !void {
     var eng: miniaudio.ma_engine = undefined;
     if (miniaudio.ma_engine_init(null, &eng) != miniaudio.MA_SUCCESS) return error.MiniaudioFailed;
     defer miniaudio.ma_engine_uninit(&eng);
+    if (miniaudio.ma_engine_set_volume(&eng, dbToGain(master_output_gain_db)) != miniaudio.MA_SUCCESS) return error.MiniaudioFailed;
     // _ = miniaudio.ma_engine_play_sound(&eng, "music.mp3", null);
-    // _ = miniaudio.ma_engine_set_volume(&eng, 1);
 
     if (builtin.mode != .Debug) shared.redirectStderrToFile(io, "client.log");
 
@@ -98,6 +118,7 @@ pub fn main(init: std.process.Init) !void {
         while (try window.poll(desktop)) |event| {
             const options_was_open = system_context.hud.overlay == .options;
             system_table.systemContextUpdate(&system_context, &.{ .delta_time = time_step, .elapsed_time = elapsed_time, .world = &world }, &event);
+            drainAudioCommands(&world, &asset_server, &eng);
             switch (event) {
                 .close => break :main_loop,
                 .resize => {
@@ -126,6 +147,7 @@ pub fn main(init: std.process.Init) !void {
             if (system_context.request_exit) break :main_loop;
         }
         system_table.systemContextUpdate(&system_context, &.{ .delta_time = time_step, .elapsed_time = elapsed_time, .world = &world }, null);
+        drainAudioCommands(&world, &asset_server, &eng);
         if (system_context.request_exit) break :main_loop;
 
         if (try watcher.reload(io)) {
@@ -137,6 +159,49 @@ pub fn main(init: std.process.Init) !void {
 
         elapsed_time += time_step;
     }
+}
+
+fn drainAudioCommands(world: *World, asset_server: *const system.AssetServer, engine: *miniaudio.ma_engine) void {
+    for (world.audio_outbox.items) |command| {
+        switch (command) {
+            .boss_death => _ = playSound(asset_server, engine, boss_death_sound),
+            .bullet_shoot => _ = playSound(asset_server, engine, bullet_shoot_sound),
+            .enemy_death => _ = playSound(asset_server, engine, enemy_death_sound),
+            .item_pickup => _ = playSound(asset_server, engine, item_pickup_sound),
+            .lightning_attack => _ = playSound(asset_server, engine, randomSound(world, lightning_attack_sounds[0..])),
+            .lootbox_open => _ = playSound(asset_server, engine, lootbox_open_sound),
+            .teleported_charged => _ = playSound(asset_server, engine, teleported_charged_sound),
+        }
+    }
+    world.audio_outbox.clearRetainingCapacity();
+}
+
+fn dbToGain(db: f32) f32 {
+    return std.math.pow(f32, 10.0, db / 20.0);
+}
+
+fn randomSound(world: *World, sounds: []const []const u8) []const u8 {
+    return sounds[world.prng.random().uintLessThan(usize, sounds.len)];
+}
+
+fn playSound(asset_server: *const system.AssetServer, engine: *miniaudio.ma_engine, asset_path: []const u8) bool {
+    var path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
+    const path_len = asset_server.dir.realPathFile(asset_server.io, asset_path, &path_buffer) catch |err| {
+        std.log.warn("sound not found {s}/{s}: {t}", .{ asset_server.assets_path, asset_path, err });
+        return false;
+    };
+    if (path_len >= path_buffer.len) {
+        std.log.warn("sound path too long for {s}/{s}", .{ asset_server.assets_path, asset_path });
+        return false;
+    }
+    path_buffer[path_len] = 0;
+    const path = path_buffer[0..path_len :0];
+    const result = miniaudio.ma_engine_play_sound(engine, path.ptr, null);
+    if (result != miniaudio.MA_SUCCESS) {
+        std.log.warn("play sound failed {s}: {d}", .{ path, result });
+        return false;
+    }
+    return true;
 }
 
 pub fn getDeltaTime(io: std.Io) f32 {
