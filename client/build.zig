@@ -33,13 +33,31 @@ pub fn build(b: *std.Build) void {
     stb_truetype.addIncludePath(b.dependency("stb", .{}).path("."));
 
     const miniaudio_dep = b.dependency("miniaudio", .{});
+    const miniaudio_wrappers = b.addWriteFiles();
+    const miniaudio_header = miniaudio_wrappers.add("miniaudio_vorbis.h",
+        \\#define STB_VORBIS_HEADER_ONLY
+        \\#include "stb_vorbis.c"
+        \\#include "miniaudio.h"
+    );
+    const miniaudio_source = miniaudio_wrappers.add("miniaudio_vorbis.c",
+        \\#define STB_VORBIS_HEADER_ONLY
+        \\#include "stb_vorbis.c"
+        \\#define MINIAUDIO_IMPLEMENTATION
+        \\#include "miniaudio.h"
+        \\#undef STB_VORBIS_HEADER_ONLY
+        \\#include "stb_vorbis.c"
+    );
     const miniaudio_translate_c = b.addTranslateC(.{
-        .root_source_file = miniaudio_dep.path("miniaudio.h"),
+        .root_source_file = miniaudio_header,
         .optimize = optimize,
         .target = target,
     });
+    miniaudio_translate_c.addIncludePath(miniaudio_dep.path("."));
+    miniaudio_translate_c.addIncludePath(miniaudio_dep.path("extras"));
     const miniaudio = miniaudio_translate_c.createModule();
-    miniaudio.addCSourceFile(.{ .file = miniaudio_dep.path("miniaudio.c") });
+    miniaudio.addIncludePath(miniaudio_dep.path("."));
+    miniaudio.addIncludePath(miniaudio_dep.path("extras"));
+    miniaudio.addCSourceFile(.{ .file = miniaudio_source });
 
     const system = b.addLibrary(.{
         .name = "system_client",
@@ -141,6 +159,11 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(system);
     b.installArtifact(exe);
+    b.installDirectory(.{
+        .source_dir = b.path("assets"),
+        .install_dir = .bin,
+        .install_subdir = "assets",
+    });
 
     // Shared Tracy client dll must sit next to the binaries that link it.
     if (tracy_enable) b.installArtifact(ztracy_dep.artifact("tracy"));
